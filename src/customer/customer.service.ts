@@ -24,6 +24,13 @@ export class CustomerService {
     return 'ok';
   }
 
+  async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
+    return this.customerModel
+      .find({ createdBy })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async createCustomer(
     dto: CreateCustomerDto,
     createdBy: string,
@@ -32,6 +39,7 @@ export class CustomerService {
       dto.interestedProjects?.map((entry) => ({
         projectId: entry.projectId,
         date: entry.date ? new Date(entry.date) : new Date(),
+        addedBy: createdBy,
       })) ?? [];
     const created = new this.customerModel({
       name: dto.name,
@@ -110,6 +118,7 @@ export class CustomerService {
 
   async addInterestedProject(
     customerId: string,
+    userId: string,
     dto: AddInterestedProjectDto,
   ): Promise<CustomerDocument> {
     const customer = await this.customerModel
@@ -120,6 +129,7 @@ export class CustomerService {
             interestedProjects: {
               projectId: dto.projectId,
               date: dto.date ? new Date(dto.date) : new Date(),
+              addedBy: userId,
             },
           },
         },

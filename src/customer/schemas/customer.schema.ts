@@ -36,11 +36,12 @@ export class Customer {
       {
         projectId: { type: String, required: true },
         date: { type: Date, required: true },
+        addedBy: { type: String, required: false },
       },
     ],
     default: [],
   })
-  interestedProjects: { projectId: string; date: Date }[];
+  interestedProjects: { projectId: string; date: Date; addedBy?: string }[];
 
   @Prop({ type: [String], default: [] })
   description: string[];

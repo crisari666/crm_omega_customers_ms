@@ -66,7 +66,7 @@ Creates a customer document in MongoDB.
 | `email` | string | no | Valid email when present |
 | `documentType` | string | no | `cc` or `passport` |
 | `document` | string | no | |
-| `interestedProjects` | array | no | Items: `{ "projectId": string, "date"?: ISO-8601 string }`. If `date` is omitted, server uses current time |
+| `interestedProjects` | array | no | Items: `{ "projectId": string, "date"?: ISO-8601 string }`. If `date` is omitted, server uses current time. Each stored item includes `addedBy` from the JWT (`userId` or `sub`) |
 | `description` | string[] | no | Short text lines stored on the customer |
 | `assignedTo` | string | no | User or agent id (opaque string) |
 
@@ -163,7 +163,7 @@ Saved description document, including `_id` and `customerId`.
 
 ### `POST /customer/:customerId/projects`
 
-Pushes one entry into the customer’s `interestedProjects` array (`projectId` + `date`).
+Pushes one entry into the customer’s `interestedProjects` array (`projectId`, `date`, `addedBy`). The `addedBy` field is set from the JWT (`userId`, or `sub`), not from the body.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -175,6 +175,7 @@ Pushes one entry into the customer’s `interestedProjects` array (`projectId` +
 ```bash
 curl -sS -X POST "http://localhost:3000/customer/REPLACE_WITH_CUSTOMER_ID/projects" \
   -H 'Content-Type: application/json' \
+  -H "TOKEN: $OFFICE_JWT" \
   -d '{
     "projectId": "proj_042",
     "date": "2026-04-20T10:00:00.000Z"

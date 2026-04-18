@@ -24,6 +24,16 @@ export class CustomerController {
   }
 
   /**
+   * Customers whose `createdBy` matches JWT user (`userId` or `sub`).
+   */
+  @Get('mine')
+  findMyCustomers(@JwtUser() jwtUser: OfficeJwtPayload | undefined) {
+    return this.customerService.findCustomersCreatedBy(
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  /**
    * Creates a new customer record.
    */
   @Post()
@@ -71,7 +81,12 @@ export class CustomerController {
   addInterestedProject(
     @Param('customerId') customerId: string,
     @Body() body: AddInterestedProjectDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
-    return this.customerService.addInterestedProject(customerId, body);
+    return this.customerService.addInterestedProject(
+      customerId,
+      resolveOfficeUserId(jwtUser),
+      body,
+    );
   }
 }
