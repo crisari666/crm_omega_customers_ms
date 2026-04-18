@@ -50,7 +50,4 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   assignedTo?: string;
-
-  @IsString()
-  createdBy: string;
 }

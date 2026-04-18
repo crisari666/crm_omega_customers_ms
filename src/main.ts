@@ -4,7 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  const port = process.env.APP_PORT || 4001;
   const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('customers-rest');
   app.enableCors({
     origin: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -17,6 +20,6 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  await app.listen(3000);
+  await app.listen(port);
 }
 bootstrap();

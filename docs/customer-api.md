@@ -26,7 +26,7 @@ TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 curl -sS -X POST http://localhost:3000/customer \
   -H 'Content-Type: application/json' \
   -H "TOKEN: $OFFICE_JWT" \
-  -d '{"name":"Ada","lastName":"Lovelace","phone":"+573001234567","createdBy":"user_admin_01"}'
+  -d '{"name":"Ada","lastName":"Lovelace","phone":"+573001234567"}'
 ```
 
 ---
@@ -69,13 +69,15 @@ Creates a customer document in MongoDB.
 | `interestedProjects` | array | no | Items: `{ "projectId": string, "date"?: ISO-8601 string }`. If `date` is omitted, server uses current time |
 | `description` | string[] | no | Short text lines stored on the customer |
 | `assignedTo` | string | no | User or agent id (opaque string) |
-| `createdBy` | string | yes | User id who created the record |
+
+The `createdBy` field on the stored customer is set from the JWT (`userId`, or `sub` if `userId` is absent), not from the JSON body.
 
 **Example**
 
 ```bash
 curl -sS -X POST http://localhost:3000/customer \
   -H 'Content-Type: application/json' \
+  -H "TOKEN: $OFFICE_JWT" \
   -d '{
     "name": "Ada",
     "lastName": "Lovelace",
@@ -88,8 +90,7 @@ curl -sS -X POST http://localhost:3000/customer \
       { "projectId": "proj_001", "date": "2026-04-18T12:00:00.000Z" }
     ],
     "description": ["Met at fair", "Wants 2BR"],
-    "assignedTo": "user_sales_01",
-    "createdBy": "user_admin_01"
+    "assignedTo": "user_sales_01"
   }'
 ```
 
@@ -105,7 +106,7 @@ The body matches the `Customer` schema plus Mongo fields: `_id`, `createdAt`, `u
 
 Partial update. `:customerId` is the MongoDB `_id` string.
 
-Same fields as create, all optional. Omitted fields are left unchanged. Sending `interestedProjects` replaces the entire array on the customer.
+Same fields as create (except `createdBy`, which is only set on create from the JWT), all optional. Omitted fields are left unchanged. Sending `interestedProjects` replaces the entire array on the customer.
 
 **Example**
 
@@ -129,11 +130,10 @@ curl -sS -X PATCH "http://localhost:3000/customer/REPLACE_WITH_CUSTOMER_ID" \
 
 ### `POST /customer/:customerId/descriptions`
 
-Appends a row in the `customer_descriptions` collection (`CustomerDescription` schema: `customerId`, `user`, `date`, `description`).
+Appends a row in the `customer_descriptions` collection (`CustomerDescription` schema: `customerId`, `user`, `date`, `description`). The `user` field is set from the JWT (`userId`, or `sub`), not from the body.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `user` | string | yes | Who wrote the note |
 | `description` | string | yes | Text |
 | `date` | string | no | ISO-8601; defaults to now |
 
@@ -142,8 +142,8 @@ Appends a row in the `customer_descriptions` collection (`CustomerDescription` s
 ```bash
 curl -sS -X POST "http://localhost:3000/customer/REPLACE_WITH_CUSTOMER_ID/descriptions" \
   -H 'Content-Type: application/json' \
+  -H "TOKEN: $OFFICE_JWT" \
   -d '{
-    "user": "user_sales_01",
     "description": "Called back; prefers morning visits.",
     "date": "2026-04-18T15:30:00.000Z"
   }'

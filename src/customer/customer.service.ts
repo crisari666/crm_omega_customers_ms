@@ -24,7 +24,10 @@ export class CustomerService {
     return 'ok';
   }
 
-  async createCustomer(dto: CreateCustomerDto): Promise<CustomerDocument> {
+  async createCustomer(
+    dto: CreateCustomerDto,
+    createdBy: string,
+  ): Promise<CustomerDocument> {
     const interestedProjects =
       dto.interestedProjects?.map((entry) => ({
         projectId: entry.projectId,
@@ -41,7 +44,7 @@ export class CustomerService {
       interestedProjects,
       description: dto.description ?? [],
       assignedTo: dto.assignedTo,
-      createdBy: dto.createdBy,
+      createdBy,
     });
     return created.save();
   }
@@ -87,20 +90,18 @@ export class CustomerService {
     if (dto.assignedTo !== undefined) {
       customer.assignedTo = dto.assignedTo;
     }
-    if (dto.createdBy !== undefined) {
-      customer.createdBy = dto.createdBy;
-    }
     return customer.save();
   }
 
   async addCustomerDescription(
     customerId: string,
+    userId: string,
     dto: AddCustomerDescriptionDto,
   ): Promise<CustomerDescriptionDocument> {
     await this.ensureCustomerExists(customerId);
     const created = new this.customerDescriptionModel({
       customerId: new Types.ObjectId(customerId),
-      user: dto.user,
+      user: userId,
       date: dto.date ? new Date(dto.date) : new Date(),
       description: dto.description,
     });

@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../omega_office_back"
+		},
+		{
+			"path": "../../../crm_lots_agents"
+		}
+	],
+	"settings": {}
+}
