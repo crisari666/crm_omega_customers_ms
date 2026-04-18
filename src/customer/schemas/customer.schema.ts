@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export type CustomerDocument = HydratedDocument<Customer>;
 
@@ -43,8 +43,12 @@ export class Customer {
   })
   interestedProjects: { projectId: string; date: Date; addedBy?: string }[];
 
-  @Prop({ type: [String], default: [] })
-  description: string[];
+  /** `_id` values pointing at documents in the `customer_descriptions` collection. */
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'CustomerDescription' }],
+    default: [],
+  })
+  description: Types.ObjectId[];
 
   @Prop()
   assignedTo?: string;

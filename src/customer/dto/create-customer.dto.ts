@@ -43,11 +43,6 @@ export class CreateCustomerDto {
   interestedProjects?: InterestedProjectEntryDto[];
 
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  description?: string[];
-
-  @IsOptional()
   @IsString()
   assignedTo?: string;
 }

@@ -31,6 +31,17 @@ export class CustomerService {
       .exec();
   }
 
+  async getCustomerById(customerId: string): Promise<CustomerDocument> {
+    const customer = await this.customerModel
+      .findById(customerId)
+      .populate('description')
+      .exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    return customer;
+  }
+
   async createCustomer(
     dto: CreateCustomerDto,
     createdBy: string,
@@ -50,7 +61,6 @@ export class CustomerService {
       documentType: dto.documentType,
       document: dto.document,
       interestedProjects,
-      description: dto.description ?? [],
       assignedTo: dto.assignedTo,
       createdBy,
     });
@@ -92,9 +102,6 @@ export class CustomerService {
         date: entry.date ? new Date(entry.date) : new Date(),
       }));
     }
-    if (dto.description !== undefined) {
-      customer.description = dto.description;
-    }
     if (dto.assignedTo !== undefined) {
       customer.assignedTo = dto.assignedTo;
     }
@@ -107,13 +114,18 @@ export class CustomerService {
     dto: AddCustomerDescriptionDto,
   ): Promise<CustomerDescriptionDocument> {
     await this.ensureCustomerExists(customerId);
-    const created = new this.customerDescriptionModel({
+    const created = await new this.customerDescriptionModel({
       customerId: new Types.ObjectId(customerId),
       user: userId,
       date: dto.date ? new Date(dto.date) : new Date(),
       description: dto.description,
-    });
-    return created.save();
+    }).save();
+    await this.customerModel
+      .findByIdAndUpdate(customerId, {
+        $push: { description: created._id },
+      })
+      .exec();
+    return created;
   }
 
   async addInterestedProject(

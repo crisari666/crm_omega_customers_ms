@@ -34,6 +34,14 @@ export class CustomerController {
   }
 
   /**
+   * Loads one customer by Mongo `_id`.
+   */
+  @Get(':customerId')
+  getCustomer(@Param('customerId') customerId: string) {
+    return this.customerService.getCustomerById(customerId);
+  }
+
+  /**
    * Creates a new customer record.
    */
   @Post()
