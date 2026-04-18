@@ -1,13 +1,16 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config/configuration';
+import { CoreModule } from './core/core.module';
+import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
 
 @Module({
   imports: [
+    CoreModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -22,6 +25,10 @@ import { CustomerModule } from './customer/customer.module';
     CustomerModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, TokenJwtMiddleware],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(TokenJwtMiddleware).forRoutes('*');
+  }
+}

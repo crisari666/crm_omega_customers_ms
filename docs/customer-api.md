@@ -6,6 +6,31 @@ The app runs a global `ValidationPipe` with `whitelist` and `forbidNonWhiteliste
 
 ---
 
+## Authentication (JWT)
+
+All routes under `/customer` **except** `GET /customer/test` require a valid office JWT (RS256).
+
+- Send the token in the **`TOKEN`** HTTP header (same as omega_rag). Optional `Bearer ` prefix is stripped before verification.
+- The service loads the public key from `{JWT_OFFICE_BASE_URL or CRM_BACKEND_URL}/public/jwt/public-key`. Set at least one of these environment variables (see omega office / CRM backend base URL).
+- Invalid, missing, or expired tokens respond with **401 Unauthorized** (`TOKEN header is required`, `Invalid token`, `Token has expired`, etc.).
+
+**Example header**
+
+```http
+TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+`curl` with a token:
+
+```bash
+curl -sS -X POST http://localhost:3000/customer \
+  -H 'Content-Type: application/json' \
+  -H "TOKEN: $OFFICE_JWT" \
+  -d '{"name":"Ada","lastName":"Lovelace","phone":"+573001234567","createdBy":"user_admin_01"}'
+```
+
+---
+
 ## Health
 
 ### `GET /customer/test`
@@ -170,11 +195,11 @@ Full updated customer document (including the new item in `interestedProjects`).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/customer/test` | Health |
-| `POST` | `/customer` | Create customer |
-| `PATCH` | `/customer/:customerId` | Update customer |
-| `POST` | `/customer/:customerId/descriptions` | Add structured description |
-| `POST` | `/customer/:customerId/projects` | Add interested project |
+| `GET` | `/customer/test` | Health (no JWT) |
+| `POST` | `/customer` | Create customer (JWT) |
+| `PATCH` | `/customer/:customerId` | Update customer (JWT) |
+| `POST` | `/customer/:customerId/descriptions` | Add structured description (JWT) |
+| `POST` | `/customer/:customerId/projects` | Add interested project (JWT) |
 
 ---
 
