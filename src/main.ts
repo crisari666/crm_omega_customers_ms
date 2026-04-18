@@ -11,8 +11,9 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'TOKEN'],
+    //allowedHeaders: ['Content-Type', 'TOKEN'],
   });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

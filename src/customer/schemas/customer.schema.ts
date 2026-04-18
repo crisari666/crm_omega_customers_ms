@@ -10,10 +10,10 @@ export enum DocumentType {
 
 @Schema({ timestamps: true })
 export class Customer {
-  @Prop({ required: true })
+  @Prop({ required: false })
   name: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   lastName: string;
 
   @Prop({ required: true })
