@@ -5,6 +5,7 @@ import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { AssignCustomerAssigneeDto } from './dto/assign-customer-assignee.dto';
 import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
+import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
 import { CustomerService } from './customer.service';
 
 /**
@@ -30,6 +31,11 @@ export class CustomerAdminController {
     );
   }
 
+  @Get(':customerId')
+  getCustomerAdminDetail(@Param('customerId') customerId: string) {
+    return this.customerService.getCustomerAdminDetail(customerId);
+  }
+
   @Patch(':customerId/assignee')
   assignCustomerAssignee(
     @Param('customerId') customerId: string,
@@ -37,6 +43,19 @@ export class CustomerAdminController {
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
     return this.customerService.assignCustomerAssignee(
+      customerId,
+      body,
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  @Patch(':customerId')
+  updateCustomerAdmin(
+    @Param('customerId') customerId: string,
+    @Body() body: UpdateCustomerAdminDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerService.updateCustomerAdmin(
       customerId,
       body,
       resolveOfficeUserId(jwtUser),

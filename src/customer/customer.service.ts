@@ -7,12 +7,14 @@ import { AssignCustomerAssigneeDto } from './dto/assign-customer-assignee.dto';
 import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
+import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerAuditService } from './customer-audit.service';
 import {
   CustomerAdminListItem,
   CustomerAdminListResponse,
 } from './types/customer-admin-list-item.type';
+import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
 import { LeanCustomerListRow } from './types/lean-customer-list-row.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
@@ -194,6 +196,142 @@ export class CustomerService {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
     return customer;
+  }
+
+  /**
+   * Admin CRM: full customer row with populated notes (`customer_descriptions`).
+   */
+  async getCustomerAdminDetail(customerId: string): Promise<CustomerAdminDetail> {
+    const raw = await this.customerModel.findById(customerId).lean().exec();
+    if (!raw || typeof raw !== 'object' || !('_id' in raw)) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    const noteDocs = await this.customerDescriptionModel
+      .find({ customerId: new Types.ObjectId(customerId) })
+      .sort({ date: -1 })
+      .lean()
+      .exec();
+    const notes = noteDocs.map((d) => ({
+      id: String(d._id),
+      user: d.user,
+      date:
+        d.date instanceof Date
+          ? d.date.toISOString()
+          : new Date(String(d.date)).toISOString(),
+      description: d.description,
+    }));
+    const r = raw as unknown as Record<string, unknown> & { _id: Types.ObjectId };
+    const interestedProjects = ((r.interestedProjects ?? []) as {
+      projectId: string;
+      date: Date | string;
+      addedBy?: string;
+    }[]).map(
+      (p: {
+        projectId: string;
+        date: Date | string;
+        addedBy?: string;
+      }) => ({
+        projectId: p.projectId,
+        date:
+          p.date instanceof Date
+            ? p.date.toISOString()
+            : new Date(String(p.date)).toISOString(),
+        ...(p.addedBy !== undefined && { addedBy: p.addedBy }),
+      }),
+    );
+    const createdAtRaw = r.createdAt as Date | string | undefined;
+    const updatedAtRaw = r.updatedAt as Date | string | undefined;
+    return {
+      id: String(r._id),
+      ...(r.name !== undefined && r.name !== null && { name: r.name as string }),
+      ...(r.lastName !== undefined &&
+        r.lastName !== null && { lastName: r.lastName as string }),
+      phone: String(r.phone ?? ''),
+      ...(r.whatsapp !== undefined &&
+        r.whatsapp !== '' && { whatsapp: r.whatsapp as string }),
+      ...(r.email !== undefined &&
+        r.email !== '' && { email: r.email as string }),
+      ...(r.documentType !== undefined && {
+        documentType: r.documentType as CustomerAdminDetail['documentType'],
+      }),
+      ...(r.document !== undefined &&
+        r.document !== '' && { document: r.document as string }),
+      interestedProjects,
+      ...(r.assignedTo !== undefined &&
+        r.assignedTo !== null &&
+        String(r.assignedTo).trim() !== '' && {
+          assignedTo: String(r.assignedTo),
+        }),
+      enabled: r.enabled !== false,
+      createdBy: String(r.createdBy ?? ''),
+      createdAt:
+        createdAtRaw instanceof Date
+          ? createdAtRaw.toISOString()
+          : new Date(String(createdAtRaw ?? Date.now())).toISOString(),
+      ...(updatedAtRaw !== undefined && {
+        updatedAt:
+          updatedAtRaw instanceof Date
+            ? updatedAtRaw.toISOString()
+            : new Date(String(updatedAtRaw)).toISOString(),
+      }),
+      notes,
+    };
+  }
+
+  /**
+   * Admin CRM: partial update including `enabled`.
+   */
+  async updateCustomerAdmin(
+    customerId: string,
+    dto: UpdateCustomerAdminDto,
+    actorUserId: string,
+  ): Promise<CustomerAdminDetail> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    customer.$locals['__auditActorUserId'] = actorUserId;
+    if (dto.name !== undefined) {
+      customer.name = dto.name;
+    }
+    if (dto.lastName !== undefined) {
+      customer.lastName = dto.lastName;
+    }
+    if (dto.phone !== undefined) {
+      customer.phone = dto.phone;
+    }
+    if (dto.whatsapp !== undefined) {
+      customer.whatsapp = dto.whatsapp;
+    }
+    if (dto.email !== undefined) {
+      customer.email = dto.email;
+    }
+    if (dto.documentType !== undefined) {
+      customer.documentType = dto.documentType;
+    }
+    if (dto.document !== undefined) {
+      customer.document = dto.document;
+    }
+    if (dto.interestedProjects !== undefined) {
+      const previous = customer.interestedProjects ?? [];
+      customer.interestedProjects = dto.interestedProjects.map((entry) => {
+        const prev = previous.find((p) => p.projectId === entry.projectId);
+        return {
+          projectId: entry.projectId,
+          date: entry.date ? new Date(entry.date) : new Date(),
+          ...(prev?.addedBy !== undefined && { addedBy: prev.addedBy }),
+        };
+      });
+    }
+    if (dto.assignedTo !== undefined) {
+      const t = dto.assignedTo.trim();
+      customer.assignedTo = t === '' ? undefined : t;
+    }
+    if (dto.enabled !== undefined) {
+      customer.enabled = dto.enabled;
+    }
+    await customer.save();
+    return this.getCustomerAdminDetail(customerId);
   }
 
   async createCustomer(
