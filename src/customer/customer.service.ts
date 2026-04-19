@@ -5,7 +5,13 @@ import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
 import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import {
+  CustomerAdminListItem,
+  CustomerAdminListResponse,
+} from './types/customer-admin-list-item.type';
+import { LeanCustomerListRow } from './types/lean-customer-list-row.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
   CustomerDescription,
@@ -30,6 +36,150 @@ export class CustomerService {
       .find({ createdBy })
       .sort({ createdAt: -1 })
       .exec();
+  }
+
+  /**
+   * Admin list with filters; returns only fields needed for CRM table display.
+   */
+  async listCustomersAdmin(
+    query: ListCustomersAdminQueryDto,
+  ): Promise<CustomerAdminListResponse> {
+    const filter = this.buildAdminListFilter(query);
+    const limit = query.limit ?? 50;
+    const skip = query.skip ?? 0;
+
+    const [raw, total] = await Promise.all([
+      this.customerModel
+        .find(filter)
+        .select({
+          name: 1,
+          lastName: 1,
+          phone: 1,
+          email: 1,
+          assignedTo: 1,
+          enabled: 1,
+          createdAt: 1,
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.customerModel.countDocuments(filter).exec(),
+    ]);
+
+    const items: CustomerAdminListItem[] = (raw as LeanCustomerListRow[]).map(
+      (doc) => ({
+        id: String(doc._id),
+        name: doc.name,
+        lastName: doc.lastName,
+        phone: doc.phone,
+        email: doc.email,
+        assignedTo: doc.assignedTo,
+        enabled: doc.enabled !== false,
+        createdAt:
+          doc.createdAt instanceof Date
+            ? doc.createdAt.toISOString()
+            : new Date(doc.createdAt as string).toISOString(),
+      }),
+    );
+
+    return { items, total };
+  }
+
+  private buildAdminListFilter(
+    query: ListCustomersAdminQueryDto,
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown> = {};
+
+    const useDateRange =
+      query.omitDateRange !== true &&
+      (query.createdFrom !== undefined || query.createdTo !== undefined);
+    if (useDateRange) {
+      const createdAt: Record<string, Date> = {};
+      if (query.createdFrom !== undefined) {
+        createdAt.$gte = new Date(query.createdFrom);
+      }
+      if (query.createdTo !== undefined) {
+        createdAt.$lte = new Date(query.createdTo);
+      }
+      filter.createdAt = createdAt;
+    }
+
+    const hasAssignedTo =
+      query.assignedTo !== undefined &&
+      query.assignedTo !== null &&
+      query.assignedTo.trim() !== '';
+
+    const q = query.search?.trim();
+    const searchClause =
+      q !== undefined && q !== ''
+        ? (() => {
+            const escaped = this.escapeRegex(q);
+            const rx = new RegExp(escaped, 'i');
+            return {
+              $or: [
+                { name: rx },
+                { lastName: rx },
+                { email: rx },
+                { phone: rx },
+              ],
+            };
+          })()
+        : null;
+
+    const unassignedClause =
+      !hasAssignedTo && query.unassignedOnly === true
+        ? {
+            $or: [
+              { assignedTo: { $exists: false } },
+              { assignedTo: null },
+              { assignedTo: '' },
+            ],
+          }
+        : null;
+
+    if (hasAssignedTo) {
+      filter.assignedTo = query.assignedTo!.trim();
+      if (searchClause !== null) {
+        filter.$or = searchClause.$or;
+      }
+    } else if (unassignedClause !== null && searchClause !== null) {
+      filter.$and = [unassignedClause, searchClause];
+    } else if (unassignedClause !== null) {
+      filter.$or = unassignedClause.$or;
+    } else if (searchClause !== null) {
+      filter.$or = searchClause.$or;
+    }
+
+    const enabledClause =
+      query.enabled === true
+        ? {
+            $or: [{ enabled: true }, { enabled: { $exists: false } }],
+          }
+        : query.enabled === false
+          ? { enabled: false }
+          : null;
+
+    if (enabledClause !== null) {
+      return this.mergeFilterWithClause(filter, enabledClause);
+    }
+
+    return filter;
+  }
+
+  private mergeFilterWithClause(
+    base: Record<string, unknown>,
+    clause: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (Object.keys(base).length === 0) {
+      return clause;
+    }
+    return { $and: [base, clause] };
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   async getCustomerById(customerId: string): Promise<CustomerDocument> {

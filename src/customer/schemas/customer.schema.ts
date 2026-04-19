@@ -53,6 +53,12 @@ export class Customer {
   @Prop()
   assignedTo?: string;
 
+  /**
+   * When false, customer treated as disabled (excluded from active flows). Defaults to true.
+   */
+  @Prop({ type: Boolean, default: true, index: true })
+  enabled?: boolean;
+
   @Prop({ required: true })
   createdBy: string;
 }
