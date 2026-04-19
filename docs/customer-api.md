@@ -70,7 +70,7 @@ From a browser, ensure CORS allows your origin; send the `TOKEN` header on cross
 
 ## Authentication (JWT)
 
-All routes under `/customer` **except** `GET /customer/test` require a valid office JWT (RS256), including `GET /customer/mine`, `GET /customer/:customerId`, `POST /customer`, `PATCH /customer/:customerId`, and the `POST` routes under `:customerId`.
+All routes under `/customer` **except** `GET /customer/test` require a valid office JWT (RS256), including `GET /customer/mine`, `GET /customer/:customerId`, `POST /customer`, `POST /customer/admin`, `PATCH /customer/:customerId`, and the `POST` routes under `:customerId`.
 
 - Send the token in the **`TOKEN`** HTTP header (same as omega_rag). Optional `Bearer ` prefix is stripped before verification.
 - The service loads the public key from `{JWT_OFFICE_BASE_URL or CRM_BACKEND_URL}/public/jwt/public-key`. Set at least one of these environment variables (see omega office / CRM backend base URL).
@@ -208,6 +208,43 @@ curl -sS -X POST http://localhost:4001/customers-rest/customer \
 **Response** (`201` from Nest default for POST returning body — here returns the saved document)
 
 The body matches the `Customer` schema plus Mongo fields: `_id`, `createdAt`, `updatedAt`, `__v`.
+
+---
+
+## Create customer (admin minimal)
+
+### `POST /customer/admin`
+
+Creates a customer where only **`phone`** is required. Optional fields: `name`, `lastName`, `email`, and **`user`** (office user id to assign — stored as `assignedTo`). The `createdBy` field is set from the JWT, same as `POST /customer`.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `phone` | string | yes | |
+| `name` | string | no | |
+| `lastName` | string | no | |
+| `email` | string | no | Valid email when present |
+| `user` | string | no | Assignee user id; persisted as `assignedTo` |
+
+Send the same **`token`** header as other customer routes (see [Authentication](#authentication-jwt); middleware reads the `token` header).
+
+**Example**
+
+```bash
+curl -sS -X POST http://localhost:4001/customers-rest/customer/admin \
+  -H 'Content-Type: application/json' \
+  -H "TOKEN: $OFFICE_JWT" \
+  -d '{
+    "phone": "+573001234567",
+    "name": "Ada",
+    "lastName": "Lovelace",
+    "email": "ada@example.com",
+    "user": "507f1f77bcf86cd799439011"
+  }'
+```
+
+**Response** (`201`)
+
+Saved customer document (same shape as `POST /customer`).
 
 ---
 

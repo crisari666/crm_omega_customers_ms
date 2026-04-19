@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
+import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
@@ -62,6 +63,24 @@ export class CustomerService {
       document: dto.document,
       interestedProjects,
       assignedTo: dto.assignedTo,
+      createdBy,
+    });
+    return created.save();
+  }
+
+  /**
+   * Creates a customer with only phone required; optional assignee from `user` → assignedTo.
+   */
+  async createCustomerAdmin(
+    dto: CreateCustomerAdminDto,
+    createdBy: string,
+  ): Promise<CustomerDocument> {
+    const created = new this.customerModel({
+      phone: dto.phone,
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+      ...(dto.email !== undefined && { email: dto.email }),
+      ...(dto.user !== undefined && dto.user !== '' && { assignedTo: dto.user }),
       createdBy,
     });
     return created.save();
