@@ -3,10 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
+import { AssignCustomerAssigneeDto } from './dto/assign-customer-assignee.dto';
 import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerAuditService } from './customer-audit.service';
 import {
   CustomerAdminListItem,
   CustomerAdminListResponse,
@@ -25,6 +27,7 @@ export class CustomerService {
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerDescription.name)
     private readonly customerDescriptionModel: Model<CustomerDescriptionDocument>,
+    private readonly customerAuditService: CustomerAuditService,
   ) {}
 
   executePing(): string {
@@ -215,6 +218,7 @@ export class CustomerService {
       assignedTo: dto.assignedTo,
       createdBy,
     });
+    created.$locals['__auditActorUserId'] = createdBy;
     return created.save();
   }
 
@@ -245,9 +249,11 @@ export class CustomerService {
       interestedProjects,
       createdBy,
     });
+    created.$locals['__auditActorUserId'] = createdBy;
     const saved = await created.save();
     const noteText = dto.note?.trim();
     if (noteText) {
+      const beforeDesc = (saved.description ?? []).map((id) => String(id));
       const descDoc = await new this.customerDescriptionModel({
         customerId: saved._id,
         user: createdBy,
@@ -259,6 +265,14 @@ export class CustomerService {
           $push: { description: descDoc._id },
         })
         .exec();
+      const afterDesc = [...beforeDesc, String(descDoc._id)];
+      await this.customerAuditService.recordArrayOrQueryUpdate({
+        customerId: String(saved._id),
+        actorUserId: createdBy,
+        summaryField: 'description',
+        from: beforeDesc,
+        to: afterDesc,
+      });
     }
     const updated = await this.customerModel.findById(saved._id).exec();
     return updated ?? saved;
@@ -267,11 +281,13 @@ export class CustomerService {
   async updateCustomer(
     customerId: string,
     dto: UpdateCustomerDto,
+    actorUserId: string,
   ): Promise<CustomerDocument> {
     const customer = await this.customerModel.findById(customerId).exec();
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
+    customer.$locals['__auditActorUserId'] = actorUserId;
     if (dto.name !== undefined) {
       customer.name = dto.name;
     }
@@ -305,12 +321,36 @@ export class CustomerService {
     return customer.save();
   }
 
+  /**
+   * Sets `assignedTo` from admin CRM (empty string clears assignee).
+   */
+  async assignCustomerAssignee(
+    customerId: string,
+    dto: AssignCustomerAssigneeDto,
+    actorUserId: string,
+  ): Promise<CustomerDocument> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    const trimmed = dto.assignedTo.trim();
+    customer.assignedTo = trimmed === '' ? undefined : trimmed;
+    customer.$locals['__auditActorUserId'] = actorUserId;
+    return customer.save();
+  }
+
   async addCustomerDescription(
     customerId: string,
     userId: string,
     dto: AddCustomerDescriptionDto,
   ): Promise<CustomerDescriptionDocument> {
     await this.ensureCustomerExists(customerId);
+    const existing = await this.customerModel
+      .findById(customerId)
+      .select('description')
+      .lean()
+      .exec();
+    const beforeDesc = (existing?.description ?? []).map((id) => String(id));
     const created = await new this.customerDescriptionModel({
       customerId: new Types.ObjectId(customerId),
       user: userId,
@@ -322,6 +362,14 @@ export class CustomerService {
         $push: { description: created._id },
       })
       .exec();
+    const afterDesc = [...beforeDesc, String(created._id)];
+    await this.customerAuditService.recordArrayOrQueryUpdate({
+      customerId,
+      actorUserId: userId,
+      summaryField: 'description',
+      from: beforeDesc,
+      to: afterDesc,
+    });
     return created;
   }
 
@@ -330,6 +378,12 @@ export class CustomerService {
     userId: string,
     dto: AddInterestedProjectDto,
   ): Promise<CustomerDocument> {
+    const beforeDoc = await this.customerModel
+      .findById(customerId)
+      .select('interestedProjects')
+      .lean()
+      .exec();
+    const beforeProjects = beforeDoc?.interestedProjects ?? [];
     const customer = await this.customerModel
       .findByIdAndUpdate(
         customerId,
@@ -348,6 +402,13 @@ export class CustomerService {
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
+    await this.customerAuditService.recordArrayOrQueryUpdate({
+      customerId,
+      actorUserId: userId,
+      summaryField: 'interestedProjects',
+      from: beforeProjects,
+      to: customer.interestedProjects,
+    });
     return customer;
   }
 

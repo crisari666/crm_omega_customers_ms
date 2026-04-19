@@ -1,12 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { JwtUser } from '../core/decorators/jwt-user.decorator';
 import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
-import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
-import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerService } from './customer.service';
 
@@ -36,14 +34,6 @@ export class CustomerController {
   }
 
   /**
-   * Admin list: filter by creation date range, assignee, name/email/phone search; paginated lean payload.
-   */
-  @Get('admin')
-  listCustomersAdmin(@Query() query: ListCustomersAdminQueryDto) {
-    return this.customerService.listCustomersAdmin(query);
-  }
-
-  /**
    * Loads one customer by Mongo `_id`.
    */
   @Get(':customerId')
@@ -66,28 +56,19 @@ export class CustomerController {
   }
 
   /**
-   * Admin create: only `phone` required; optional name, lastName, email, user (assignee).
-   */
-  @Post('admin')
-  createCustomerAdmin(
-    @Body() body: CreateCustomerAdminDto,
-    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
-  ) {
-    return this.customerService.createCustomerAdmin(
-      body,
-      resolveOfficeUserId(jwtUser),
-    );
-  }
-
-  /**
    * Updates an existing customer.
    */
   @Patch(':customerId')
   updateCustomer(
     @Param('customerId') customerId: string,
     @Body() body: UpdateCustomerDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
-    return this.customerService.updateCustomer(customerId, body);
+    return this.customerService.updateCustomer(
+      customerId,
+      body,
+      resolveOfficeUserId(jwtUser),
+    );
   }
 
   /**
