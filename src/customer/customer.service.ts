@@ -70,20 +70,48 @@ export class CustomerService {
 
   /**
    * Creates a customer with only phone required; optional assignee from `user` → assignedTo.
+   * Optional `note` creates an initial description row; optional `projectId` seeds `interestedProjects`.
    */
   async createCustomerAdmin(
     dto: CreateCustomerAdminDto,
     createdBy: string,
   ): Promise<CustomerDocument> {
+    const interestedProjects =
+      dto.projectId !== undefined && dto.projectId.trim() !== ''
+        ? [
+            {
+              projectId: dto.projectId.trim(),
+              date: new Date(),
+              addedBy: createdBy,
+            },
+          ]
+        : [];
     const created = new this.customerModel({
       phone: dto.phone,
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.lastName !== undefined && { lastName: dto.lastName }),
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.user !== undefined && dto.user !== '' && { assignedTo: dto.user }),
+      interestedProjects,
       createdBy,
     });
-    return created.save();
+    const saved = await created.save();
+    const noteText = dto.note?.trim();
+    if (noteText) {
+      const descDoc = await new this.customerDescriptionModel({
+        customerId: saved._id,
+        user: createdBy,
+        date: new Date(),
+        description: noteText,
+      }).save();
+      await this.customerModel
+        .findByIdAndUpdate(saved._id, {
+          $push: { description: descDoc._id },
+        })
+        .exec();
+    }
+    const updated = await this.customerModel.findById(saved._id).exec();
+    return updated ?? saved;
   }
 
   async updateCustomer(

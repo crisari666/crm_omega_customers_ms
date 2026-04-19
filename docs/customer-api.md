@@ -215,7 +215,7 @@ The body matches the `Customer` schema plus Mongo fields: `_id`, `createdAt`, `u
 
 ### `POST /customer/admin`
 
-Creates a customer where only **`phone`** is required. Optional fields: `name`, `lastName`, `email`, and **`user`** (office user id to assign — stored as `assignedTo`). The `createdBy` field is set from the JWT, same as `POST /customer`.
+Creates a customer where only **`phone`** is required. Optional fields: `name`, `lastName`, `email`, **`user`** (assignee → `assignedTo`), **`note`** (initial CRM note → `CustomerDescription` + link on `description`), and **`projectId`** (adds one `interestedProjects` entry with `addedBy` = JWT user). The `createdBy` field is set from the JWT, same as `POST /customer`.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -224,6 +224,8 @@ Creates a customer where only **`phone`** is required. Optional fields: `name`, 
 | `lastName` | string | no | |
 | `email` | string | no | Valid email when present |
 | `user` | string | no | Assignee user id; persisted as `assignedTo` |
+| `note` | string | no | Initial description text (max 8000 chars); creates `customer_descriptions` row |
+| `projectId` | string | no | First interested project id (`interestedProjects[0].projectId`) |
 
 Send the same **`token`** header as other customer routes (see [Authentication](#authentication-jwt); middleware reads the `token` header).
 
@@ -238,7 +240,9 @@ curl -sS -X POST http://localhost:4001/customers-rest/customer/admin \
     "name": "Ada",
     "lastName": "Lovelace",
     "email": "ada@example.com",
-    "user": "507f1f77bcf86cd799439011"
+    "user": "507f1f77bcf86cd799439011",
+    "note": "Lead from admin form",
+    "projectId": "proj_001"
   }'
 ```
 
