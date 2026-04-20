@@ -53,6 +53,7 @@ export class CustomerService {
   }
 
   async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
+    console.log('createdBy', createdBy);
     return this.customerModel
       .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
       .sort({ createdAt: -1 })
