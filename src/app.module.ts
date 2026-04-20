@@ -7,6 +7,7 @@ import configuration from './config/configuration';
 import { CoreModule } from './core/core.module';
 import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
+import { CustomerStepsModule } from './customer-steps/customer-steps.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CustomerModule } from './customer/customer.module';
       }),
     }),
     CustomerModule,
+    CustomerStepsModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],
