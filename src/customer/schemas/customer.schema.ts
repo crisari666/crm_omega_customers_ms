@@ -16,9 +16,14 @@ export class Customer {
   @Prop({ required: false })
   lastName: string;
 
-  @Prop({ required: true })
+  /**
+   * Canonical contact number (trimmed, no spaces). Unique.
+   * `whatsapp` is stored to the same value on create so both fields stay aligned.
+   */
+  @Prop({ required: true, index: true, unique: true })
   phone: string;
 
+  /** Same canonical string as `phone`; optional on legacy docs. */
   @Prop()
   whatsapp?: string;
 

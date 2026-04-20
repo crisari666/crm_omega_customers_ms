@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -33,6 +34,19 @@ import {
   CustomerStep,
   CustomerStepDocument,
 } from '../customer-steps/schemas/customer-step.schema';
+import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
+
+const DUPLICATE_PHONE_MESSAGE =
+  'Ya existe un cliente con este número de teléfono.';
+
+function isMongoDuplicateKeyError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === 11000
+  );
+}
 
 @Injectable()
 export class CustomerService {
@@ -314,10 +328,13 @@ export class CustomerService {
       customer.lastName = dto.lastName;
     }
     if (dto.phone !== undefined) {
-      customer.phone = dto.phone;
-    }
-    if (dto.whatsapp !== undefined) {
-      customer.whatsapp = dto.whatsapp;
+      const p = normalizeCustomerPhone(dto.phone);
+      customer.phone = p;
+      customer.whatsapp = p;
+    } else if (dto.whatsapp !== undefined) {
+      const w = normalizeCustomerPhone(dto.whatsapp);
+      customer.phone = w;
+      customer.whatsapp = w;
     }
     if (dto.email !== undefined) {
       customer.email = dto.email;
@@ -346,7 +363,14 @@ export class CustomerService {
     if (dto.enabled !== undefined) {
       customer.enabled = dto.enabled;
     }
-    await customer.save();
+    try {
+      await customer.save();
+    } catch (err) {
+      if (isMongoDuplicateKeyError(err)) {
+        throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
+      }
+      throw err;
+    }
     return this.getCustomerAdminDetail(customerId);
   }
 
@@ -360,11 +384,12 @@ export class CustomerService {
         date: entry.date ? new Date(entry.date) : new Date(),
         addedBy: createdBy,
       })) ?? [];
+    const canonicalPhone = normalizeCustomerPhone(dto.phone);
     const created = new this.customerModel({
       name: dto.name,
       lastName: dto.lastName,
-      phone: dto.phone,
-      whatsapp: dto.whatsapp,
+      phone: canonicalPhone,
+      whatsapp: canonicalPhone,
       email: dto.email,
       documentType: dto.documentType,
       document: dto.document,
@@ -373,7 +398,14 @@ export class CustomerService {
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;
-    return created.save();
+    try {
+      return await created.save();
+    } catch (err) {
+      if (isMongoDuplicateKeyError(err)) {
+        throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -394,8 +426,10 @@ export class CustomerService {
             },
           ]
         : [];
+    const canonicalPhone = normalizeCustomerPhone(dto.phone);
     const created = new this.customerModel({
-      phone: dto.phone,
+      phone: canonicalPhone,
+      whatsapp: canonicalPhone,
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.lastName !== undefined && { lastName: dto.lastName }),
       ...(dto.email !== undefined && { email: dto.email }),
@@ -404,7 +438,15 @@ export class CustomerService {
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;
-    const saved = await created.save();
+    let saved: CustomerDocument;
+    try {
+      saved = await created.save();
+    } catch (err) {
+      if (isMongoDuplicateKeyError(err)) {
+        throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
+      }
+      throw err;
+    }
     const noteText = dto.note?.trim();
     if (noteText) {
       const beforeDesc = (saved.description ?? []).map((id) => String(id));
@@ -449,10 +491,13 @@ export class CustomerService {
       customer.lastName = dto.lastName;
     }
     if (dto.phone !== undefined) {
-      customer.phone = dto.phone;
-    }
-    if (dto.whatsapp !== undefined) {
-      customer.whatsapp = dto.whatsapp;
+      const p = normalizeCustomerPhone(dto.phone);
+      customer.phone = p;
+      customer.whatsapp = p;
+    } else if (dto.whatsapp !== undefined) {
+      const w = normalizeCustomerPhone(dto.whatsapp);
+      customer.phone = w;
+      customer.whatsapp = w;
     }
     if (dto.email !== undefined) {
       customer.email = dto.email;
@@ -472,7 +517,14 @@ export class CustomerService {
     if (dto.assignedTo !== undefined) {
       customer.assignedTo = dto.assignedTo;
     }
-    return customer.save();
+    try {
+      return await customer.save();
+    } catch (err) {
+      if (isMongoDuplicateKeyError(err)) {
+        throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
+      }
+      throw err;
+    }
   }
 
   /**
