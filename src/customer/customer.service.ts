@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
@@ -18,9 +22,17 @@ import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
 import { LeanCustomerListRow } from './types/lean-customer-list-row.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
+  CustomerStepUpdateLog,
+  CustomerStepUpdateLogDocument,
+} from './schemas/customer-step-update-log.schema';
+import {
   CustomerDescription,
   CustomerDescriptionDocument,
 } from './schemas/descriptions.schema';
+import {
+  CustomerStep,
+  CustomerStepDocument,
+} from '../customer-steps/schemas/customer-step.schema';
 
 @Injectable()
 export class CustomerService {
@@ -29,6 +41,10 @@ export class CustomerService {
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerDescription.name)
     private readonly customerDescriptionModel: Model<CustomerDescriptionDocument>,
+    @InjectModel(CustomerStep.name)
+    private readonly customerStepModel: Model<CustomerStepDocument>,
+    @InjectModel(CustomerStepUpdateLog.name)
+    private readonly customerStepUpdateLogModel: Model<CustomerStepUpdateLogDocument>,
     private readonly customerAuditService: CustomerAuditService,
   ) {}
 
@@ -457,6 +473,55 @@ export class CustomerService {
       customer.assignedTo = dto.assignedTo;
     }
     return customer.save();
+  }
+
+  /**
+   * Assigns pipeline step only; appends `CustomerStepUpdateLog` when the step changes.
+   */
+  async setCustomerStep(
+    customerId: string,
+    customerStepId: string,
+    actorUserId: string,
+  ): Promise<CustomerDocument> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    const nextStepId = await this.resolveCustomerStepObjectId(customerStepId);
+    if (nextStepId === undefined) {
+      throw new BadRequestException('customerStepId is required');
+    }
+    const prevId = customer.customerStepId
+      ? String(customer.customerStepId)
+      : '';
+    const nextId = String(nextStepId);
+    if (prevId !== nextId) {
+      await new this.customerStepUpdateLogModel({
+        customerId: customer._id,
+        ...(customer.customerStepId !== undefined && {
+          fromCustomerStepId: customer.customerStepId,
+        }),
+        toCustomerStepId: nextStepId,
+        actorUserId,
+      }).save();
+      customer.customerStepId = nextStepId;
+    }
+    customer.$locals['__auditActorUserId'] = actorUserId;
+    return customer.save();
+  }
+
+  private async resolveCustomerStepObjectId(
+    stepId: string,
+  ): Promise<Types.ObjectId | undefined> {
+    const trimmed = stepId.trim();
+    if (trimmed === '') {
+      return undefined;
+    }
+    const exists = await this.customerStepModel.findById(trimmed).lean().exec();
+    if (!exists) {
+      throw new BadRequestException(`Customer step not found: ${trimmed}`);
+    }
+    return new Types.ObjectId(trimmed);
   }
 
   /**

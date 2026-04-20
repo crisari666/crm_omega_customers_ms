@@ -8,7 +8,15 @@ import {
   CustomerChangeLog,
   CustomerChangeLogSchema,
 } from './schemas/customer-change-log.schema';
+import {
+  CustomerStepUpdateLog,
+  CustomerStepUpdateLogSchema,
+} from './schemas/customer-step-update-log.schema';
 import { Customer, CustomerSchema } from './schemas/customer.schema';
+import {
+  CustomerStep,
+  CustomerStepSchema,
+} from '../customer-steps/schemas/customer-step.schema';
 import {
   CustomerDescription,
   CustomerDescriptionSchema,
@@ -20,6 +28,8 @@ import {
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerDescription.name, schema: CustomerDescriptionSchema },
       { name: CustomerChangeLog.name, schema: CustomerChangeLogSchema },
+      { name: CustomerStepUpdateLog.name, schema: CustomerStepUpdateLogSchema },
+      { name: CustomerStep.name, schema: CustomerStepSchema },
     ]),
   ],
   controllers: [CustomerController, CustomerAdminController],

@@ -5,6 +5,7 @@ import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { SetCustomerStepDto } from './dto/set-customer-step.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerService } from './customer.service';
 
@@ -51,6 +52,22 @@ export class CustomerController {
   ) {
     return this.customerService.createCustomer(
       body,
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  /**
+   * Sets the customer's CRM pipeline step (not part of general `PATCH :customerId`).
+   */
+  @Patch(':customerId/step')
+  setCustomerStep(
+    @Param('customerId') customerId: string,
+    @Body() body: SetCustomerStepDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerService.setCustomerStep(
+      customerId,
+      body.customerStepId,
       resolveOfficeUserId(jwtUser),
     );
   }

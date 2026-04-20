@@ -16,6 +16,7 @@ const IGNORED_DIFF_FIELDS = new Set([
   '__v',
   '_id',
   'description',
+  'customerStepId',
 ]);
 
 /**

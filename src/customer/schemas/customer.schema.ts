@@ -53,6 +53,9 @@ export class Customer {
   @Prop()
   assignedTo?: string;
 
+  @Prop({ type: Types.ObjectId, ref: 'CustomerStep', required: false, index: true })
+  customerStepId?: Types.ObjectId;
+
   /**
    * When false, customer treated as disabled (excluded from active flows). Defaults to true.
    */
