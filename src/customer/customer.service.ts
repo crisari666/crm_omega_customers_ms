@@ -38,7 +38,7 @@ export class CustomerService {
 
   async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
     return this.customerModel
-      .find({ createdBy })
+      .find({ createdBy, assignedTo: createdBy })
       .sort({ createdAt: -1 })
       .exec();
   }
