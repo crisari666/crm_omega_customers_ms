@@ -54,7 +54,7 @@ export class CustomerService {
 
   async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
     return this.customerModel
-      .find({ createdBy, assignedTo: createdBy })
+      .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
       .sort({ createdAt: -1 })
       .exec();
   }
@@ -476,7 +476,7 @@ export class CustomerService {
   }
 
   /**
-   * Assigns pipeline step only; appends `CustomerStepUpdateLog` when the step changes.
+   * Assigns pipeline step only; appends {@link CustomerStepUpdateLog} when the step changes.
    */
   async setCustomerStep(
     customerId: string,
