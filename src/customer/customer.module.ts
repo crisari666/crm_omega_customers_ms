@@ -21,6 +21,12 @@ import {
   CustomerDescription,
   CustomerDescriptionSchema,
 } from './schemas/descriptions.schema';
+import {
+  CustomerCallLog,
+  CustomerCallLogSchema,
+} from './schemas/customer-call-log.schema';
+import { CustomerWebhookController } from './customer-webhook.controller';
+import { CustomerCallLogsService } from './customer-call-logs.service';
 
 @Module({
   imports: [
@@ -30,10 +36,11 @@ import {
       { name: CustomerChangeLog.name, schema: CustomerChangeLogSchema },
       { name: CustomerStepUpdateLog.name, schema: CustomerStepUpdateLogSchema },
       { name: CustomerStep.name, schema: CustomerStepSchema },
+      { name: CustomerCallLog.name, schema: CustomerCallLogSchema },
     ]),
   ],
-  controllers: [CustomerController, CustomerAdminController],
-  providers: [CustomerService, CustomerAuditService],
+  controllers: [CustomerController, CustomerAdminController, CustomerWebhookController],
+  providers: [CustomerService, CustomerAuditService, CustomerCallLogsService],
   exports: [CustomerService],
 })
 export class CustomerModule implements OnModuleInit {
