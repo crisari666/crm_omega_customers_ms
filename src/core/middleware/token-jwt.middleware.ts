@@ -7,7 +7,6 @@ import type { NextFunction, Request, Response } from 'express';
 import { JwtVerificationService } from '../services/jwt-verification.service';
 
 const CUSTOMER_PREFIX = '/customer';
-const VOICE_WEBHOOK_PREFIX = '/customers-rest/webhooks/voice/calls';
 const BEARER_PREFIX_REGEX = /^Bearer\s+/i;
 
 function extractRawJwt(value: string): string {
@@ -32,11 +31,6 @@ export class TokenJwtMiddleware implements NestMiddleware {
     _res: Response,
     next: NextFunction,
   ): Promise<void> {
-    if (this.isVoiceWebhookRequest(req)) {
-      this.validateVoiceWebhookToken(req);
-      next();
-      return;
-    }
     if (this.shouldBypass(req)) {
       next();
       return;
@@ -73,44 +67,6 @@ export class TokenJwtMiddleware implements NestMiddleware {
       return true;
     }
     return false;
-  }
-
-  private isVoiceWebhookRequest(req: Request): boolean {
-    const pathname = this.extractPathname(req.originalUrl);
-    console.log('pathname', pathname);
-    return pathname.startsWith(VOICE_WEBHOOK_PREFIX);
-  }
-
-  private validateVoiceWebhookToken(req: Request): void {
-    const expectedToken: string = this.normalizeToken(
-      process.env.VOICE_WEBHOOK_TOKEN,
-    );
-    const rawHeader = req.headers['x-voice-webhook-token'];
-    console.log('rawHeader', rawHeader);
-    const receivedToken: string = this.normalizeToken(
-      typeof rawHeader === 'string'
-        ? rawHeader
-        : Array.isArray(rawHeader)
-          ? (rawHeader[0] ?? '')
-          : '',
-    );
-    if (expectedToken === '') {
-      throw new UnauthorizedException('VOICE_WEBHOOK_TOKEN is not configured');
-    }
-    if (receivedToken !== expectedToken) {
-      throw new UnauthorizedException('Invalid voice webhook token');
-    }
-  }
-
-  private normalizeToken(rawValue: string | undefined): string {
-    const value = (rawValue ?? '').trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      return value.slice(1, -1).trim();
-    }
-    return value;
   }
 
   private extractPathname(originalUrl: string): string {

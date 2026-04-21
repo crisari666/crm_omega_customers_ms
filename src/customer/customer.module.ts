@@ -25,8 +25,9 @@ import {
   CustomerCallLog,
   CustomerCallLogSchema,
 } from './schemas/customer-call-log.schema';
-import { CustomerWebhookController } from './customer-webhook.controller';
 import { CustomerCallLogsService } from './customer-call-logs.service';
+import { VoiceCallRmqController } from './voice-call-rmq.controller';
+import { VoiceRmqTopologyService } from './voice-rmq-topology.service';
 
 @Module({
   imports: [
@@ -39,9 +40,14 @@ import { CustomerCallLogsService } from './customer-call-logs.service';
       { name: CustomerCallLog.name, schema: CustomerCallLogSchema },
     ]),
   ],
-  controllers: [CustomerController, CustomerAdminController, CustomerWebhookController],
-  providers: [CustomerService, CustomerAuditService, CustomerCallLogsService],
-  exports: [CustomerService],
+  controllers: [CustomerController, CustomerAdminController, VoiceCallRmqController],
+  providers: [
+    CustomerService,
+    CustomerAuditService,
+    CustomerCallLogsService,
+    VoiceRmqTopologyService,
+  ],
+  exports: [CustomerService, VoiceRmqTopologyService],
 })
 export class CustomerModule implements OnModuleInit {
   constructor(private readonly customerAuditService: CustomerAuditService) {}
