@@ -464,6 +464,8 @@ export class CustomerService {
     if (dto.assignedTo !== undefined) {
       const t = dto.assignedTo.trim();
       customer.assignedTo = t === '' ? undefined : t;
+      customer.assignedDate = new Date().toISOString();
+
     }
     if (dto.enabled !== undefined) {
       customer.enabled = dto.enabled;
@@ -629,6 +631,7 @@ export class CustomerService {
     }
     if (dto.assignedTo !== undefined) {
       customer.assignedTo = dto.assignedTo;
+      customer.assignedDate = new Date().toISOString();
     }
     try {
       return await customer.save();

@@ -57,6 +57,9 @@ export class Customer {
 
   @Prop()
   assignedTo?: string;
+  
+  @Prop()
+  assignedDate?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'CustomerStep', required: false, index: true })
   customerStepId?: Types.ObjectId;
