@@ -12,6 +12,7 @@ export type LeanCustomerListRow = {
   assignedTo?: string;
   /** Office user id who created the customer record. */
   createdBy?: string;
+  customerStepId?: Types.ObjectId;
   enabled?: boolean;
   createdAt?: Date | string;
 };

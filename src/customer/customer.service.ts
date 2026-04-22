@@ -93,6 +93,7 @@ export class CustomerService {
           email: 1,
           assignedTo: 1,
           createdBy: 1,
+          customerStepId: 1,
           enabled: 1,
           createdAt: 1,
         })
@@ -104,6 +105,27 @@ export class CustomerService {
       this.customerModel.countDocuments(filter).exec(),
     ]);
 
+    const stepIds = Array.from(
+      new Set(
+        (raw as LeanCustomerListRow[])
+          .map((doc) => doc.customerStepId?.toString())
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    const stepById = new Map<string, string>();
+    if (stepIds.length > 0) {
+      const steps = await this.customerStepModel
+        .find({ _id: { $in: stepIds } })
+        .select({ name: 1 })
+        .lean()
+        .exec();
+
+      for (const step of steps as Array<{ _id: Types.ObjectId; name?: string }>) {
+        stepById.set(String(step._id), step.name ?? '');
+      }
+    }
+
     const items: CustomerAdminListItem[] = (raw as LeanCustomerListRow[]).map(
       (doc) => ({
         id: String(doc._id),
@@ -113,6 +135,9 @@ export class CustomerService {
         email: doc.email,
         assignedTo: doc.assignedTo,
         createdBy: doc.createdBy,
+        currentStep: doc.customerStepId
+          ? (stepById.get(String(doc.customerStepId)) ?? undefined)
+          : undefined,
         enabled: doc.enabled !== false,
         createdAt:
           doc.createdAt instanceof Date

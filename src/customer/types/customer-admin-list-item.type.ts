@@ -10,6 +10,8 @@ export type CustomerAdminListItem = {
   assignedTo?: string;
   /** Office user id who created the customer record. */
   createdBy?: string;
+  /** Current pipeline step label for customer. */
+  currentStep?: string;
   /** False when customer disabled; true when active or legacy doc without field. */
   enabled: boolean;
   createdAt: string;
