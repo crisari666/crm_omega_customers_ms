@@ -8,6 +8,7 @@ import { CoreModule } from './core/core.module';
 import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
 import { CustomerStepsModule } from './customer-steps/customer-steps.module';
+import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CustomerStepsModule } from './customer-steps/customer-steps.module';
     }),
     CustomerModule,
     CustomerStepsModule,
+    VentorScheduleModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],

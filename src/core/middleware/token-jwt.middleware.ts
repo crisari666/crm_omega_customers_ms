@@ -6,8 +6,27 @@ import {
 import type { NextFunction, Request, Response } from 'express';
 import { JwtVerificationService } from '../services/jwt-verification.service';
 
+const GLOBAL_API_PREFIX = '/customers-rest';
 const CUSTOMER_PREFIX = '/customer';
+const VENTOR_SCHEDULE_PREFIX = '/ventor-schedule';
 const BEARER_PREFIX_REGEX = /^Bearer\s+/i;
+
+function normalizeApiPathname(originalUrl: string): string {
+  const pathname = extractPathname(originalUrl);
+  if (pathname.startsWith(GLOBAL_API_PREFIX)) {
+    return pathname.slice(GLOBAL_API_PREFIX.length) || '/';
+  }
+  return pathname;
+}
+
+function extractPathname(originalUrl: string): string {
+  const questionIndex = originalUrl.indexOf('?');
+  const path =
+    questionIndex === -1
+      ? originalUrl
+      : originalUrl.slice(0, questionIndex);
+  return path === '' ? '/' : path;
+}
 
 function extractRawJwt(value: string): string {
   const trimmed = value.trim();
@@ -18,7 +37,8 @@ function extractRawJwt(value: string): string {
 }
 
 /**
- * Requires a valid JWT in the `TOKEN` header for `/customer/*`, except `GET /customer/test`.
+ * Requires a valid JWT in the `TOKEN` header for `/customer/*` and `/ventor-schedule/*`
+ * (after optional global prefix `/customers-rest`), except `GET /customer/test`.
  */
 @Injectable()
 export class TokenJwtMiddleware implements NestMiddleware {
@@ -55,8 +75,10 @@ export class TokenJwtMiddleware implements NestMiddleware {
     if (req.method === 'OPTIONS') {
       return true;
     }
-    const pathname = this.extractPathname(req.originalUrl);
-    if (!pathname.startsWith(CUSTOMER_PREFIX)) {
+    const pathname = normalizeApiPathname(req.originalUrl);
+    const isCustomer = pathname.startsWith(CUSTOMER_PREFIX);
+    const isVentorSchedule = pathname.startsWith(VENTOR_SCHEDULE_PREFIX);
+    if (!isCustomer && !isVentorSchedule) {
       return true;
     }
     const normalized =
@@ -67,14 +89,5 @@ export class TokenJwtMiddleware implements NestMiddleware {
       return true;
     }
     return false;
-  }
-
-  private extractPathname(originalUrl: string): string {
-    const questionIndex = originalUrl.indexOf('?');
-    const path =
-      questionIndex === -1
-        ? originalUrl
-        : originalUrl.slice(0, questionIndex);
-    return path === '' ? '/' : path;
   }
 }

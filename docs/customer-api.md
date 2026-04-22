@@ -4,6 +4,8 @@ Base URL: `http://localhost:{APP_PORT}` (default **`4001`**, see `src/main.ts`) 
 
 The app runs a global `ValidationPipe` with `whitelist` and `forbidNonWhitelisted`: unknown properties in the body are rejected with **400 Bad Request**.
 
+Ventor agenda (schedule events): [ventor-schedule-api.md](./ventor-schedule-api.md) — paths under `/ventor-schedule`, same `TOKEN` header as below.
+
 ---
 
 ## Consuming the API
