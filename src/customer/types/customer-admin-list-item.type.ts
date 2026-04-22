@@ -8,6 +8,8 @@ export type CustomerAdminListItem = {
   phone: string;
   email?: string;
   assignedTo?: string;
+  /** Office user id who created the customer record. */
+  createdBy?: string;
   /** False when customer disabled; true when active or legacy doc without field. */
   enabled: boolean;
   createdAt: string;

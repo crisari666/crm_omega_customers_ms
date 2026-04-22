@@ -10,6 +10,8 @@ export type LeanCustomerListRow = {
   phone: string;
   email?: string;
   assignedTo?: string;
+  /** Office user id who created the customer record. */
+  createdBy?: string;
   enabled?: boolean;
   createdAt?: Date | string;
 };

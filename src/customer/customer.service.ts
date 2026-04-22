@@ -92,6 +92,7 @@ export class CustomerService {
           phone: 1,
           email: 1,
           assignedTo: 1,
+          createdBy: 1,
           enabled: 1,
           createdAt: 1,
         })
@@ -111,6 +112,7 @@ export class CustomerService {
         phone: doc.phone,
         email: doc.email,
         assignedTo: doc.assignedTo,
+        createdBy: doc.createdBy,
         enabled: doc.enabled !== false,
         createdAt:
           doc.createdAt instanceof Date
