@@ -56,6 +56,13 @@ export class CustomerController {
     );
   }
 
+  @Post('normalize-contacts')
+  normalizeContacts(
+    @Body() body: { phone?: string; whatsapp?: string },
+  ): { phone: string; whatsapp: string } {
+    return this.customerService.normalizeCustomerContactNumbers(body);
+  }
+
   /**
    * Sets the customer's CRM pipeline step (not part of general `PATCH :customerId`).
    */

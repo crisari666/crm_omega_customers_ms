@@ -1,5 +1,7 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CustomerAdminController } from './customer-admin.controller';
 import { CustomerAuditService } from './customer-audit.service';
 import { CustomerController } from './customer.controller';
@@ -28,9 +30,28 @@ import {
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { VoiceCallRmqController } from './voice-call-rmq.controller';
 import { VoiceRmqTopologyService } from './voice-rmq-topology.service';
+import { CustomerWhatsappRmqController } from './customer-whatsapp-rmq.controller';
+import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publisher';
 
 @Module({
   imports: [
+    ClientsModule.registerAsync([
+      {
+        name: 'WHATSAPP_MS_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('rabbitmq.url', '')],
+            queue:
+              configService.get<string>('RABBITMQ_WHATSAPP_EVENTS_QUEUE') ||
+              'crm.whatsapp.events',
+            queueOptions: { durable: true },
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
     MongooseModule.forFeature([
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerDescription.name, schema: CustomerDescriptionSchema },
@@ -40,12 +61,18 @@ import { VoiceRmqTopologyService } from './voice-rmq-topology.service';
       { name: CustomerCallLog.name, schema: CustomerCallLogSchema },
     ]),
   ],
-  controllers: [CustomerController, CustomerAdminController, VoiceCallRmqController],
+  controllers: [
+    CustomerController,
+    CustomerAdminController,
+    VoiceCallRmqController,
+    CustomerWhatsappRmqController,
+  ],
   providers: [
     CustomerService,
     CustomerAuditService,
     CustomerCallLogsService,
     VoiceRmqTopologyService,
+    CustomerWhatsappEventsPublisher,
   ],
   exports: [CustomerService, VoiceRmqTopologyService],
 })

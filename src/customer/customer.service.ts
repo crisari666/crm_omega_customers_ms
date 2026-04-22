@@ -82,6 +82,23 @@ export class CustomerService {
     return 'ok';
   }
 
+  normalizeCustomerContactNumbers(input: {
+    phone?: string;
+    whatsapp?: string;
+  }): { phone: string; whatsapp: string } {
+    const normalizedPhone =
+      input.phone !== undefined ? normalizeCustomerPhone(input.phone) : '';
+    const normalizedWhatsapp =
+      input.whatsapp !== undefined ? normalizeCustomerPhone(input.whatsapp) : '';
+    if (normalizedPhone !== '') {
+      return { phone: normalizedPhone, whatsapp: normalizedPhone };
+    }
+    if (normalizedWhatsapp !== '') {
+      return { phone: normalizedWhatsapp, whatsapp: normalizedWhatsapp };
+    }
+    return { phone: '', whatsapp: '' };
+  }
+
   async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
     return this.customerModel
       .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
@@ -412,11 +429,15 @@ export class CustomerService {
       customer.lastName = dto.lastName;
     }
     if (dto.phone !== undefined) {
-      const p = normalizeCustomerPhone(dto.phone);
+      const p = this.normalizeCustomerContactNumbers({
+        phone: dto.phone,
+      }).phone;
       customer.phone = p;
       customer.whatsapp = p;
     } else if (dto.whatsapp !== undefined) {
-      const w = normalizeCustomerPhone(dto.whatsapp);
+      const w = this.normalizeCustomerContactNumbers({
+        whatsapp: dto.whatsapp,
+      }).whatsapp;
       customer.phone = w;
       customer.whatsapp = w;
     }
@@ -468,7 +489,9 @@ export class CustomerService {
         date: entry.date ? new Date(entry.date) : new Date(),
         addedBy: createdBy,
       })) ?? [];
-    const canonicalPhone = normalizeCustomerPhone(dto.phone);
+    const canonicalPhone = this.normalizeCustomerContactNumbers({
+      phone: dto.phone,
+    }).phone;
     const created = new this.customerModel({
       name: dto.name,
       lastName: dto.lastName,
@@ -510,7 +533,9 @@ export class CustomerService {
             },
           ]
         : [];
-    const canonicalPhone = normalizeCustomerPhone(dto.phone);
+    const canonicalPhone = this.normalizeCustomerContactNumbers({
+      phone: dto.phone,
+    }).phone;
     const created = new this.customerModel({
       phone: canonicalPhone,
       whatsapp: canonicalPhone,
@@ -575,11 +600,15 @@ export class CustomerService {
       customer.lastName = dto.lastName;
     }
     if (dto.phone !== undefined) {
-      const p = normalizeCustomerPhone(dto.phone);
+      const p = this.normalizeCustomerContactNumbers({
+        phone: dto.phone,
+      }).phone;
       customer.phone = p;
       customer.whatsapp = p;
     } else if (dto.whatsapp !== undefined) {
-      const w = normalizeCustomerPhone(dto.whatsapp);
+      const w = this.normalizeCustomerContactNumbers({
+        whatsapp: dto.whatsapp,
+      }).whatsapp;
       customer.phone = w;
       customer.whatsapp = w;
     }
@@ -749,6 +778,45 @@ export class CustomerService {
       to: customer.interestedProjects,
     });
     return customer;
+  }
+
+  async findCustomerForWhatsappLink(
+    phoneOrWhatsapp: string,
+    userSessionId?: string,
+  ): Promise<{ customerId: string; assignedTo?: string } | null> {
+    const canonical = normalizeCustomerPhone(phoneOrWhatsapp || '');
+    if (canonical === '') {
+      return null;
+    }
+
+    const compactDigits = canonical.replace(/\D/g, '');
+    const candidates = [...new Set([canonical, compactDigits])].filter(
+      (value) => value !== '',
+    );
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const query = {
+      $or: [{ phone: { $in: candidates } }, { whatsapp: { $in: candidates } }],
+    };
+    const docs = await this.customerModel
+      .find(query)
+      .select('_id assignedTo')
+      .lean()
+      .exec();
+    if (docs.length === 0) {
+      return null;
+    }
+
+    if (userSessionId && userSessionId.trim() !== '') {
+      const preferred = docs.find((doc) => doc.assignedTo === userSessionId);
+      if (preferred) {
+        return { customerId: String(preferred._id), assignedTo: preferred.assignedTo };
+      }
+    }
+
+    return { customerId: String(docs[0]._id), assignedTo: docs[0].assignedTo };
   }
 
   private async ensureCustomerExists(customerId: string): Promise<void> {
