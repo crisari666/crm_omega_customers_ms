@@ -129,8 +129,8 @@ export class CustomerService {
               },
             },
             {
+              // Inclusion-only: `_stepJoin` omitted (cannot mix field:0 with field:1).
               $project: {
-                _stepJoin: 0,
                 _id: 1,
                 name: 1,
                 lastName: 1,
