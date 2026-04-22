@@ -4,8 +4,10 @@ import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { AssignCustomerAssigneeDto } from './dto/assign-customer-assignee.dto';
 import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
+import { ListCallLogsAdminQueryDto } from './dto/list-call-logs-admin.query.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
+import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerService } from './customer.service';
 
 /**
@@ -13,11 +15,19 @@ import { CustomerService } from './customer.service';
  */
 @Controller('admin/customer')
 export class CustomerAdminController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly customerCallLogsService: CustomerCallLogsService,
+  ) {}
 
   @Get()
   listCustomersAdmin(@Query() query: ListCustomersAdminQueryDto) {
     return this.customerService.listCustomersAdmin(query);
+  }
+
+  @Get('call-logs')
+  listCallLogsAdmin(@Query() query: ListCallLogsAdminQueryDto) {
+    return this.customerCallLogsService.listAdmin(query);
   }
 
   @Post()
@@ -29,6 +39,11 @@ export class CustomerAdminController {
       body,
       resolveOfficeUserId(jwtUser),
     );
+  }
+
+  @Get(':customerId/call-logs')
+  listCustomerCallLogs(@Param('customerId') customerId: string) {
+    return this.customerCallLogsService.listForCustomer(customerId);
   }
 
   @Get(':customerId')

@@ -1,12 +1,53 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types, isValidObjectId } from 'mongoose';
 import { IngestVoiceCallEventDto } from './dto/ingest-voice-call-event.dto';
+import { ListCallLogsAdminQueryDto } from './dto/list-call-logs-admin.query.dto';
 import { SaveCallTranscriptionDto } from './dto/save-call-transcription.dto';
 import {
   CustomerCallLog,
   CustomerCallLogDocument,
 } from './schemas/customer-call-log.schema';
+import {
+  callOutcomeMatchesFilter,
+  deriveResolvedCallOutcome,
+  type ResolvedCallOutcome,
+} from './utils/call-log-outcome.util';
+
+export type CustomerCallLogAdminEventDto = {
+  eventType: string;
+  timestamp: string;
+  status?: string;
+  durationSeconds?: number;
+  recordingUrl?: string;
+  transcript?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CustomerCallLogAdminItemDto = {
+  id: string;
+  callSid: string;
+  provider: string;
+  from?: string;
+  to?: string;
+  direction?: string;
+  durationSeconds?: number;
+  recordingUrl?: string;
+  transcript?: string;
+  text?: string;
+  status?: string;
+  customerId?: string;
+  customerExternalRef?: string;
+  agentExternalRef?: string;
+  resolvedOutcome: ResolvedCallOutcome;
+  preCompleteEventType?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  events: CustomerCallLogAdminEventDto[];
+};
+
+const ADMIN_LIST_FETCH_CAP = 5000;
 
 type IngestResult = {
   accepted: true;
@@ -64,6 +105,119 @@ export class CustomerCallLogsService {
       ...(payload.customerExternalRef !== undefined
         ? { customerId: payload.customerExternalRef }
         : {}),
+    };
+  }
+
+  async listForCustomer(customerId: string): Promise<CustomerCallLogAdminItemDto[]> {
+    const or: Array<Record<string, unknown>> = [
+      { customerExternalRef: customerId },
+    ];
+    if (isValidObjectId(customerId)) {
+      or.push({ customerId: new Types.ObjectId(customerId) });
+    }
+    const docs = await this.customerCallLogModel
+      .find({ $or: or })
+      .sort({ updatedAt: -1 })
+      .limit(500)
+      .lean()
+      .exec();
+    return docs.map((d) => this.toAdminItem(d));
+  }
+
+  async listAdmin(query: ListCallLogsAdminQueryDto): Promise<{
+    items: CustomerCallLogAdminItemDto[];
+    total: number;
+  }> {
+    const createdAtRange: { $gte?: Date; $lte?: Date } = {};
+    if (query.callFrom !== undefined) {
+      createdAtRange.$gte = new Date(query.callFrom);
+    }
+    if (query.callTo !== undefined) {
+      createdAtRange.$lte = new Date(query.callTo);
+    }
+    const filter =
+      Object.keys(createdAtRange).length > 0 ? { createdAt: createdAtRange } : {};
+    const docs = await this.customerCallLogModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .limit(ADMIN_LIST_FETCH_CAP)
+      .lean()
+      .exec();
+    const mapped = docs.map((d) => this.toAdminItem(d));
+    const outcomeFilter = query.outcome ?? 'all';
+    const filtered =
+      outcomeFilter === 'all'
+        ? mapped
+        : mapped.filter((row) =>
+            callOutcomeMatchesFilter(row.resolvedOutcome, outcomeFilter),
+          );
+    const total = filtered.length;
+    const skip = query.skip ?? 0;
+    const limit = query.limit ?? 50;
+    const items = filtered.slice(skip, skip + limit);
+    return { items, total };
+  }
+
+  private toAdminItem(doc: {
+    _id: Types.ObjectId;
+    callSid: string;
+    provider: string;
+    from?: string;
+    to?: string;
+    direction?: string;
+    durationSeconds?: number;
+    recordingUrl?: string;
+    transcript?: string;
+    text?: string;
+    status?: string;
+    customerId?: Types.ObjectId;
+    customerExternalRef?: string;
+    agentExternalRef?: string;
+    events?: CustomerCallLog['events'];
+    createdAt?: Date;
+    updatedAt?: Date;
+  }): CustomerCallLogAdminItemDto {
+    const events = (doc.events ?? []).map((e) => ({
+      eventType: e.eventType,
+      timestamp: new Date(e.timestamp).toISOString(),
+      status: e.status,
+      durationSeconds: e.durationSeconds,
+      recordingUrl: e.recordingUrl,
+      transcript: e.transcript,
+      metadata: e.metadata,
+    }));
+    const derived = deriveResolvedCallOutcome(doc.events, doc.status);
+    const customerId =
+      doc.customerId !== undefined ? String(doc.customerId) : undefined;
+    const createdAt =
+      (doc as { createdAt?: Date }).createdAt !== undefined
+        ? new Date((doc as { createdAt: Date }).createdAt).toISOString()
+        : new Date(0).toISOString();
+    const updatedAt =
+      (doc as { updatedAt?: Date }).updatedAt !== undefined
+        ? new Date((doc as { updatedAt: Date }).updatedAt).toISOString()
+        : createdAt;
+    return {
+      id: String(doc._id),
+      callSid: doc.callSid,
+      provider: doc.provider,
+      from: doc.from,
+      to: doc.to,
+      direction: doc.direction,
+      durationSeconds: doc.durationSeconds,
+      recordingUrl: doc.recordingUrl,
+      transcript: doc.transcript,
+      text: doc.text,
+      status: doc.status,
+      customerId,
+      customerExternalRef: doc.customerExternalRef,
+      agentExternalRef: doc.agentExternalRef,
+      resolvedOutcome: derived.outcome,
+      preCompleteEventType: derived.preCompleteEventType,
+      completedAt: derived.completedAtIso,
+      createdAt,
+      updatedAt,
+      events,
     };
   }
 
