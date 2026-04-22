@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import type { PipelineStage } from 'mongoose';
 import { Model, Types } from 'mongoose';
 import { AddCustomerDescriptionDto } from './dto/add-customer-description.dto';
 import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
@@ -20,7 +21,6 @@ import {
   CustomerAdminListResponse,
 } from './types/customer-admin-list-item.type';
 import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
-import { LeanCustomerListRow } from './types/lean-customer-list-row.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
   CustomerStepUpdateLog,
@@ -47,6 +47,22 @@ function isMongoDuplicateKeyError(err: unknown): boolean {
     (err as { code: unknown }).code === 11000
   );
 }
+
+/** Lean row after admin list aggregation ($lookup customer_steps). */
+type AdminListAggRow = {
+  _id: Types.ObjectId;
+  name?: string;
+  lastName?: string;
+  phone: string;
+  email?: string;
+  assignedTo?: string;
+  createdBy?: string;
+  customerStepId?: Types.ObjectId;
+  enabled?: boolean;
+  createdAt?: Date;
+  __stepName?: string;
+  __stepColor?: string;
+};
 
 @Injectable()
 export class CustomerService {
@@ -75,6 +91,7 @@ export class CustomerService {
 
   /**
    * Admin list with filters; returns only fields needed for CRM table display.
+   * Single aggregation: match + facet (count + paginated rows with step lookup).
    */
   async listCustomersAdmin(
     query: ListCustomersAdminQueryDto,
@@ -83,70 +100,105 @@ export class CustomerService {
     const limit = query.limit ?? 50;
     const skip = query.skip ?? 0;
 
-    const [raw, total] = await Promise.all([
-      this.customerModel
-        .find(filter)
-        .select({
-          name: 1,
-          lastName: 1,
-          phone: 1,
-          email: 1,
-          assignedTo: 1,
-          createdBy: 1,
-          customerStepId: 1,
-          enabled: 1,
-          createdAt: 1,
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .exec(),
-      this.customerModel.countDocuments(filter).exec(),
-    ]);
+    type FacetBucket = {
+      meta: { total: number }[];
+      rows: AdminListAggRow[];
+    };
 
-    const stepIds = Array.from(
-      new Set(
-        (raw as LeanCustomerListRow[])
-          .map((doc) => doc.customerStepId?.toString())
-          .filter((id): id is string => Boolean(id)),
-      ),
-    );
+    const pipeline: PipelineStage[] = [
+      { $match: filter },
+      {
+        $facet: {
+          meta: [{ $count: 'total' }],
+          rows: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: 'customer_steps',
+                localField: 'customerStepId',
+                foreignField: '_id',
+                as: '_stepJoin',
+              },
+            },
+            {
+              $set: {
+                __stepName: { $arrayElemAt: ['$_stepJoin.name', 0] },
+                __stepColor: { $arrayElemAt: ['$_stepJoin.color', 0] },
+              },
+            },
+            {
+              $project: {
+                _stepJoin: 0,
+                _id: 1,
+                name: 1,
+                lastName: 1,
+                phone: 1,
+                email: 1,
+                assignedTo: 1,
+                createdBy: 1,
+                customerStepId: 1,
+                enabled: 1,
+                createdAt: 1,
+                __stepName: 1,
+                __stepColor: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
 
-    const stepById = new Map<string, string>();
-    if (stepIds.length > 0) {
-      const steps = await this.customerStepModel
-        .find({ _id: { $in: stepIds } })
-        .select({ name: 1 })
-        .lean()
-        .exec();
+    const agg = await this.customerModel.aggregate<FacetBucket>(pipeline).exec();
+    const bucket = agg[0];
+    const total = bucket?.meta[0]?.total ?? 0;
+    const rows = bucket?.rows ?? [];
 
-      for (const step of steps as Array<{ _id: Types.ObjectId; name?: string }>) {
-        stepById.set(String(step._id), step.name ?? '');
-      }
-    }
-
-    const items: CustomerAdminListItem[] = (raw as LeanCustomerListRow[]).map(
-      (doc) => ({
-        id: String(doc._id),
-        name: doc.name,
-        lastName: doc.lastName,
-        phone: doc.phone,
-        email: doc.email,
-        assignedTo: doc.assignedTo,
-        createdBy: doc.createdBy,
-        currentStep: doc.customerStepId
-          ? (stepById.get(String(doc.customerStepId)) ?? undefined)
-          : undefined,
-        enabled: doc.enabled !== false,
-        createdAt:
-          doc.createdAt instanceof Date
-            ? doc.createdAt.toISOString()
-            : new Date(doc.createdAt as string).toISOString(),
-      }),
-    );
-
+    const items = rows.map((doc) => this.mapAdminListAggRowToItem(doc));
     return { items, total };
+  }
+
+  private mapAdminListAggRowToItem(doc: AdminListAggRow): CustomerAdminListItem {
+    const sid = doc.customerStepId
+      ? String(doc.customerStepId)
+      : undefined;
+    const stepName =
+      typeof doc.__stepName === 'string' && doc.__stepName.trim() !== ''
+        ? doc.__stepName.trim()
+        : undefined;
+    const stepColor =
+      typeof doc.__stepColor === 'string' && doc.__stepColor.trim() !== ''
+        ? doc.__stepColor.trim()
+        : undefined;
+
+    const createdRaw = doc.createdAt;
+    const createdAt =
+      createdRaw instanceof Date
+        ? createdRaw.toISOString()
+        : new Date(createdRaw as string).toISOString();
+
+    const item: CustomerAdminListItem = {
+      id: String(doc._id),
+      name: doc.name,
+      lastName: doc.lastName,
+      phone: doc.phone,
+      email: doc.email,
+      assignedTo: doc.assignedTo,
+      createdBy: doc.createdBy,
+      enabled: doc.enabled !== false,
+      createdAt,
+    };
+    if (sid !== undefined) {
+      item.customerStepId = sid;
+    }
+    if (sid !== undefined && stepName !== undefined) {
+      item.currentStep = stepName;
+    }
+    if (sid !== undefined && stepColor !== undefined) {
+      item.currentStepColor = stepColor;
+    }
+    return item;
   }
 
   private buildAdminListFilter(
@@ -212,6 +264,11 @@ export class CustomerService {
       filter.$or = unassignedClause.$or;
     } else if (searchClause !== null) {
       filter.$or = searchClause.$or;
+    }
+
+    const stepId = query.customerStepId?.trim();
+    if (stepId !== undefined && stepId !== '') {
+      filter.customerStepId = new Types.ObjectId(stepId);
     }
 
     const enabledClause =

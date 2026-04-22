@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  IsMongoId,
   IsOptional,
   IsString,
   Max,
@@ -66,6 +67,13 @@ export class ListCustomersAdminQueryDto {
   @IsString()
   @MaxLength(200)
   search?: string;
+
+  /**
+   * When set, only customers whose current pipeline step matches this id.
+   */
+  @IsOptional()
+  @IsMongoId()
+  customerStepId?: string;
 
   @IsOptional()
   @Type(() => Number)
