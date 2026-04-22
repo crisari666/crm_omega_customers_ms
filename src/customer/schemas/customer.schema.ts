@@ -73,4 +73,7 @@ export class Customer {
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);
 
+CustomerSchema.index({ createdAt: -1 });
+CustomerSchema.index({ createdAt: -1, assignedTo: 1 });
+
 /** Change history uses pre/post `save` hooks attached in {@link CustomerAuditService.attachCustomerSchemaHooks}. */
