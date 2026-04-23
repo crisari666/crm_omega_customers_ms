@@ -64,6 +64,19 @@ export class CustomerController {
   }
 
   /**
+   * Normalizes stored contact numbers for all customers.
+   */
+  @Post('normalize-all-contacts')
+  async normalizeAllContacts(): Promise<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    conflicts: number;
+  }> {
+    return this.customerService.normalizeAllCustomerContactNumbers();
+  }
+
+  /**
    * Sets the customer's CRM pipeline step (not part of general `PATCH :customerId`).
    */
   @Patch(':customerId/step')

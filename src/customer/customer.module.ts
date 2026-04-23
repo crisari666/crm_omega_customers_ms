@@ -43,9 +43,7 @@ import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publ
           transport: Transport.RMQ,
           options: {
             urls: [configService.get<string>('rabbitmq.url', '')],
-            queue:
-              configService.get<string>('RABBITMQ_WHATSAPP_EVENTS_QUEUE') ||
-              'crm.whatsapp.events',
+            queue: 'crm.whatsapp.events',
             queueOptions: { durable: true },
           },
         }),

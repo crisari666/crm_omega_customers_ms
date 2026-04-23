@@ -1,40 +1,57 @@
 import './express-augmentation';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 import { VoiceCrmInboundDeserializer } from './customer/voice-crm-inbound.deserializer';
 import { VoiceRmqTopologyService } from './customer/voice-rmq-topology.service';
-
-function trimEnv(value: string | undefined): string {
-  return (value ?? '').trim();
-}
+import configuration from './config/configuration';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const port = process.env.APP_PORT || 4001;
   const app = await NestFactory.create(AppModule);
-  const rabbitUrl: string = trimEnv(process.env.RABBITMQ_URL);
+  const rabbitUrl: string = configuration().rabbitmq.url;
+
   if (rabbitUrl !== '') {
     const topology: VoiceRmqTopologyService = app.get(VoiceRmqTopologyService);
     await topology.ensureVoiceCallBindings();
-    const queue: string =
-      trimEnv(process.env.RABBITMQ_VOICE_QUEUE) || 'crm.customers.voice_call_logs';
-    const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
-    const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
-    const prefetchCount: number =
-      Number.isFinite(parsedPrefetch) && parsedPrefetch > 0 ? parsedPrefetch : 10;
+    const { voiceQueue, integrationQueue, prefetch: prefetchCount } = configuration().rabbitmq;
+    const rmqBaseOptions = {
+      urls: [rabbitUrl],
+      prefetchCount,
+      noAck: false,
+      //queueOptions: { durable: true },
+    };
+
     app.connectMicroservice<MicroserviceOptions>({
       transport: Transport.RMQ,
       options: {
-        urls: [rabbitUrl],
-        queue,
-        prefetchCount,
-        noAck: false,
+        ...rmqBaseOptions,
+        queue: voiceQueue,
         deserializer: new VoiceCrmInboundDeserializer(),
-        queueOptions: { durable: true },
       },
     });
+
+    // crm_whatsapp_ms send/emit: default Nest deserializer (VoiceCrmInboundDeserializer throws on non-voice non-Nest edge cases).
+    if (integrationQueue !== voiceQueue) {
+      app.connectMicroservice<MicroserviceOptions>({
+        transport: Transport.RMQ,
+        options: {
+          ...rmqBaseOptions,
+          queue: integrationQueue,
+        },
+      });
+    }
+
     await app.startAllMicroservices();
+    logger.log(
+      `RabbitMQ microservices started (voiceQueue=${voiceQueue}, integrationQueue=${integrationQueue})`,
+    );
+  } else {
+    logger.warn(
+      'RabbitMQ URL empty; microservices not started. WhatsApp/customer RPC handlers inactive.',
+    );
   }
 
   app.setGlobalPrefix('customers-rest');

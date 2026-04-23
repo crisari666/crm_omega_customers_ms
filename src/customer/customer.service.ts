@@ -63,6 +63,12 @@ type AdminListAggRow = {
   __stepName?: string;
   __stepColor?: string;
 };
+type NormalizeAllContactsResult = {
+  total: number;
+  updated: number;
+  unchanged: number;
+  conflicts: number;
+};
 
 @Injectable()
 export class CustomerService {
@@ -97,6 +103,44 @@ export class CustomerService {
       return { phone: normalizedWhatsapp, whatsapp: normalizedWhatsapp };
     }
     return { phone: '', whatsapp: '' };
+  }
+
+  /**
+   * Normalizes all customer contact numbers by removing spaces and `+`.
+   * When normalized values collide with unique `phone`, the record is skipped.
+   */
+  async normalizeAllCustomerContactNumbers(): Promise<NormalizeAllContactsResult> {
+    const customers = await this.customerModel.find().select('phone whatsapp').exec();
+    let updated = 0;
+    let unchanged = 0;
+    let conflicts = 0;
+    for (const customer of customers) {
+      const normalized = this.normalizeCustomerContactNumbers({
+        phone: customer.phone,
+        whatsapp: customer.whatsapp,
+      });
+      const currentPhone = customer.phone ?? '';
+      const currentWhatsapp = customer.whatsapp ?? '';
+      const hasChanges =
+        currentPhone !== normalized.phone || currentWhatsapp !== normalized.whatsapp;
+      if (!hasChanges) {
+        unchanged += 1;
+        continue;
+      }
+      customer.phone = normalized.phone;
+      customer.whatsapp = normalized.whatsapp;
+      try {
+        await customer.save();
+        updated += 1;
+      } catch (err) {
+        if (isMongoDuplicateKeyError(err)) {
+          conflicts += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+    return { total: customers.length, updated, unchanged, conflicts };
   }
 
   async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
