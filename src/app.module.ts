@@ -7,6 +7,7 @@ import configuration from './config/configuration';
 import { CoreModule } from './core/core.module';
 import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
+import { CustomerConversationsModule } from './customer-conversations/customer-conversations.module';
 import { CustomerStepsModule } from './customer-steps/customer-steps.module';
 import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 
@@ -25,6 +26,7 @@ import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
       }),
     }),
     CustomerModule,
+    CustomerConversationsModule,
     CustomerStepsModule,
     VentorScheduleModule,
   ],
