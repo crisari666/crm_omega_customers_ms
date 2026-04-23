@@ -25,6 +25,17 @@ export class CustomerController {
   }
 
   /**
+   * KPIs for ventor home: customers created by JWT user with `assignedTo` set, and
+   * completed office visits (schedule) for those customers.
+   */
+  @Get('mine/stats')
+  getMyDashboardStats(@JwtUser() jwtUser: OfficeJwtPayload | undefined) {
+    return this.customerService.getVendorMineDashboardStats(
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  /**
    * Customers whose `createdBy` matches JWT user (`userId` or `sub`).
    */
   @Get('mine')

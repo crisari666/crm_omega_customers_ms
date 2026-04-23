@@ -23,6 +23,12 @@ import {
 import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
+  VentorScheduleEvent,
+  VentorScheduleEventDocument,
+  VentorScheduleEventStatus,
+  VentorScheduleEventType,
+} from '../ventor-schedule/schemas/ventor-schedule-event.schema';
+import {
   CustomerStepUpdateLog,
   CustomerStepUpdateLogDocument,
 } from './schemas/customer-step-update-log.schema';
@@ -73,6 +79,8 @@ type NormalizeAllContactsResult = {
 @Injectable()
 export class CustomerService {
   constructor(
+    @InjectModel(VentorScheduleEvent.name)
+    private readonly ventorScheduleEventModel: Model<VentorScheduleEventDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerDescription.name)
@@ -148,6 +156,58 @@ export class CustomerService {
       .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
       .sort({ createdAt: -1 })
       .exec();
+  }
+
+  /**
+   * Ventor dashboard: customers this user created with a non-empty assignee, and
+   * distinct customers (same creator filter) with a completed in-office schedule event.
+   */
+  async getVendorMineDashboardStats(userId: string): Promise<{
+    customersActives: number;
+    customerConversion: number;
+  }> {
+    const enabledOk = {
+      $or: [{ enabled: true }, { enabled: { $exists: false } }],
+    };
+    const customersActives = await this.customerModel.countDocuments({
+      createdBy: userId,
+      assignedTo: { $exists: true, $nin: [null, ''] },
+      ...enabledOk,
+    });
+
+    const customerColl = this.customerModel.collection.name;
+    const convAgg = await this.ventorScheduleEventModel
+      .aggregate<{ n: number }>([
+        {
+          $match: {
+            userId,
+            eventType: VentorScheduleEventType.Office,
+            status: VentorScheduleEventStatus.Done,
+          },
+        },
+        {
+          $lookup: {
+            from: customerColl,
+            let: { cid: '$customerId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$_id', '$$cid'] },
+                  createdBy: userId,
+                },
+              },
+            ],
+            as: 'cust',
+          },
+        },
+        { $match: { cust: { $ne: [] } } },
+        { $group: { _id: '$customerId' } },
+        { $count: 'n' },
+      ])
+      .exec();
+
+    const customerConversion = convAgg[0]?.n ?? 0;
+    return { customersActives, customerConversion };
   }
 
   /**
