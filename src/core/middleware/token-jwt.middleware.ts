@@ -9,6 +9,7 @@ import { JwtVerificationService } from '../services/jwt-verification.service';
 const GLOBAL_API_PREFIX = '/customers-rest';
 const CUSTOMER_PREFIX = '/customer';
 const VENTOR_SCHEDULE_PREFIX = '/ventor-schedule';
+const ADMIN_CUSTOMER_PREFIX = '/admin/customer';
 const BEARER_PREFIX_REGEX = /^Bearer\s+/i;
 
 function normalizeApiPathname(originalUrl: string): string {
@@ -37,7 +38,7 @@ function extractRawJwt(value: string): string {
 }
 
 /**
- * Requires a valid JWT in the `TOKEN` header for `/customer/*` and `/ventor-schedule/*`
+ * Requires a valid JWT in the `TOKEN` header for `/customer/*`, `/admin/customer/*`, and `/ventor-schedule/*`
  * (after optional global prefix `/customers-rest`), except `GET /customer/test`.
  */
 @Injectable()
@@ -67,6 +68,7 @@ export class TokenJwtMiddleware implements NestMiddleware {
       throw new UnauthorizedException('TOKEN header is required');
     }
     const payload = await this.jwtVerificationService.verifyToken(token);
+    console.log('payload middleware', payload);
     req.officeJwtUser = payload;
     next();
   }
@@ -78,7 +80,8 @@ export class TokenJwtMiddleware implements NestMiddleware {
     const pathname = normalizeApiPathname(req.originalUrl);
     const isCustomer = pathname.startsWith(CUSTOMER_PREFIX);
     const isVentorSchedule = pathname.startsWith(VENTOR_SCHEDULE_PREFIX);
-    if (!isCustomer && !isVentorSchedule) {
+    const isAdminCustomer = pathname.startsWith(ADMIN_CUSTOMER_PREFIX);
+    if (!isCustomer && !isVentorSchedule && !isAdminCustomer) {
       return true;
     }
     const normalized =

@@ -93,11 +93,17 @@ Generate code, corrections, and refactorings that comply with the basic principl
   - Follow the Given-When-Then convention.
 
 
-  ## Specific to NestJS
+## Specific to NestJS
 
-  ### Basic Principles
-  
-  - Use modular architecture.
+### Backend conventions (crm-omega-customers-ms)
+
+- **Authenticated actor (JWT):** New routes that require an office user must stay on path prefixes verified by `TokenJwtMiddleware` (so the `token` header is validated and `req.officeJwtUser` is set). In controllers, use `@JwtUser() jwtUser: OfficeJwtPayload | undefined` and pass `jwtUser` or `resolveOfficeUserId(jwtUser)` into service methods that need the actor. Services must not read `Authorization` / `token` from the raw request for business logic—only the controller (or a guard) bridges HTTP auth into typed inputs.
+- **Types:** Put shared response shapes, list projections, and domain aggregates in dedicated files (for example `src/<feature>/types/*.type.ts`). Keep request bodies as `class` DTOs under `dto/` with `class-validator`. Do not grow large `export type` blocks inside service files; add or extend a types file instead.
+- **Service file per controller:** When you add a new `@Controller()` (or split an existing HTTP surface into a new controller), add a matching dedicated `@Injectable()` service module (its own `*.service.ts`) for that controller’s orchestration and persistence. Avoid stuffing unrelated controller endpoints into one oversized service; extract a new service and wire it in the Nest module.
+
+### Basic Principles
+
+- Use modular architecture.
   - Encapsulate the API in modules.
     - One module per main domain/route.
     - One controller for its route.
@@ -105,28 +111,28 @@ Generate code, corrections, and refactorings that comply with the basic principl
     - A models folder with data types.
       - DTOs validated with class-validator for inputs.
       - Declare simple types for outputs.
-    - A services module with business logic and persistence.
-      - Entities with MikroORM for data persistence.
-      - One service per entity.
-  
-  - Common Module: Create a common module (e.g., @app/common) for shared, reusable code across the application.
-    - This module should include:
-      - Configs: Global configuration settings.
-      - Decorators: Custom decorators for reusability.
-      - DTOs: Common data transfer objects.
-      - Guards: Guards for role-based or permission-based access control.
-      - Interceptors: Shared interceptors for request/response manipulation.
-      - Notifications: Modules for handling app-wide notifications.
-      - Services: Services that are reusable across modules.
-      - Types: Common TypeScript types or interfaces.
-      - Utils: Helper functions and utilities.
-      - Validators: Custom validators for consistent input validation.
-  
-  - Core module functionalities:
-    - Global filters for exception handling.
-    - Global middlewares for request management.
-    - Guards for permission management.
-    - Interceptors for request processing.
+  - A services module with business logic and persistence.
+    - Entities with MikroORM for data persistence.
+    - One service per entity.
+
+- Common Module: Create a common module (e.g., @app/common) for shared, reusable code across the application.
+  - This module should include:
+    - Configs: Global configuration settings.
+    - Decorators: Custom decorators for reusability.
+    - DTOs: Common data transfer objects.
+    - Guards: Guards for role-based or permission-based access control.
+    - Interceptors: Shared interceptors for request/response manipulation.
+    - Notifications: Modules for handling app-wide notifications.
+    - Services: Services that are reusable across modules.
+    - Types: Common TypeScript types or interfaces.
+    - Utils: Helper functions and utilities.
+    - Validators: Custom validators for consistent input validation.
+
+- Core module functionalities:
+  - Global filters for exception handling.
+  - Global middlewares for request management.
+  - Guards for permission management.
+  - Interceptors for request processing.
 
 ### Testing
 

@@ -7,6 +7,7 @@ import type { OfficeJwtPayload } from '../types/office-jwt-payload.type';
 export function resolveOfficeUserId(
   payload: OfficeJwtPayload | undefined,
 ): string {
+  console.log('payload', payload);
   if (payload == null) {
     throw new UnauthorizedException('Missing JWT context');
   }
