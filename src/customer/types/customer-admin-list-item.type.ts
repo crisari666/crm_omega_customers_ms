@@ -21,7 +21,15 @@ export type CustomerAdminListItem = {
   createdAt: string;
 };
 
+export type CustomerStepDistributionItem = {
+  customerStepId: string | null;
+  name: string;
+  color?: string;
+  count: number;
+};
+
 export type CustomerAdminListResponse = {
   items: CustomerAdminListItem[];
   total: number;
+  stepDistribution: CustomerStepDistributionItem[];
 };

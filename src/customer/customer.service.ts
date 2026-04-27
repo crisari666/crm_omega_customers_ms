@@ -19,6 +19,7 @@ import { CustomerAuditService } from './customer-audit.service';
 import {
   CustomerAdminListItem,
   CustomerAdminListResponse,
+  CustomerStepDistributionItem,
 } from './types/customer-admin-list-item.type';
 import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
@@ -66,6 +67,12 @@ type AdminListAggRow = {
   customerStepId?: Types.ObjectId;
   enabled?: boolean;
   createdAt?: Date;
+  __stepName?: string;
+  __stepColor?: string;
+};
+type StepDistributionAggRow = {
+  _id: Types.ObjectId | null;
+  count: number;
   __stepName?: string;
   __stepColor?: string;
 };
@@ -224,6 +231,7 @@ export class CustomerService {
     type FacetBucket = {
       meta: { total: number }[];
       rows: AdminListAggRow[];
+      stepDistribution: StepDistributionAggRow[];
     };
 
     const pipeline: PipelineStage[] = [
@@ -267,6 +275,37 @@ export class CustomerService {
               },
             },
           ],
+          stepDistribution: [
+            {
+              $group: {
+                _id: '$customerStepId',
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $lookup: {
+                from: 'customer_steps',
+                localField: '_id',
+                foreignField: '_id',
+                as: '_stepJoin',
+              },
+            },
+            {
+              $set: {
+                __stepName: { $arrayElemAt: ['$_stepJoin.name', 0] },
+                __stepColor: { $arrayElemAt: ['$_stepJoin.color', 0] },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                count: 1,
+                __stepName: 1,
+                __stepColor: 1,
+              },
+            },
+            { $sort: { count: -1 } },
+          ],
         },
       },
     ];
@@ -275,9 +314,13 @@ export class CustomerService {
     const bucket = agg[0];
     const total = bucket?.meta[0]?.total ?? 0;
     const rows = bucket?.rows ?? [];
+    const stepDistributionRows = bucket?.stepDistribution ?? [];
 
     const items = rows.map((doc) => this.mapAdminListAggRowToItem(doc));
-    return { items, total };
+    const stepDistribution = stepDistributionRows.map((doc) =>
+      this.mapStepDistributionAggRowToItem(doc),
+    );
+    return { items, total, stepDistribution };
   }
 
   private mapAdminListAggRowToItem(doc: AdminListAggRow): CustomerAdminListItem {
@@ -320,6 +363,22 @@ export class CustomerService {
       item.currentStepColor = stepColor;
     }
     return item;
+  }
+
+  private mapStepDistributionAggRowToItem(
+    doc: StepDistributionAggRow,
+  ): CustomerStepDistributionItem {
+    const customerStepId = doc._id !== null ? String(doc._id) : null;
+    const hasStepName =
+      typeof doc.__stepName === 'string' && doc.__stepName.trim() !== '';
+    const hasStepColor =
+      typeof doc.__stepColor === 'string' && doc.__stepColor.trim() !== '';
+    return {
+      customerStepId,
+      name: hasStepName ? doc.__stepName!.trim() : 'Sin paso',
+      ...(hasStepColor ? { color: doc.__stepColor!.trim() } : {}),
+      count: doc.count,
+    };
   }
 
   private buildAdminListFilter(
