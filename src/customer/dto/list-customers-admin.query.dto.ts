@@ -62,6 +62,10 @@ export class ListCustomersAdminQueryDto {
   @Transform(({ value }) => toOptionalBoolean(value))
   @IsBoolean()
   enabled?: boolean;
+  @IsOptional()
+  @Transform(({ value }) => toOptionalBoolean(value))
+  @IsBoolean()
+  isReferral?: boolean;
 
   @IsOptional()
   @IsString()

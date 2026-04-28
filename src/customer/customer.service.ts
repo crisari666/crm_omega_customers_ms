@@ -14,6 +14,7 @@ import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
+import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerAuditService } from './customer-audit.service';
 import {
@@ -66,6 +67,7 @@ type AdminListAggRow = {
   createdBy?: string;
   customerStepId?: Types.ObjectId;
   enabled?: boolean;
+  isReferral?: boolean;
   createdAt?: Date;
   __stepName?: string;
   __stepColor?: string;
@@ -269,6 +271,7 @@ export class CustomerService {
                 createdBy: 1,
                 customerStepId: 1,
                 enabled: 1,
+                isReferral: 1,
                 createdAt: 1,
                 __stepName: 1,
                 __stepColor: 1,
@@ -351,6 +354,7 @@ export class CustomerService {
       assignedTo: doc.assignedTo,
       createdBy: doc.createdBy,
       enabled: doc.enabled !== false,
+      isReferral: doc.isReferral === true,
       createdAt,
     };
     if (sid !== undefined) {
@@ -461,7 +465,18 @@ export class CustomerService {
           : null;
 
     if (enabledClause !== null) {
-      return this.mergeFilterWithClause(filter, enabledClause);
+      const withEnabled = this.mergeFilterWithClause(filter, enabledClause);
+      if (query.isReferral !== undefined) {
+        return this.mergeFilterWithClause(withEnabled, {
+          isReferral: query.isReferral,
+        });
+      }
+      return withEnabled;
+    }
+    if (query.isReferral !== undefined) {
+      return this.mergeFilterWithClause(filter, {
+        isReferral: query.isReferral,
+      });
     }
 
     return filter;
@@ -557,6 +572,7 @@ export class CustomerService {
           assignedTo: String(r.assignedTo),
         }),
       enabled: r.enabled !== false,
+      isReferral: r.isReferral === true,
       createdBy: String(r.createdBy ?? ''),
       createdAt:
         createdAtRaw instanceof Date
@@ -633,6 +649,9 @@ export class CustomerService {
     if (dto.enabled !== undefined) {
       customer.enabled = dto.enabled;
     }
+    if (dto.isReferral !== undefined) {
+      customer.isReferral = dto.isReferral;
+    }
     try {
       await customer.save();
     } catch (err) {
@@ -667,6 +686,7 @@ export class CustomerService {
       document: dto.document,
       interestedProjects,
       assignedTo: dto.assignedTo,
+      isReferral: dto.isReferral === true,
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;
@@ -796,6 +816,9 @@ export class CustomerService {
       customer.assignedTo = dto.assignedTo;
       customer.assignedDate = new Date().toISOString();
     }
+    if (dto.isReferral !== undefined) {
+      customer.isReferral = dto.isReferral;
+    }
     try {
       return await customer.save();
     } catch (err) {
@@ -871,6 +894,21 @@ export class CustomerService {
     customer.assignedTo = trimmed === '' ? undefined : trimmed;
     customer.$locals['__auditActorUserId'] = actorUserId;
     return customer.save();
+  }
+
+  async updateCustomerReferral(
+    customerId: string,
+    dto: UpdateCustomerReferralDto,
+    actorUserId: string,
+  ): Promise<CustomerAdminDetail> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    customer.isReferral = dto.isReferral;
+    customer.$locals['__auditActorUserId'] = actorUserId;
+    await customer.save();
+    return this.getCustomerAdminDetail(customerId);
   }
 
   async addCustomerDescription(

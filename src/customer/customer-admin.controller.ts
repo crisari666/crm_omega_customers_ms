@@ -7,6 +7,7 @@ import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { ListCallLogsAdminQueryDto } from './dto/list-call-logs-admin.query.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
+import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerService } from './customer.service';
 
@@ -71,6 +72,19 @@ export class CustomerAdminController {
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
     return this.customerService.updateCustomerAdmin(
+      customerId,
+      body,
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  @Patch(':customerId/referral')
+  updateCustomerReferral(
+    @Param('customerId') customerId: string,
+    @Body() body: UpdateCustomerReferralDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerService.updateCustomerReferral(
       customerId,
       body,
       resolveOfficeUserId(jwtUser),

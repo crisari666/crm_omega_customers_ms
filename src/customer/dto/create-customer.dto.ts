@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -45,4 +46,7 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   assignedTo?: string;
+  @IsOptional()
+  @IsBoolean()
+  isReferral?: boolean;
 }

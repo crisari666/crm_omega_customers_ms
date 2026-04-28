@@ -18,6 +18,7 @@ export type CustomerAdminListItem = {
   currentStepColor?: string;
   /** False when customer disabled; true when active or legacy doc without field. */
   enabled: boolean;
+  isReferral: boolean;
   createdAt: string;
 };
 

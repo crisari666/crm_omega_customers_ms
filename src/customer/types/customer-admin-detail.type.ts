@@ -28,6 +28,7 @@ export type CustomerAdminDetail = {
   readonly interestedProjects: CustomerAdminInterestedProject[];
   readonly assignedTo?: string;
   readonly enabled: boolean;
+  readonly isReferral: boolean;
   readonly createdBy: string;
   readonly createdAt: string;
   readonly updatedAt?: string;
