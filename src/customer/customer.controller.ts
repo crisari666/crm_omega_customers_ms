@@ -11,6 +11,7 @@ import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
+import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 /**
  * HTTP API for customers.
@@ -55,7 +56,7 @@ export class CustomerController {
    * Loads one customer by Mongo `_id`.
    */
   @Get(':customerId')
-  getCustomer(@Param('customerId') customerId: string) {
+  getCustomer(@Param('customerId', ParseHexObjectIdPipe) customerId: string) {
     return this.customerService.getCustomerById(customerId);
   }
 
@@ -98,7 +99,7 @@ export class CustomerController {
    */
   @Patch(':customerId/step')
   setCustomerStep(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: SetCustomerStepDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -114,7 +115,7 @@ export class CustomerController {
    */
   @Patch(':customerId')
   updateCustomer(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: UpdateCustomerDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -130,7 +131,7 @@ export class CustomerController {
    */
   @Post(':customerId/descriptions')
   addCustomerDescription(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: AddCustomerDescriptionDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -146,7 +147,7 @@ export class CustomerController {
    */
   @Post(':customerId/projects')
   addInterestedProject(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: AddInterestedProjectDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -159,7 +160,7 @@ export class CustomerController {
 
   @Post(':customerId/events')
   createCustomerEvent(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: CreateCustomerEventDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -172,7 +173,7 @@ export class CustomerController {
 
   @Get(':customerId/events')
   listCustomerEvents(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Query() query: ListCustomerEventsQueryDto,
   ) {
     return this.customerEventsService.listByCustomerId(customerId, query);

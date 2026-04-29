@@ -12,6 +12,7 @@ import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
+import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 /**
  * Admin CRM HTTP API (crm_lots_agents). Vendor app keeps using {@link CustomerController} routes (`customer/mine`, etc.).
@@ -51,18 +52,18 @@ export class CustomerAdminController {
   }
 
   @Get(':customerId/call-logs')
-  listCustomerCallLogs(@Param('customerId') customerId: string) {
+  listCustomerCallLogs(@Param('customerId', ParseHexObjectIdPipe) customerId: string) {
     return this.customerCallLogsService.listForCustomer(customerId);
   }
 
   @Get(':customerId')
-  getCustomerAdminDetail(@Param('customerId') customerId: string) {
+  getCustomerAdminDetail(@Param('customerId', ParseHexObjectIdPipe) customerId: string) {
     return this.customerService.getCustomerAdminDetail(customerId);
   }
 
   @Patch(':customerId/assignee')
   assignCustomerAssignee(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: AssignCustomerAssigneeDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -75,7 +76,7 @@ export class CustomerAdminController {
 
   @Patch(':customerId')
   updateCustomerAdmin(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: UpdateCustomerAdminDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
@@ -88,7 +89,7 @@ export class CustomerAdminController {
 
   @Patch(':customerId/referral')
   updateCustomerReferral(
-    @Param('customerId') customerId: string,
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
     @Body() body: UpdateCustomerReferralDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
