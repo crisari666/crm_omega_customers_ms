@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { JwtUser } from '../core/decorators/jwt-user.decorator';
 import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
@@ -7,6 +7,9 @@ import { AddInterestedProjectDto } from './dto/add-interested-project.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { SetCustomerStepDto } from './dto/set-customer-step.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
+import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
+import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
 
 /**
@@ -14,7 +17,10 @@ import { CustomerService } from './customer.service';
  */
 @Controller('customer')
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly customerEventsService: CustomerEventsService,
+  ) {}
 
   /**
    * Smoke endpoint for health checks.
@@ -149,5 +155,26 @@ export class CustomerController {
       resolveOfficeUserId(jwtUser),
       body,
     );
+  }
+
+  @Post(':customerId/events')
+  createCustomerEvent(
+    @Param('customerId') customerId: string,
+    @Body() body: CreateCustomerEventDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerEventsService.createEvent({
+      customerId,
+      body,
+      actorUserId: resolveOfficeUserId(jwtUser),
+    });
+  }
+
+  @Get(':customerId/events')
+  listCustomerEvents(
+    @Param('customerId') customerId: string,
+    @Query() query: ListCustomerEventsQueryDto,
+  ) {
+    return this.customerEventsService.listByCustomerId(customerId, query);
   }
 }

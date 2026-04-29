@@ -27,6 +27,10 @@ import {
   CustomerCallLog,
   CustomerCallLogSchema,
 } from './schemas/customer-call-log.schema';
+import {
+  CustomerEvent,
+  CustomerEventSchema,
+} from './schemas/customer-event.schema';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import {
   VentorScheduleEvent,
@@ -36,6 +40,7 @@ import { VoiceCallRmqController } from './voice-call-rmq.controller';
 import { VoiceRmqTopologyService } from './voice-rmq-topology.service';
 import { CustomerWhatsappRmqController } from './customer-whatsapp-rmq.controller';
 import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publisher';
+import { CustomerEventsService } from './customer-events.service';
 
 @Module({
   imports: [
@@ -61,6 +66,7 @@ import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publ
       { name: CustomerStepUpdateLog.name, schema: CustomerStepUpdateLogSchema },
       { name: CustomerStep.name, schema: CustomerStepSchema },
       { name: CustomerCallLog.name, schema: CustomerCallLogSchema },
+      { name: CustomerEvent.name, schema: CustomerEventSchema },
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
     ]),
   ],
@@ -74,6 +80,7 @@ import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publ
     CustomerService,
     CustomerAuditService,
     CustomerCallLogsService,
+    CustomerEventsService,
     VoiceRmqTopologyService,
     CustomerWhatsappEventsPublisher,
   ],

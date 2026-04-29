@@ -7,8 +7,10 @@ import { CreateCustomerAdminDto } from './dto/create-customer-admin.dto';
 import { ListCallLogsAdminQueryDto } from './dto/list-call-logs-admin.query.dto';
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
+import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
 import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
+import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
 
 /**
@@ -19,6 +21,7 @@ export class CustomerAdminController {
   constructor(
     private readonly customerService: CustomerService,
     private readonly customerCallLogsService: CustomerCallLogsService,
+    private readonly customerEventsService: CustomerEventsService,
   ) {}
 
   @Get()
@@ -29,6 +32,11 @@ export class CustomerAdminController {
   @Get('call-logs')
   listCallLogsAdmin(@Query() query: ListCallLogsAdminQueryDto) {
     return this.customerCallLogsService.listAdmin(query);
+  }
+
+  @Get('events')
+  listCustomerEventsAdmin(@Query() query: ListCustomerEventsQueryDto) {
+    return this.customerEventsService.listAdmin(query);
   }
 
   @Post()

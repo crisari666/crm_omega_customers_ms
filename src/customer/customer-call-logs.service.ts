@@ -11,56 +11,21 @@ import {
 import {
   callOutcomeMatchesFilter,
   deriveResolvedCallOutcome,
-  type ResolvedCallOutcome,
 } from './utils/call-log-outcome.util';
-
-export type CustomerCallLogAdminEventDto = {
-  eventType: string;
-  timestamp: string;
-  status?: string;
-  durationSeconds?: number;
-  recordingUrl?: string;
-  transcript?: string;
-  metadata?: Record<string, unknown>;
-};
-
-export type CustomerCallLogAdminItemDto = {
-  id: string;
-  callSid: string;
-  provider: string;
-  from?: string;
-  to?: string;
-  direction?: string;
-  durationSeconds?: number;
-  recordingUrl?: string;
-  transcript?: string;
-  text?: string;
-  status?: string;
-  customerId?: string;
-  customerExternalRef?: string;
-  agentExternalRef?: string;
-  resolvedOutcome: ResolvedCallOutcome;
-  preCompleteEventType?: string;
-  completedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  events: CustomerCallLogAdminEventDto[];
-};
+import { CustomerEventsService } from './customer-events.service';
+import {
+  type CustomerCallLogAdminItemDto,
+  type IngestResult,
+} from './types/customer-call-logs.type';
 
 const ADMIN_LIST_FETCH_CAP = 5000;
-
-type IngestResult = {
-  accepted: true;
-  callSid: string;
-  eventType: string;
-  customerId?: string;
-};
 
 @Injectable()
 export class CustomerCallLogsService {
   constructor(
     @InjectModel(CustomerCallLog.name)
     private readonly customerCallLogModel: Model<CustomerCallLogDocument>,
+    private readonly customerEventsService: CustomerEventsService,
   ) {}
 
   async ingestVoiceCallEvent(payload: IngestVoiceCallEventDto): Promise<IngestResult> {
@@ -78,6 +43,14 @@ export class CustomerCallLogsService {
 
   async createVoiceCall(payload: IngestVoiceCallEventDto): Promise<IngestResult> {
     await this.createOrUpdateCallHeader(payload);
+    console.log('createVoiceCall', JSON.stringify(payload, null, 2));
+    if (payload.customerExternalRef?.trim()) {
+      await this.customerEventsService.createCallCrmEvent({
+        customerRef: payload.customerExternalRef,
+        callSid: payload.callSid,
+        userId: payload.agentExternalRef,
+      });
+    }
     return {
       accepted: true,
       callSid: payload.callSid,
