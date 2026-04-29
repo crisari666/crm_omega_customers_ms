@@ -7,11 +7,21 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
+import { CustomerEventsService } from '../customer/customer-events.service';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
   VentorScheduleEventStatus,
+  VentorScheduleEventType,
 } from './schemas/ventor-schedule-event.schema';
+
+const ON_LAND_SCHEDULE_METADATA_KEY = 'ventorScheduleEventId' as const;
+
+const ON_LAND_CUSTOMER_EVENT_DESCRIPTION = {
+  customSentLand: 'Customer sent to land: visit scheduled.',
+  visitCancelled: 'On-land visit cancelled.',
+  visitCompleted: 'On-land visit completed.',
+} as const;
 
 function parseUtcDateTime(dateYmd: string, timeHm: string): Date {
   const [y, mo, d] = dateYmd.split('-').map((n) => Number.parseInt(n, 10));
@@ -34,6 +44,7 @@ export class VentorScheduleService {
     private readonly scheduleModel: Model<VentorScheduleEventDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+    private readonly customerEventsService: CustomerEventsService,
   ) {}
 
   private async assertCustomerAccessible(
@@ -56,6 +67,52 @@ export class VentorScheduleService {
     return customer;
   }
 
+  private buildScheduleEventMetadata(
+    scheduleId: Types.ObjectId,
+    scheduledAt: Date,
+  ): Record<string, unknown> {
+    return {
+      [ON_LAND_SCHEDULE_METADATA_KEY]: String(scheduleId),
+      scheduledAt: scheduledAt.toISOString(),
+    };
+  }
+
+  private async recordCustomSentLandEvent(
+    userId: string,
+    customerId: string,
+    scheduleId: Types.ObjectId,
+    scheduledAt: Date,
+  ): Promise<void> {
+    await this.customerEventsService.createEvent({
+      customerId,
+      actorUserId: userId,
+      body: {
+        eventType: 'CUSTOM_SENT_LAND',
+        description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.customSentLand,
+        metadata: this.buildScheduleEventMetadata(scheduleId, scheduledAt),
+      },
+    });
+  }
+
+  private async recordOnLandStatusCustomerEvent(args: {
+    readonly userId: string;
+    readonly customerId: string;
+    readonly scheduleId: Types.ObjectId;
+    readonly scheduledAt: Date;
+    readonly eventType: 'CUSTOMER_CANCELLED_VISIT_LAND' | 'CUSTOMER_VISIT_LAND';
+    readonly description: string;
+  }): Promise<void> {
+    await this.customerEventsService.createEvent({
+      customerId: args.customerId,
+      actorUserId: args.userId,
+      body: {
+        eventType: args.eventType,
+        description: args.description,
+        metadata: this.buildScheduleEventMetadata(args.scheduleId, args.scheduledAt),
+      },
+    });
+  }
+
   async create(
     userId: string,
     dto: CreateVentorScheduleEventDto,
@@ -70,7 +127,16 @@ export class VentorScheduleService {
       note: dto.note,
       status: VentorScheduleEventStatus.Pending,
     });
-    return doc.save();
+    const saved = await doc.save();
+    if (dto.eventType === VentorScheduleEventType.OnLand) {
+      await this.recordCustomSentLandEvent(
+        userId,
+        dto.customerId,
+        saved._id as Types.ObjectId,
+        saved.scheduledAt,
+      );
+    }
+    return saved;
   }
 
   async findByUserAndDay(
@@ -100,9 +166,17 @@ export class VentorScheduleService {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new NotFoundException('Event not found');
     }
+    const scheduleObjectId = new Types.ObjectId(eventId);
+    const prior = await this.scheduleModel
+      .findOne({ _id: scheduleObjectId, userId })
+      .select('status eventType customerId scheduledAt')
+      .exec();
+    if (!prior) {
+      throw new NotFoundException('Event not found');
+    }
     const updated = await this.scheduleModel
       .findOneAndUpdate(
-        { _id: new Types.ObjectId(eventId), userId },
+        { _id: scheduleObjectId, userId },
         { $set: { status } },
         { new: true },
       )
@@ -113,6 +187,35 @@ export class VentorScheduleService {
       .exec();
     if (!updated) {
       throw new NotFoundException('Event not found');
+    }
+    const becameCancelled =
+      status === VentorScheduleEventStatus.Cancelled &&
+      prior.status !== VentorScheduleEventStatus.Cancelled;
+    const becameDone =
+      status === VentorScheduleEventStatus.Done &&
+      prior.status !== VentorScheduleEventStatus.Done;
+    if (prior.eventType === VentorScheduleEventType.OnLand && (becameCancelled || becameDone)) {
+      const customerIdStr = String(prior.customerId);
+      if (becameCancelled) {
+        await this.recordOnLandStatusCustomerEvent({
+          userId,
+          customerId: customerIdStr,
+          scheduleId: scheduleObjectId,
+          scheduledAt: prior.scheduledAt,
+          eventType: 'CUSTOMER_CANCELLED_VISIT_LAND',
+          description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCancelled,
+        });
+      }
+      if (becameDone) {
+        await this.recordOnLandStatusCustomerEvent({
+          userId,
+          customerId: customerIdStr,
+          scheduleId: scheduleObjectId,
+          scheduledAt: prior.scheduledAt,
+          eventType: 'CUSTOMER_VISIT_LAND',
+          description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCompleted,
+        });
+      }
     }
     return updated as unknown as VentorScheduleEventDocument;
   }

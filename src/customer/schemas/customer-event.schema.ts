@@ -8,6 +8,9 @@ export const CUSTOMER_EVENT_TYPES = [
   'PHONE_CALL',
   'VIDEO_CALL',
   'CALL_CRM',
+  'CUSTOM_SENT_LAND',
+  'CUSTOMER_CANCELLED_VISIT_LAND',
+  'CUSTOMER_VISIT_LAND',
 ] as const;
 
 export type CustomerEventType = (typeof CUSTOMER_EVENT_TYPES)[number];

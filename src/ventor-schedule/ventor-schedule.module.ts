@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CustomerModule } from '../customer/customer.module';
 import { Customer, CustomerSchema } from '../customer/schemas/customer.schema';
 import {
   VentorScheduleEvent,
@@ -10,6 +11,7 @@ import { VentorScheduleService } from './ventor-schedule.service';
 
 @Module({
   imports: [
+    CustomerModule,
     MongooseModule.forFeature([
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
       { name: Customer.name, schema: CustomerSchema },

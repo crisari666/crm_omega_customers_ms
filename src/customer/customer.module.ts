@@ -86,7 +86,7 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
     VoiceRmqTopologyService,
     CustomerWhatsappEventsPublisher,
   ],
-  exports: [CustomerService, VoiceRmqTopologyService],
+  exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
 })
 export class CustomerModule implements OnModuleInit {
   constructor(private readonly customerAuditService: CustomerAuditService) {}
