@@ -41,6 +41,7 @@ import { VoiceRmqTopologyService } from './voice-rmq-topology.service';
 import { CustomerWhatsappRmqController } from './customer-whatsapp-rmq.controller';
 import { CustomerWhatsappEventsPublisher } from './customer-whatsapp-events.publisher';
 import { CustomerEventsService } from './customer-events.service';
+import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 @Module({
@@ -85,6 +86,7 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
     CustomerEventsService,
     VoiceRmqTopologyService,
     CustomerWhatsappEventsPublisher,
+    CustomerStaffPerformanceService,
   ],
   exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
 })

@@ -12,6 +12,8 @@ import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
+import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
+import { StaffPerformanceBodyDto } from './dto/staff-performance.body.dto';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 /**
@@ -23,6 +25,7 @@ export class CustomerAdminController {
     private readonly customerService: CustomerService,
     private readonly customerCallLogsService: CustomerCallLogsService,
     private readonly customerEventsService: CustomerEventsService,
+    private readonly customerStaffPerformanceService: CustomerStaffPerformanceService,
   ) {}
 
   @Get()
@@ -33,6 +36,11 @@ export class CustomerAdminController {
   @Get('call-logs')
   listCallLogsAdmin(@Query() query: ListCallLogsAdminQueryDto) {
     return this.customerCallLogsService.listAdmin(query);
+  }
+
+  @Post('staff-performance')
+  postStaffPerformanceReport(@Body() body: StaffPerformanceBodyDto) {
+    return this.customerStaffPerformanceService.getReport(body);
   }
 
   @Get('events')
