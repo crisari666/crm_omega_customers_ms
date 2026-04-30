@@ -68,7 +68,6 @@ export class TokenJwtMiddleware implements NestMiddleware {
       throw new UnauthorizedException('TOKEN header is required');
     }
     const payload = await this.jwtVerificationService.verifyToken(token);
-    console.log('payload middleware', payload);
     req.officeJwtUser = payload;
     next();
   }

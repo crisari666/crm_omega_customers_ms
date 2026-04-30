@@ -158,6 +158,24 @@ export class VentorScheduleService {
     return rows as VentorScheduleEventDocument[];
   }
 
+  async findAllOnLandByDay(
+    dateYmd: string,
+  ): Promise<VentorScheduleEventDocument[]> {
+    const { start, end } = utcDayRange(dateYmd);
+    const rows = await this.scheduleModel
+      .find({
+        eventType: VentorScheduleEventType.OnLand,
+        scheduledAt: { $gte: start, $lt: end },
+      })
+      .sort({ scheduledAt: 1 })
+      .populate({
+        path: 'customerId',
+        select: 'name lastName interestedProjects',
+      })
+      .exec();
+    return rows as VentorScheduleEventDocument[];
+  }
+
   async updateStatus(
     userId: string,
     eventId: string,
@@ -194,29 +212,113 @@ export class VentorScheduleService {
     const becameDone =
       status === VentorScheduleEventStatus.Done &&
       prior.status !== VentorScheduleEventStatus.Done;
-    if (prior.eventType === VentorScheduleEventType.OnLand && (becameCancelled || becameDone)) {
-      const customerIdStr = String(prior.customerId);
-      if (becameCancelled) {
-        await this.recordOnLandStatusCustomerEvent({
-          userId,
-          customerId: customerIdStr,
-          scheduleId: scheduleObjectId,
-          scheduledAt: prior.scheduledAt,
-          eventType: 'CUSTOMER_CANCELLED_VISIT_LAND',
-          description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCancelled,
-        });
-      }
-      if (becameDone) {
-        await this.recordOnLandStatusCustomerEvent({
-          userId,
-          customerId: customerIdStr,
-          scheduleId: scheduleObjectId,
-          scheduledAt: prior.scheduledAt,
-          eventType: 'CUSTOMER_VISIT_LAND',
-          description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCompleted,
-        });
-      }
-    }
+    await this.emitOnLandStatusCustomerEventsIfNeeded({
+      prior,
+      actorUserId: userId,
+      scheduleObjectId,
+      becameCancelled,
+      becameDone,
+    });
     return updated as unknown as VentorScheduleEventDocument;
+  }
+
+  async updateStatusAsMainLead(
+    actorUserId: string,
+    eventId: string,
+    status: VentorScheduleEventStatus,
+  ): Promise<VentorScheduleEventDocument> {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new NotFoundException('Event not found');
+    }
+    const scheduleObjectId = new Types.ObjectId(eventId);
+    const prior = await this.scheduleModel
+      .findOne({ _id: scheduleObjectId })
+      .select('status eventType customerId scheduledAt')
+      .exec();
+    if (!prior) {
+      throw new NotFoundException('Event not found');
+    }
+    if (prior.eventType !== VentorScheduleEventType.OnLand) {
+      throw new ForbiddenException(
+        'Only on_land events can be updated by main lead',
+      );
+    }
+    const updated = await this.scheduleModel
+      .findOneAndUpdate(
+        { _id: scheduleObjectId },
+        { $set: { status } },
+        { new: true },
+      )
+      .populate<{ customerId: CustomerDocument }>({
+        path: 'customerId',
+        select: 'name lastName interestedProjects',
+      })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException('Event not found');
+    }
+    const becameCancelled =
+      status === VentorScheduleEventStatus.Cancelled &&
+      prior.status !== VentorScheduleEventStatus.Cancelled;
+    const becameDone =
+      status === VentorScheduleEventStatus.Done &&
+      prior.status !== VentorScheduleEventStatus.Done;
+    await this.emitOnLandStatusCustomerEventsIfNeeded({
+      prior,
+      actorUserId,
+      scheduleObjectId,
+      becameCancelled,
+      becameDone,
+    });
+    return updated as unknown as VentorScheduleEventDocument;
+  }
+
+  private async emitOnLandStatusCustomerEventsIfNeeded(args: {
+    readonly prior: {
+      eventType: VentorScheduleEventType;
+      status: VentorScheduleEventStatus;
+      customerId: Types.ObjectId;
+      scheduledAt: Date;
+    };
+    readonly actorUserId: string;
+    readonly scheduleObjectId: Types.ObjectId;
+    readonly becameCancelled: boolean;
+    readonly becameDone: boolean;
+  }): Promise<void> {
+    console.log('emitOnLandStatusCustomerEventsIfNeeded', JSON.stringify(args, null, 2));
+    const {
+      prior,
+      actorUserId,
+      scheduleObjectId,
+      becameCancelled,
+      becameDone,
+    } = args;
+    if (
+      prior.eventType !== VentorScheduleEventType.OnLand ||
+      (!becameCancelled && !becameDone)
+    ) {
+      return;
+    }
+    const customerIdStr = String(prior.customerId);
+    if (becameCancelled) {
+      await this.recordOnLandStatusCustomerEvent({
+        userId: actorUserId,
+        customerId: customerIdStr,
+        scheduleId: scheduleObjectId,
+        scheduledAt: prior.scheduledAt,
+        eventType: 'CUSTOMER_CANCELLED_VISIT_LAND',
+        description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCancelled,
+      });
+    }
+    if (becameDone) {
+      await this.recordOnLandStatusCustomerEvent({
+        userId: actorUserId,
+        customerId: customerIdStr,
+        scheduleId: scheduleObjectId,
+        scheduledAt: prior.scheduledAt,
+        eventType: 'CUSTOMER_VISIT_LAND',
+        description: ON_LAND_CUSTOMER_EVENT_DESCRIPTION.visitCompleted,
+      });
+    }
   }
 }

@@ -1,10 +1,22 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { JwtUser } from '../core/decorators/jwt-user.decorator';
 import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
+import { OFFICE_USER_LEVEL_MAIN_LEAD } from '../core/constants/office-user-level.constant';
+import { assertOfficeMainLead } from '../core/utils/assert-office-main-lead.util';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
 import { UpdateVentorScheduleStatusDto } from './dto/update-ventor-schedule-status.dto';
 import { VentorScheduleByDayQueryDto } from './dto/ventor-schedule-by-day-query.dto';
+import { VENTOR_SCHEDULE_BY_DAY_VIEW } from './dto/ventor-schedule-by-day-view.const';
 import { VentorScheduleService } from './ventor-schedule.service';
 import { VentorScheduleEventDocument } from './schemas/ventor-schedule-event.schema';
 import { CustomerDocument } from '../customer/schemas/customer.schema';
@@ -13,6 +25,7 @@ function serializeEvent(doc: VentorScheduleEventDocument) {
   const o = doc.toObject({ virtuals: true });
   const customerRaw = o.customerId as unknown;
   let customer: Record<string, unknown> | null = null;
+  let customerId = String(o.customerId);
   if (
     customerRaw &&
     typeof customerRaw === 'object' &&
@@ -26,11 +39,12 @@ function serializeEvent(doc: VentorScheduleEventDocument) {
       displayName: name || c.name,
       lastProjectId: lastInterest?.projectId,
     };
+    customerId = String(c._id);
   }
   return {
     id: String(o._id),
     userId: o.userId,
-    customerId: String(o.customerId),
+    customerId,
     scheduledAt: o.scheduledAt?.toISOString?.() ?? o.scheduledAt,
     eventType: o.eventType,
     note: o.note,
@@ -68,6 +82,14 @@ export class VentorScheduleController {
     @Query() query: VentorScheduleByDayQueryDto,
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
+    const view = query.view ?? VENTOR_SCHEDULE_BY_DAY_VIEW.Self;
+    if (view === VENTOR_SCHEDULE_BY_DAY_VIEW.MainLeadOnLand) {
+      assertOfficeMainLead(jwtUser);
+      const list = await this.ventorScheduleService.findAllOnLandByDay(
+        query.date,
+      );
+      return list.map((d) => serializeEvent(d));
+    }
     const userId = resolveOfficeUserId(jwtUser);
     const list = await this.ventorScheduleService.findByUserAndDay(
       userId,
@@ -83,11 +105,26 @@ export class VentorScheduleController {
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
     const userId = resolveOfficeUserId(jwtUser);
-    const doc = await this.ventorScheduleService.updateStatus(
-      userId,
-      id,
-      body.status,
-    );
-    return serializeEvent(doc);
+    try {
+      const doc = await this.ventorScheduleService.updateStatus(
+        userId,
+        id,
+        body.status,
+      );
+      return serializeEvent(doc);
+    } catch (err: unknown) {
+      if (err instanceof NotFoundException) {
+        if (jwtUser?.level !== OFFICE_USER_LEVEL_MAIN_LEAD) {
+          throw err;
+        }
+        const doc = await this.ventorScheduleService.updateStatusAsMainLead(
+          userId,
+          id,
+          body.status,
+        );
+        return serializeEvent(doc);
+      }
+      throw err;
+    }
   }
 }

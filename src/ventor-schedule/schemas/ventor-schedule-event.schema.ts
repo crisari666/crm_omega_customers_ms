@@ -52,3 +52,4 @@ export const VentorScheduleEventSchema = SchemaFactory.createForClass(
 );
 
 VentorScheduleEventSchema.index({ userId: 1, scheduledAt: 1 });
+VentorScheduleEventSchema.index({ eventType: 1, scheduledAt: 1 });
