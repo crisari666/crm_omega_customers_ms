@@ -74,11 +74,16 @@ export class Customer {
 
   @Prop({ required: true })
   createdBy: string;
+
+  /** Latest CRM customer_event activity time (denormalized for list sort). */
+  @Prop({ type: Date, required: false, index: true })
+  lastUpdate?: Date;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);
 
 CustomerSchema.index({ createdAt: -1 });
 CustomerSchema.index({ createdAt: -1, assignedTo: 1 });
+CustomerSchema.index({ lastUpdate: -1, createdAt: -1 });
 
 /** Change history uses pre/post `save` hooks attached in {@link CustomerAuditService.attachCustomerSchemaHooks}. */
