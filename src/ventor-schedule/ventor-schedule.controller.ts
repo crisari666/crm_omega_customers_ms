@@ -20,6 +20,7 @@ import { VENTOR_SCHEDULE_BY_DAY_VIEW } from './dto/ventor-schedule-by-day-view.c
 import { VentorScheduleService } from './ventor-schedule.service';
 import { VentorScheduleEventDocument } from './schemas/ventor-schedule-event.schema';
 import { CustomerDocument } from '../customer/schemas/customer.schema';
+import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 function serializeEvent(doc: VentorScheduleEventDocument) {
   const o = doc.toObject({ virtuals: true });
@@ -75,6 +76,19 @@ export class VentorScheduleController {
       select: 'name lastName interestedProjects',
     });
     return serializeEvent(doc);
+  }
+
+  @Get('by-customer/:customerId')
+  async byCustomer(
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const userId = resolveOfficeUserId(jwtUser);
+    const list = await this.ventorScheduleService.findByCustomerForUser(
+      userId,
+      customerId,
+    );
+    return list.map((d) => serializeEvent(d));
   }
 
   @Get('by-day')

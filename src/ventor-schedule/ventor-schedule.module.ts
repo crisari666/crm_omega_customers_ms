@@ -8,6 +8,7 @@ import {
 } from './schemas/ventor-schedule-event.schema';
 import { VentorScheduleController } from './ventor-schedule.controller';
 import { VentorScheduleService } from './ventor-schedule.service';
+import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
 @Module({
   imports: [
@@ -18,6 +19,6 @@ import { VentorScheduleService } from './ventor-schedule.service';
     ]),
   ],
   controllers: [VentorScheduleController],
-  providers: [VentorScheduleService],
+  providers: [VentorScheduleService, ParseHexObjectIdPipe],
 })
 export class VentorScheduleModule {}

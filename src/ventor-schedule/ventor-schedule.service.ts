@@ -176,6 +176,25 @@ export class VentorScheduleService {
     return rows as VentorScheduleEventDocument[];
   }
 
+  /**
+   * All schedule rows for a customer when JWT user may access that customer.
+   */
+  async findByCustomerForUser(
+    userId: string,
+    customerId: string,
+  ): Promise<VentorScheduleEventDocument[]> {
+    await this.assertCustomerAccessible(userId, customerId);
+    const rows = await this.scheduleModel
+      .find({ customerId: new Types.ObjectId(customerId) })
+      .sort({ scheduledAt: -1 })
+      .populate({
+        path: 'customerId',
+        select: 'name lastName interestedProjects',
+      })
+      .exec();
+    return rows as VentorScheduleEventDocument[];
+  }
+
   async updateStatus(
     userId: string,
     eventId: string,
