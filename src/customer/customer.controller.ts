@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { JwtUser } from '../core/decorators/jwt-user.decorator';
 import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
@@ -9,6 +17,7 @@ import { SetCustomerStepDto } from './dto/set-customer-step.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
+import { ListCustomerMineQueryDto } from './dto/list-customer-mine.query.dto';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerService } from './customer.service';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
@@ -46,9 +55,14 @@ export class CustomerController {
    * Customers whose `createdBy` matches JWT user (`userId` or `sub`).
    */
   @Get('mine')
-  findMyCustomers(@JwtUser() jwtUser: OfficeJwtPayload | undefined) {
+  findMyCustomers(
+    @Query() query: ListCustomerMineQueryDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const sort = query.sort === 'lastUpdate' ? 'lastUpdate' : 'createdAt';
     return this.customerService.findCustomersCreatedBy(
       resolveOfficeUserId(jwtUser),
+      sort,
     );
   }
 
@@ -177,5 +191,19 @@ export class CustomerController {
     @Query() query: ListCustomerEventsQueryDto,
   ) {
     return this.customerEventsService.listByCustomerId(customerId, query);
+  }
+
+  /**
+   * Sets `Customer.lastUpdate` from the latest `customer_events` row (scope: creator or assignee).
+   */
+  @Post(':customerId/last-update/recompute')
+  recomputeCustomerLastUpdate(
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerEventsService.recomputeCustomerLastUpdateFromEvents({
+      customerId,
+      actorUserId: resolveOfficeUserId(jwtUser),
+    });
   }
 }

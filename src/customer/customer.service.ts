@@ -160,10 +160,17 @@ export class CustomerService {
     return { total: customers.length, updated, unchanged, conflicts };
   }
 
-  async findCustomersCreatedBy(createdBy: string): Promise<CustomerDocument[]> {
+  async findCustomersCreatedBy(
+    createdBy: string,
+    sort: 'createdAt' | 'lastUpdate' = 'createdAt',
+  ): Promise<CustomerDocument[]> {
+    const sortSpec =
+      sort === 'lastUpdate'
+        ? { lastUpdate: -1 as const, createdAt: -1 as const }
+        : { createdAt: -1 as const };
     return this.customerModel
       .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
-      .sort({ createdAt: -1 })
+      .sort(sortSpec)
       .exec();
   }
 
