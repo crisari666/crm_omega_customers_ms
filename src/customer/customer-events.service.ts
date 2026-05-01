@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { type Model, Types, isValidObjectId } from 'mongoose';
-import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
 import {
   CustomerEvent,
@@ -35,6 +38,8 @@ export class CustomerEventsService {
       officeId: args.officeId,
       metadata: args.body.metadata,
     });
+    const occurredAt = this.readDocumentCreatedAt(created);
+    await this.executeBumpCustomerLastUpdate(customerObjectId, occurredAt);
     return this.mapItem(created);
   }
 
@@ -50,6 +55,43 @@ export class CustomerEventsService {
     query: ListCustomerEventsQueryDto,
   ): Promise<ListCustomerEventsResult> {
     return this.listInternal(query);
+  }
+
+  /**
+   * Rebuilds `Customer.lastUpdate` from max `customer_events.createdAt` (backfill / repair).
+   */
+  async recomputeCustomerLastUpdateFromEvents(args: {
+    readonly customerId: string;
+    readonly actorUserId: string;
+  }): Promise<{ lastUpdate: string | null }> {
+    const customerObjectId = await this.resolveCustomerObjectId(args.customerId);
+    const customer = await this.customerModel.findById(customerObjectId).lean().exec();
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+    const ok =
+      customer.createdBy === args.actorUserId ||
+      (customer.assignedTo != null && customer.assignedTo === args.actorUserId);
+    if (!ok) {
+      throw new ForbiddenException('Customer is not in your scope');
+    }
+    const agg = await this.customerEventModel
+      .aggregate<{ maxAt: Date | null }>([
+        { $match: { customerId: customerObjectId } },
+        { $group: { _id: null, maxAt: { $max: '$createdAt' } } },
+      ])
+      .exec();
+    const maxAt = agg[0]?.maxAt;
+    if (maxAt == null || !(maxAt instanceof Date)) {
+      await this.customerModel
+        .updateOne({ _id: customerObjectId }, { $unset: { lastUpdate: '' } })
+        .exec();
+      return { lastUpdate: null };
+    }
+    await this.customerModel
+      .updateOne({ _id: customerObjectId }, { $set: { lastUpdate: maxAt } })
+      .exec();
+    return { lastUpdate: maxAt.toISOString() };
   }
 
   async createCallCrmEvent(args: CreateCallCrmEventArgs): Promise<void> {
@@ -70,7 +112,7 @@ export class CustomerEventsService {
     if (matched) {
       return;
     }
-    await this.customerEventModel.create({
+    const created = await this.customerEventModel.create({
       customerId: customerObjectId,
       eventType: 'CALL_CRM',
       description: args.description ?? 'CRM call created',
@@ -78,6 +120,8 @@ export class CustomerEventsService {
       userId: args.userId?.trim() ? args.userId : 'system',
       metadata: { [dedupeMetadataKey]: dedupeKey, callSid: args.callSid },
     });
+    const occurredAt = this.readDocumentCreatedAt(created);
+    await this.executeBumpCustomerLastUpdate(customerObjectId, occurredAt);
   }
 
   private async listInternal(
@@ -123,6 +167,23 @@ export class CustomerEventsService {
       limit,
       skip,
     };
+  }
+
+  /**
+   * Sets customer `lastUpdate` to the latest event time (idempotent with $max).
+   */
+  private async executeBumpCustomerLastUpdate(
+    customerObjectId: Types.ObjectId,
+    occurredAt: Date,
+  ): Promise<void> {
+    await this.customerModel
+      .updateOne({ _id: customerObjectId }, { $max: { lastUpdate: occurredAt } })
+      .exec();
+  }
+
+  private readDocumentCreatedAt(doc: CustomerEventDocument): Date {
+    const raw = (doc as unknown as { createdAt?: Date }).createdAt;
+    return raw instanceof Date ? raw : new Date();
   }
 
   private async resolveCustomerObjectId(customerId: string): Promise<Types.ObjectId> {
