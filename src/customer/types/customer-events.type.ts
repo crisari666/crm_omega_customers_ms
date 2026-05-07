@@ -7,6 +7,8 @@ export type CustomerEventItem = {
   readonly description: string;
   readonly score?: number;
   readonly customerId: string;
+  readonly customerName?: string;
+  readonly customerLastName?: string;
   readonly userId: string;
   readonly officeId?: string;
   readonly metadata?: Record<string, unknown>;

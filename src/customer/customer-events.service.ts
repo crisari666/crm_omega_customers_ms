@@ -11,6 +11,7 @@ import {
   type CustomerEventDocument,
 } from './schemas/customer-event.schema';
 import { Customer, type CustomerDocument } from './schemas/customer.schema';
+import { type CustomerEventListRow } from './types/customer-event-list-row.type';
 import {
   type CreateCallCrmEventArgs,
   type CreateEventArgs,
@@ -154,10 +155,42 @@ export class CustomerEventsService {
     }
     const [docs, total] = await Promise.all([
       this.customerEventModel
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
+        .aggregate<CustomerEventListRow>([
+          { $match: filter },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $lookup: {
+              from: 'customers',
+              localField: 'customerId',
+              foreignField: '_id',
+              as: 'customer',
+            },
+          },
+          {
+            $unwind: {
+              path: '$customer',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              eventType: 1,
+              description: 1,
+              score: 1,
+              customerId: 1,
+              customerName: '$customer.name',
+              customerLastName: '$customer.lastName',
+              userId: 1,
+              officeId: 1,
+              metadata: 1,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        ])
         .exec(),
       this.customerEventModel.countDocuments(filter).exec(),
     ]);
@@ -209,15 +242,17 @@ export class CustomerEventsService {
     }
   }
 
-  private mapItem(doc: CustomerEventDocument): CustomerEventItem {
-    const createdAt = (doc as unknown as { createdAt?: Date }).createdAt;
-    const updatedAt = (doc as unknown as { updatedAt?: Date }).updatedAt;
+  private mapItem(doc: CustomerEventDocument | CustomerEventListRow): CustomerEventItem {
+    const createdAt = (doc as { createdAt?: Date }).createdAt;
+    const updatedAt = (doc as { updatedAt?: Date }).updatedAt;
     return {
       id: String(doc._id),
       eventType: doc.eventType,
       description: doc.description,
       score: doc.score,
       customerId: String(doc.customerId),
+      customerName: 'customerName' in doc ? doc.customerName : undefined,
+      customerLastName: 'customerLastName' in doc ? doc.customerLastName : undefined,
       userId: doc.userId,
       officeId: doc.officeId,
       metadata: doc.metadata,
