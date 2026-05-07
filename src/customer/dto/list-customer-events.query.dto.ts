@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsMongoId,
   IsOptional,
   IsString,
   Max,
@@ -11,6 +12,10 @@ import {
 import { CUSTOMER_EVENT_TYPES, type CustomerEventType } from '../schemas/customer-event.schema';
 
 export class ListCustomerEventsQueryDto {
+  @IsOptional()
+  @IsMongoId()
+  customerId?: string;
+
   @IsOptional()
   @IsDateString()
   dateFrom?: string;

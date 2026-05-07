@@ -428,6 +428,7 @@ export class CustomerService {
                 { lastName: rx },
                 { email: rx },
                 { phone: rx },
+                { document: rx },
               ],
             };
           })()

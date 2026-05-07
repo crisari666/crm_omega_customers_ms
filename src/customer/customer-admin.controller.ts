@@ -8,9 +8,11 @@ import { ListCallLogsAdminQueryDto } from './dto/list-call-logs-admin.query.dto'
 import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto';
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
+import { SearchCustomersAutocompleteQueryDto } from './dto/search-customers-autocomplete.query.dto';
 import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerEventsService } from './customer-events.service';
+import { CustomerAutocompleteService } from './customer-autocomplete.service';
 import { CustomerService } from './customer.service';
 import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { StaffPerformanceBodyDto } from './dto/staff-performance.body.dto';
@@ -25,12 +27,18 @@ export class CustomerAdminController {
     private readonly customerService: CustomerService,
     private readonly customerCallLogsService: CustomerCallLogsService,
     private readonly customerEventsService: CustomerEventsService,
+    private readonly customerAutocompleteService: CustomerAutocompleteService,
     private readonly customerStaffPerformanceService: CustomerStaffPerformanceService,
   ) {}
 
   @Get()
   listCustomersAdmin(@Query() query: ListCustomersAdminQueryDto) {
     return this.customerService.listCustomersAdmin(query);
+  }
+
+  @Get('search')
+  searchCustomersAutocomplete(@Query() query: SearchCustomersAutocompleteQueryDto) {
+    return this.customerAutocompleteService.searchByText(query);
   }
 
   @Get('call-logs')
