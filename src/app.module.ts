@@ -9,6 +9,7 @@ import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
 import { CustomerConversationsModule } from './customer-conversations/customer-conversations.module';
 import { CustomerStepsModule } from './customer-steps/customer-steps.module';
+import { CustomerPaymentModule } from './customer-payment/customer-payment.module';
 import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
     CustomerModule,
     CustomerConversationsModule,
     CustomerStepsModule,
+    CustomerPaymentModule,
     VentorScheduleModule,
   ],
   controllers: [AppController],
