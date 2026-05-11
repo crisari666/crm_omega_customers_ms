@@ -125,6 +125,20 @@ export class CustomerController {
   }
 
   /**
+   * Toggles the `isInternational` flag on a customer.
+   */
+  @Patch(':customerId/toggle-international')
+  toggleInternational(
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerService.toggleCustomerInternational(
+      customerId,
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  /**
    * Updates an existing customer.
    */
   @Patch(':customerId')

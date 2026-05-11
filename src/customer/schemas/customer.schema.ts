@@ -72,6 +72,9 @@ export class Customer {
   @Prop({ type: Boolean, default: false, index: true })
   isReferral?: boolean;
 
+  @Prop({ type: Boolean, default: false, index: true })
+  isInternational?: boolean;
+
   @Prop({ required: true })
   createdBy: string;
 

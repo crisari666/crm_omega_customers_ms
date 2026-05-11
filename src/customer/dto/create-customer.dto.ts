@@ -49,4 +49,8 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isReferral?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isInternational?: boolean;
 }

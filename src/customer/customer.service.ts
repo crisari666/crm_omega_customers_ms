@@ -581,6 +581,7 @@ export class CustomerService {
         }),
       enabled: r.enabled !== false,
       isReferral: r.isReferral === true,
+      isInternational: r.isInternational === true,
       createdBy: String(r.createdBy ?? ''),
       createdAt:
         createdAtRaw instanceof Date
@@ -659,6 +660,9 @@ export class CustomerService {
     }
     if (dto.isReferral !== undefined) {
       customer.isReferral = dto.isReferral;
+    }
+    if (dto.isInternational !== undefined) {
+      customer.isInternational = dto.isInternational;
     }
     try {
       await customer.save();
@@ -827,6 +831,9 @@ export class CustomerService {
     if (dto.isReferral !== undefined) {
       customer.isReferral = dto.isReferral;
     }
+    if (dto.isInternational !== undefined) {
+      customer.isInternational = dto.isInternational;
+    }
     try {
       return await customer.save();
     } catch (err) {
@@ -914,6 +921,20 @@ export class CustomerService {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
     customer.isReferral = dto.isReferral;
+    customer.$locals['__auditActorUserId'] = actorUserId;
+    await customer.save();
+    return this.getCustomerAdminDetail(customerId);
+  }
+
+  async toggleCustomerInternational(
+    customerId: string,
+    actorUserId: string,
+  ): Promise<CustomerAdminDetail> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    customer.isInternational = !(customer.isInternational ?? false);
     customer.$locals['__auditActorUserId'] = actorUserId;
     await customer.save();
     return this.getCustomerAdminDetail(customerId);
