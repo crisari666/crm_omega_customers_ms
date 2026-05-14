@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 function trimEnv(value: string | undefined): string {
   return (value ?? '').trim();
 }
@@ -45,10 +47,23 @@ export default (): {
     integrationQueue: string;
     prefetch: number;
   };
+  customerPaymentEvidence: {
+    directory: string;
+    maxFileBytes: number;
+    allowedMimeTypes: readonly string[];
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
   const prefetch: number = Number.isFinite(parsedPrefetch) && parsedPrefetch > 0 ? parsedPrefetch : 10;
+  const evidenceDirRaw = trimEnv(process.env.CUSTOMER_PAYMENT_EVIDENCE_DIR);
+  const evidenceDirectory =
+    evidenceDirRaw !== '' ? evidenceDirRaw : join(process.cwd(), 'uploads', 'customer-payment-evidence');
+  const maxEvidenceBytesRaw = trimEnv(process.env.CUSTOMER_PAYMENT_EVIDENCE_MAX_BYTES);
+  const parsedMaxEvidence = Number.parseInt(maxEvidenceBytesRaw || '5242880', 10);
+  const maxFileBytes =
+    Number.isFinite(parsedMaxEvidence) && parsedMaxEvidence > 0 ? parsedMaxEvidence : 5242880;
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const;
   return {
     database: {
       uri: buildMongoUri(),
@@ -60,6 +75,11 @@ export default (): {
       integrationQueue:
         trimEnv(process.env.RABBIT_QUEUE_CUSTOMERS_MS) || 'crm.customers.whatsapp_integration',
       prefetch,
+    },
+    customerPaymentEvidence: {
+      directory: evidenceDirectory,
+      maxFileBytes,
+      allowedMimeTypes,
     },
   };
 };

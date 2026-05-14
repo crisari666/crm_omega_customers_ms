@@ -26,6 +26,12 @@ export class CustomerPayment {
   @Prop({ trim: true, maxlength: 2000 })
   notes?: string;
 
+  @Prop({ trim: true })
+  evidenceMimeType?: string;
+
+  @Prop({ trim: true })
+  evidenceStoredFileName?: string;
+
   @Prop({ required: true, index: true })
   recordedBy: string;
 }

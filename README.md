@@ -68,6 +68,17 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 - Website - [https://nestjs.com](https://nestjs.com/)
 - Twitter - [@nestframework](https://twitter.com/nestframework)
 
+## Customer payment evidence (optional files)
+
+Payment receipts can be stored as image files on the server (JPEG, PNG, WebP). Configure persistence and limits with:
+
+| Variable | Description |
+|----------|-------------|
+| `CUSTOMER_PAYMENT_EVIDENCE_DIR` | Absolute or relative directory for stored files. Default: `{cwd}/uploads/customer-payment-evidence`. Mount this path in production so files survive restarts. |
+| `CUSTOMER_PAYMENT_EVIDENCE_MAX_BYTES` | Max upload size in bytes. Default: `5242880` (5 MB). |
+
+HTTP: `POST /customers-rest/customer-payment/with-evidence` (multipart, field `evidence` + payment fields), `GET /customers-rest/customer-payment/:paymentId/evidence` (requires the same office JWT `token` header as other routes).
+
 ## License
 
 Nest is [MIT licensed](LICENSE).
