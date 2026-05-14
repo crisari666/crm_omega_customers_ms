@@ -83,7 +83,7 @@ export class ListCustomersAdminQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(200)
   limit?: number;
 
   @IsOptional()
