@@ -52,6 +52,9 @@ export default (): {
     maxFileBytes: number;
     allowedMimeTypes: readonly string[];
   };
+  officeBackInternal: { baseUrl: string; apiKey: string };
+  customersMetaIngest: { actorUserId: string };
+  ventorAssignment: { timeZone: string };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -64,6 +67,10 @@ export default (): {
   const maxFileBytes =
     Number.isFinite(parsedMaxEvidence) && parsedMaxEvidence > 0 ? parsedMaxEvidence : 5242880;
   const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const;
+  const officeBase = process.env.CRM_BACKEND_URL
+  const officeKey = trimEnv(process.env.OFFICE_BACK_INTERNAL_API_KEY);
+  const metaActor = trimEnv(process.env.CUSTOMERS_META_INGEST_ACTOR_ID) || 'meta-gateway-ingest';
+  const ventorTz = trimEnv(process.env.VENTOR_ASSIGNMENT_TZ) || 'America/Bogota';
   return {
     database: {
       uri: buildMongoUri(),
@@ -80,6 +87,16 @@ export default (): {
       directory: evidenceDirectory,
       maxFileBytes,
       allowedMimeTypes,
+    },
+    officeBackInternal: {
+      baseUrl: officeBase,
+      apiKey: officeKey,
+    },
+    customersMetaIngest: {
+      actorUserId: metaActor,
+    },
+    ventorAssignment: {
+      timeZone: ventorTz,
     },
   };
 };

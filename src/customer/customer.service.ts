@@ -181,6 +181,7 @@ export class CustomerService {
   async getVendorMineDashboardStats(userId: string): Promise<{
     customersActives: number;
     customerConversion: number;
+    customersAssignedLast28Days: number;
   }> {
     const enabledOk = {
       $or: [{ enabled: true }, { enabled: { $exists: false } }],
@@ -188,6 +189,17 @@ export class CustomerService {
     const customersActives = await this.customerModel.countDocuments({
       createdBy: userId,
       assignedTo: { $exists: true, $nin: [null, ''] },
+      ...enabledOk,
+    });
+    const windowEnd: Date = new Date();
+    const windowStart: Date = new Date();
+    windowStart.setHours(0, 0, 0, 0);
+    windowStart.setDate(windowStart.getDate() - 28);
+    const startIso: string = windowStart.toISOString();
+    const endIso: string = windowEnd.toISOString();
+    const customersAssignedLast28Days = await this.customerModel.countDocuments({
+      assignedTo: userId,
+      assignedDate: { $gte: startIso, $lte: endIso },
       ...enabledOk,
     });
 
@@ -223,7 +235,7 @@ export class CustomerService {
       .exec();
 
     const customerConversion = convAgg[0]?.n ?? 0;
-    return { customersActives, customerConversion };
+    return { customersActives, customerConversion, customersAssignedLast28Days };
   }
 
   /**

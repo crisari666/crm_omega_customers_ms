@@ -8,6 +8,11 @@ export enum DocumentType {
   Passport = 'passport',
 }
 
+/**
+ * CRM customer aggregate (crm-omega-customers-ms MongoDB).
+ * Meta exclusive-WABA ingress persists here only; it does not sync to omega_office_back `LeadCandidate`
+ * unless a separate integration is introduced.
+ */
 @Schema({ timestamps: true })
 export class Customer {
   @Prop({ required: false })
@@ -60,6 +65,21 @@ export class Customer {
   
   @Prop()
   assignedDate?: string;
+
+  /**
+   * Meta potential-customer funnel: pending_flow until WhatsApp Flow completes;
+   * completed_flow after flow; ready_for_llm after ventor assignment (LLM path in whatsapp_cloud_ms).
+   */
+  @Prop({
+    type: String,
+    enum: ['none', 'pending_flow', 'completed_flow', 'ready_for_llm'],
+    default: 'none',
+  })
+  whatsappPotentialCustomerStatus?: 'none' | 'pending_flow' | 'completed_flow' | 'ready_for_llm';
+
+  /** True after `potential_customer` template was requested for this funnel. */
+  @Prop({ type: Boolean, default: false })
+  metaPotentialTemplateSent?: boolean;
 
   @Prop({ type: Types.ObjectId, ref: 'CustomerStep', required: false, index: true })
   customerStepId?: Types.ObjectId;

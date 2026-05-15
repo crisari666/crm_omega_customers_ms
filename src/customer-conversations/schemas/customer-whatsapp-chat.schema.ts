@@ -23,6 +23,10 @@ export class CustomerWhatsappChat {
   @Prop({ default: null })
   userSessionId?: string | null;
 
+  /** True when chat rows come from Meta gateway / CRM ingest (no referral userSessionId). */
+  @Prop({ type: Boolean, default: false })
+  crmMessage?: boolean;
+
   @Prop({ default: 0 })
   lastMessageTimestamp: number;
 }

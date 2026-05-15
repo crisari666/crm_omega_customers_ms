@@ -78,6 +78,68 @@ export class CustomerConversationsService {
     );
   }
 
+  /**
+   * Upserts chat + message for Meta CRM gateway ingest (stable sessionId / chatId).
+   */
+  async executeUpsertFromMetaIngress(params: {
+    readonly sessionId: string;
+    readonly chatId: string;
+    readonly customerId: Types.ObjectId;
+    readonly contactName: string;
+    readonly crmMessage: boolean;
+    readonly message: {
+      readonly messageId: string;
+      readonly fromMe: boolean;
+      readonly body: string;
+      readonly type: string;
+      readonly timestamp: number;
+      readonly hasMedia: boolean;
+      readonly mediaType?: string | null;
+      readonly mediaPath?: string | null;
+      readonly mediaMimeType?: string | null;
+      readonly mediaFilename?: string | null;
+    };
+  }): Promise<void> {
+    await this.customerWhatsappChatModel.updateOne(
+      { sessionId: params.sessionId, chatId: params.chatId },
+      {
+        $set: {
+          sessionId: params.sessionId,
+          chatId: params.chatId,
+          customerId: params.customerId,
+          name: params.contactName,
+          isGroup: false,
+          userSessionId: null,
+          crmMessage: params.crmMessage,
+          lastMessageTimestamp: params.message.timestamp,
+        },
+      },
+      { upsert: true },
+    );
+    await this.customerWhatsappMessageModel.updateOne(
+      { sessionId: params.sessionId, messageId: params.message.messageId },
+      {
+        $set: {
+          sessionId: params.sessionId,
+          messageId: params.message.messageId,
+          chatId: params.chatId,
+          customerId: params.customerId,
+          fromMe: params.message.fromMe,
+          body: params.message.body,
+          type: params.message.type,
+          timestamp: params.message.timestamp,
+          hasMedia: params.message.hasMedia,
+          mediaType: params.message.mediaType ?? null,
+          mediaPath: params.message.mediaPath ?? null,
+          mediaMimeType: params.message.mediaMimeType ?? null,
+          mediaFilename: params.message.mediaFilename ?? null,
+          syncMode: 'live',
+        },
+      },
+      { upsert: true },
+    );
+  }
+
   async findChatsByCustomerId(params: {
     customerId: string;
     limit?: number;

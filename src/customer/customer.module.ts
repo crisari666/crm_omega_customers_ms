@@ -2,6 +2,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { CustomerConversationsModule } from '../customer-conversations/customer-conversations.module';
 import { CustomerAdminController } from './customer-admin.controller';
 import { CustomerAuditService } from './customer-audit.service';
 import { CustomerController } from './customer.controller';
@@ -44,9 +45,15 @@ import { CustomerEventsService } from './customer-events.service';
 import { CustomerAutocompleteService } from './customer-autocomplete.service';
 import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
+import { CustomerMetaWebhookRmqController } from './customer-meta-webhook-rmq.controller';
+import { CustomerMetaWebhookService } from './customer-meta-webhook.service';
+import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
+import { CustomerWhatsappFlowCompletedRmqController } from './customer-whatsapp-flow-completed-rmq.controller';
+import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 
 @Module({
   imports: [
+    CustomerConversationsModule,
     ClientsModule.registerAsync([
       {
         name: 'WHATSAPP_MS_SERVICE',
@@ -56,6 +63,19 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
           options: {
             urls: [configService.get<string>('rabbitmq.url', '')],
             queue: 'crm.whatsapp.events',
+            queueOptions: { durable: true },
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'WS_MS_QUEUE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('rabbitmq.url', '')],
+            queue: 'ws_ms_queue',
             queueOptions: { durable: true },
           },
         }),
@@ -78,6 +98,8 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
     CustomerAdminController,
     VoiceCallRmqController,
     CustomerWhatsappRmqController,
+    CustomerMetaWebhookRmqController,
+    CustomerWhatsappFlowCompletedRmqController,
   ],
   providers: [
     ParseHexObjectIdPipe,
@@ -89,6 +111,9 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
     VoiceRmqTopologyService,
     CustomerWhatsappEventsPublisher,
     CustomerStaffPerformanceService,
+    CustomerMetaWebhookService,
+    CustomerPotentialCustomersOutboundService,
+    CustomerWhatsappFlowCompletedService,
   ],
   exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
 })
