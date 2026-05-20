@@ -8,11 +8,13 @@ Short reference for onboarding a new chat or reviewer. Spans **omega_gateway**, 
 
 Inbound WhatsApp (Meta Cloud API) for a **dedicated CRM WABA** → persist **Customer** + conversations in **customers-ms** → send **`potential_customer`** template (es) → user completes **WhatsApp Flow** → assign **physical ventor** (load-balanced, 28 days) → notify customer in Spanish → existing customers can get **LLM** replies (gated on CRM lookup).
 
-**Isolation:** This path does **not** fan out to `crm_back_queue` / `omega_office_back` **`LeadCandidate`** onboarding. Data lives in **customers-ms** `Customer` collection only (unless a future sync is added).
+**Isolation:** WhatsApp ingress does **not** fan out to `crm_back_queue` / **`LeadCandidate`**. Meta **Lead Ads** (`clientes*` forms) also stay in customers-ms only.
+
+**Second ingress — Meta Lead Ads campaigns:** Ceiba Page webhook → gateway Graph fetch → form name `clientes*` → `customers.meta.leadgen.ingest.v1` → `meta_lead_campaigns` + `Customer` upsert → **auto-assign ventor** (load balance by assignments in last **24h**, env `VENTOR_ASSIGNMENT_META_CAMPAIGN_WINDOW_HOURS`). No WhatsApp template on this path. Form name `referidos*` → `office.facebook.leadgen.ingest.v1` → existing `facebookleads` + ventor provisioning in office_back.
 
 ---
 
-## End-to-end flow
+## End-to-end flow (WhatsApp)
 
 ```mermaid
 sequenceDiagram
@@ -40,11 +42,12 @@ sequenceDiagram
 
 | HTTP | Behavior |
 |------|----------|
-| `POST /webhooks/meta` | Envelope → **`customers.meta.webhook.ingress.v1`** on queue `crm.customers.whatsapp_integration`. Does **not** emit to `ws_ms_queue` / `crm_back_queue` (commented out). |
-| `POST /webhooks/customers` | Same ingress pattern; envelope `source: 'customers'`. **Not** `whatsapp_customers_event` / whatsapp_ms anymore. |
-| `GET /webhooks/customers` | Meta verify challenge (unchanged). |
+| `POST /webhooks/meta` | Envelope → **`customers.meta.webhook.ingress.v1`** (WhatsApp `messages` only downstream). |
+| `POST /webhooks/customers` | Same as meta → ingress; assigns ventor on inbound message if unassigned. |
+| `GET /webhooks/customers` | Meta verify challenge. |
+| `GET/POST /webhooks/ceiba` | Page **Lead Ads** (`leadgen`): Graph fetch with `FB_BUSINESS_CEIBA_TOKEN` / `_PROD`, route by form name → `customers.meta.leadgen.ingest.v1` or `office.facebook.leadgen.ingest.v1`. Unknown form prefix: log + skip. |
 
-**Files:** `src/webhook/webhook.service.ts`, `src/webhook/types/webhook-entry.type.ts` (`source: 'meta' \| 'customers'`).
+**Files:** `src/webhook/webhook.service.ts`, `meta-lead-ads.service.ts`, `meta-lead-ads-router.service.ts`.
 
 **Optional env (if re-enabled):** `META_WEBHOOK_EXCLUSIVE_PHONE_NUMBER_IDS` — comma-separated `metadata.phone_number_id` allowlist (only forward matching WABA).
 
@@ -56,7 +59,8 @@ sequenceDiagram
 
 | Pattern | Role |
 |---------|------|
-| `customers.meta.webhook.ingress.v1` | Ingest Meta webhook envelope from gateway |
+| `customers.meta.webhook.ingress.v1` | Ingest Meta WhatsApp webhook envelope from gateway |
+| `customers.meta.leadgen.ingest.v1` | Ingest Meta Lead Ads campaign lead (gateway pre-fetched Graph) |
 | `customers.whatsapp.flow.completed.v1` | Flow completion from whatsapp_ms |
 | (outbound) `potential_customers.ms_ws` | Commands to whatsapp_ms on **`ws_ms_queue`** |
 
@@ -67,7 +71,11 @@ Queue consumed: `crm.customers.whatsapp_integration` (see `configuration.ts` `in
 | File | Responsibility |
 |------|----------------|
 | `customer-meta-webhook-rmq.controller.ts` | `@EventPattern('customers.meta.webhook.ingress.v1')` |
-| `customer-meta-webhook.service.ts` | Parse Meta `entry[].changes[]` (`field === 'messages'`), normalize `wa_id`, create/find **Customer**, upsert chat/message, emit template when needed (**structured logs**) |
+| `customer-meta-webhook.service.ts` | Parse Meta `entry[].changes[]` (`field === 'messages'`), create/find **Customer**, **assign ventor** (gateway 24h window), upsert chat/message, emit template when needed |
+| `customer-meta-leadgen-rmq.controller.ts` | `@EventPattern('customers.meta.leadgen.ingest.v1')` |
+| `customer-meta-leadgen.service.ts` | Upsert **`meta_lead_campaigns`**, find/create **Customer**, assign ventor via **`CustomerVentorAssignmentService`** (24h window) |
+| `customer-ventor-assignment.service.ts` | Fetch physical ventors from office_back; count `assignedTo` in configurable window; pick minimum load |
+| `meta-lead-campaign.schema.ts` | Persist full Graph + webhook metadata per `leadgenId` |
 | `customer-whatsapp-flow-completed-rmq.controller.ts` | `@EventPattern('customers.whatsapp.flow.completed.v1')` |
 | `customer-whatsapp-flow-completed.service.ts` | Map flow JSON → Customer fields, fetch ventors from office_back, 28-day assignment counts, assign, audit, emit assignment WhatsApp text |
 | `customer-potential-customers-outbound.service.ts` | `WS_MS_QUEUE` → `emit('potential_customers.ms_ws', …)` |
