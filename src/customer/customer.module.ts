@@ -57,6 +57,7 @@ import { CustomerPotentialCustomersOutboundService } from './customer-potential-
 import { CustomerWhatsappFlowCompletedRmqController } from './customer-whatsapp-flow-completed-rmq.controller';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
+import { CustomerAdminImportService } from './customer-admin-import.service';
 
 @Module({
   imports: [
@@ -125,6 +126,7 @@ import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-c
     CustomerVentorAssignmentService,
     CustomerPotentialCustomersOutboundService,
     CustomerWhatsappFlowCompletedService,
+    CustomerAdminImportService,
   ],
   exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
 })

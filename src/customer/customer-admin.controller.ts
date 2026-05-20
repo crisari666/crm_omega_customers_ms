@@ -17,6 +17,8 @@ import { CustomerService } from './customer.service';
 import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { StaffPerformanceBodyDto } from './dto/staff-performance.body.dto';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
+import { CustomerAdminImportService } from './customer-admin-import.service';
+import { ImportCustomersAdminDto } from './dto/import-customers-admin.dto';
 
 /**
  * Admin CRM HTTP API (crm_lots_agents). Vendor app keeps using {@link CustomerController} routes (`customer/mine`, etc.).
@@ -29,6 +31,7 @@ export class CustomerAdminController {
     private readonly customerEventsService: CustomerEventsService,
     private readonly customerAutocompleteService: CustomerAutocompleteService,
     private readonly customerStaffPerformanceService: CustomerStaffPerformanceService,
+    private readonly customerAdminImportService: CustomerAdminImportService,
   ) {}
 
   @Get()
@@ -54,6 +57,17 @@ export class CustomerAdminController {
   @Get('events')
   listCustomerEventsAdmin(@Query() query: ListCustomerEventsQueryDto) {
     return this.customerEventsService.listAdmin(query);
+  }
+
+  @Post('import')
+  importCustomersAdmin(
+    @Body() body: ImportCustomersAdminDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerAdminImportService.executeImportCustomersAdmin(
+      body.customers,
+      resolveOfficeUserId(jwtUser),
+    );
   }
 
   @Post()
