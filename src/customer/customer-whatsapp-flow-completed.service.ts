@@ -1,19 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Customer, CustomerDocument, DocumentType } from './schemas/customer.schema';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { formatVentorAssignmentMessageForCustomer } from './utils/format-ventor-assignment-message.util';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
-
-type VentorCandidateRow = {
-  readonly id: string;
-  readonly name: string;
-  readonly lastName: string;
-  readonly phone: string;
-  readonly phoneJob: string;
-};
+import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
+import { VentorAssignmentCandidate } from './types/ventor-assignment-candidate.type';
 
 type FlowCompletedPayload = {
   readonly waId: string;
@@ -27,12 +20,12 @@ type FlowCompletedPayload = {
  */
 @Injectable()
 export class CustomerWhatsappFlowCompletedService {
-  private readonly logger: Logger = new Logger(CustomerWhatsappFlowCompletedService.name);
+  private readonly logger = new Logger(CustomerWhatsappFlowCompletedService.name);
 
   constructor(
-    private readonly configService: ConfigService,
     @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     private readonly potentialCustomersOutbound: CustomerPotentialCustomersOutboundService,
+    private readonly ventorAssignment: CustomerVentorAssignmentService,
   ) {}
 
   async executeProcessFlowCompleted(payload: FlowCompletedPayload): Promise<void> {
@@ -48,52 +41,43 @@ export class CustomerWhatsappFlowCompletedService {
     const flowRoot: Record<string, unknown> = this.parseFlowResponse(payload.flowResponse);
     this.applyFlowFieldsToCustomer(customer, flowRoot);
     customer.whatsappPotentialCustomerStatus = 'completed_flow';
-    const ventors: VentorCandidateRow[] = await this.executeFetchPhysicalVentors();
-    if (ventors.length === 0) {
-      this.logger.warn('Flow completed: no physical ventors from office_back; skip assignment');
+    const flowWindow = this.ventorAssignment.buildFlowCompletedWindowStart();
+    const pick = await this.ventorAssignment.executePickVentorByLoadBalance({
+      windowStartIso: flowWindow.startIso,
+      windowEndIso: flowWindow.endIso,
+    });
+    if (pick == null) {
+      this.logger.warn('Flow completed: no ventor pick; skip assignment');
       await customer.save();
       return;
     }
-    const timeZone: string = this.configService.get<string>('ventorAssignment.timeZone', 'America/Bogota');
-    const windowStart: Date = this.buildWindowStartLocalMidnightMinus28Days(timeZone);
-    const windowEnd: Date = new Date();
-    const startIso: string = windowStart.toISOString();
-    const endIso: string = windowEnd.toISOString();
-    const countsByVentorId: Record<string, number> = {};
-    for (const v of ventors) {
-      const n: number = await this.customerModel.countDocuments({
-        assignedTo: v.id,
-        assignedDate: { $gte: startIso, $lte: endIso },
-      });
-      countsByVentorId[v.id] = n;
-    }
-    console.log(
-      JSON.stringify({
-        ventorAssignmentFilter: { windowStart: startIso, windowEnd: endIso, timeZone, countsByVentorId },
-      }),
-    );
-    let chosen: VentorCandidateRow | null = null;
-    let bestCount = Number.POSITIVE_INFINITY;
-    const sortedVentors: VentorCandidateRow[] = [...ventors].sort((a, b) => a.id.localeCompare(b.id));
-    for (const v of sortedVentors) {
-      const c: number = countsByVentorId[v.id] ?? 0;
-      if (c < bestCount) {
-        bestCount = c;
-        chosen = v;
-      }
-    }
-    if (chosen == null) {
+    const existingAssignee = (customer.assignedTo ?? '').trim();
+    if (existingAssignee.length > 0) {
+      const ventor =
+        (await this.ventorAssignment.executeFindVentorById(existingAssignee)) ?? pick.ventor;
+      customer.whatsappPotentialCustomerStatus = 'ready_for_llm';
+      customer.$locals['__auditActorUserId'] = existingAssignee;
       await customer.save();
+      await this.executeEmitAssignmentWhatsApp(payload, customer, ventor, waId);
       return;
     }
-    customer.assignedTo = chosen.id;
+    customer.assignedTo = pick.ventor.id;
     customer.assignedDate = new Date().toISOString();
     customer.whatsappPotentialCustomerStatus = 'ready_for_llm';
-    customer.$locals['__auditActorUserId'] = chosen.id;
+    customer.$locals['__auditActorUserId'] = pick.ventor.id;
     await customer.save();
-    const displayName: string = `${chosen.name} ${chosen.lastName}`.trim();
+    await this.executeEmitAssignmentWhatsApp(payload, customer, pick.ventor, waId);
+  }
+
+  private async executeEmitAssignmentWhatsApp(
+    payload: FlowCompletedPayload,
+    customer: CustomerDocument,
+    ventor: VentorAssignmentCandidate,
+    waId: string,
+  ): Promise<void> {
+    const displayName: string = `${ventor.name} ${ventor.lastName}`.trim();
     const phone: string =
-      chosen.phone.trim().length > 0 ? chosen.phone.trim() : chosen.phoneJob.trim();
+      ventor.phone.trim().length > 0 ? ventor.phone.trim() : ventor.phoneJob.trim();
     const body: string = formatVentorAssignmentMessageForCustomer({
       userName: displayName.length > 0 ? displayName : 'tu asesor',
       userPhone: phone.length > 0 ? phone : '-',
@@ -108,14 +92,6 @@ export class CustomerWhatsappFlowCompletedService {
         body,
       },
     });
-  }
-
-  private buildWindowStartLocalMidnightMinus28Days(_timeZone: string): Date {
-    const now: Date = new Date();
-    const start: Date = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - 28);
-    return start;
   }
 
   private parseFlowResponse(raw: unknown): Record<string, unknown> {
@@ -215,34 +191,5 @@ export class CustomerWhatsappFlowCompletedService {
         $or: [{ phone: { $in: candidates } }, { whatsapp: { $in: candidates } }],
       })
       .exec();
-  }
-
-  private async executeFetchPhysicalVentors(): Promise<VentorCandidateRow[]> {
-    const baseUrl: string = (this.configService.get<string>('officeBackInternal.baseUrl', '') ?? '')
-    const apiKey: string = this.configService.get<string>('officeBackInternal.apiKey', '') ?? '';
-    console.log(JSON.stringify({ baseUrl, apiKey }, null, 2));
-    if (baseUrl === '' || apiKey === '') {
-      this.logger.warn('officeBackInternal baseUrl or apiKey missing; cannot load ventors');
-      return [];
-    }
-    const url: string = `${baseUrl}internal/ventors/physical-assignment-candidates`;
-    console.log(JSON.stringify({ url }, null, 2));
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { 'X-Internal-Key': apiKey },
-      });
-      if (!response.ok) {
-        this.logger.warn(`Ventor fetch HTTP ${response.status}`);
-        return [];
-      }
-      const data = (await response.json()) as { ventors?: VentorCandidateRow[] };
-      const rows = Array.isArray(data.ventors) ? data.ventors : [];
-      return rows.filter((r) => typeof r.id === 'string' && r.id.length > 0);
-    } catch (err: unknown) {
-      const message: string = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Ventor fetch failed: ${message}`);
-      return [];
-    }
   }
 }
