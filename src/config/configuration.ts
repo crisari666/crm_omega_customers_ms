@@ -54,7 +54,12 @@ export default (): {
   };
   officeBackInternal: { baseUrl: string; apiKey: string };
   customersMetaIngest: { actorUserId: string };
-  ventorAssignment: { timeZone: string };
+  ventorAssignment: {
+    timeZone: string;
+    metaCampaignWindowHours: number;
+    gatewayWindowHours: number;
+    flowCompletedWindowDays: number;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -71,6 +76,26 @@ export default (): {
   const officeKey = trimEnv(process.env.OFFICE_BACK_INTERNAL_API_KEY);
   const metaActor = trimEnv(process.env.CUSTOMERS_META_INGEST_ACTOR_ID) || 'meta-gateway-ingest';
   const ventorTz = trimEnv(process.env.VENTOR_ASSIGNMENT_TZ) || 'America/Bogota';
+  const metaWindowHoursRaw = Number.parseInt(
+    trimEnv(process.env.VENTOR_ASSIGNMENT_META_CAMPAIGN_WINDOW_HOURS) || '24',
+    10,
+  );
+  const metaCampaignWindowHours =
+    Number.isFinite(metaWindowHoursRaw) && metaWindowHoursRaw > 0 ? metaWindowHoursRaw : 24;
+  const flowWindowDaysRaw = Number.parseInt(
+    trimEnv(process.env.VENTOR_ASSIGNMENT_FLOW_WINDOW_DAYS) || '28',
+    10,
+  );
+  const flowCompletedWindowDays =
+    Number.isFinite(flowWindowDaysRaw) && flowWindowDaysRaw > 0 ? flowWindowDaysRaw : 28;
+  const gatewayWindowHoursRaw = Number.parseInt(
+    trimEnv(process.env.VENTOR_ASSIGNMENT_GATEWAY_WINDOW_HOURS) || '0',
+    10,
+  );
+  const gatewayWindowHours =
+    Number.isFinite(gatewayWindowHoursRaw) && gatewayWindowHoursRaw > 0
+      ? gatewayWindowHoursRaw
+      : metaCampaignWindowHours;
   return {
     database: {
       uri: buildMongoUri(),
@@ -97,6 +122,9 @@ export default (): {
     },
     ventorAssignment: {
       timeZone: ventorTz,
+      metaCampaignWindowHours,
+      gatewayWindowHours,
+      flowCompletedWindowDays,
     },
   };
 };
