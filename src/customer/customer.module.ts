@@ -45,10 +45,17 @@ import { CustomerEventsService } from './customer-events.service';
 import { CustomerAutocompleteService } from './customer-autocomplete.service';
 import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
+import { CustomerMetaLeadgenRmqController } from './customer-meta-leadgen-rmq.controller';
+import { CustomerMetaLeadgenService } from './customer-meta-leadgen.service';
 import { CustomerMetaWebhookRmqController } from './customer-meta-webhook-rmq.controller';
 import { CustomerMetaWebhookService } from './customer-meta-webhook.service';
+import {
+  MetaLeadCampaign,
+  MetaLeadCampaignSchema,
+} from './schemas/meta-lead-campaign.schema';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
 import { CustomerWhatsappFlowCompletedRmqController } from './customer-whatsapp-flow-completed-rmq.controller';
+import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 
 @Module({
@@ -91,6 +98,7 @@ import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-c
       { name: CustomerCallLog.name, schema: CustomerCallLogSchema },
       { name: CustomerEvent.name, schema: CustomerEventSchema },
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
+      { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
     ]),
   ],
   controllers: [
@@ -99,6 +107,7 @@ import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-c
     VoiceCallRmqController,
     CustomerWhatsappRmqController,
     CustomerMetaWebhookRmqController,
+    CustomerMetaLeadgenRmqController,
     CustomerWhatsappFlowCompletedRmqController,
   ],
   providers: [
@@ -112,6 +121,8 @@ import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-c
     CustomerWhatsappEventsPublisher,
     CustomerStaffPerformanceService,
     CustomerMetaWebhookService,
+    CustomerMetaLeadgenService,
+    CustomerVentorAssignmentService,
     CustomerPotentialCustomersOutboundService,
     CustomerWhatsappFlowCompletedService,
   ],

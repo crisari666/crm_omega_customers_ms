@@ -9,6 +9,7 @@ import { MetaWebhookMessagesValue } from './types/meta-webhook-messages-value.ty
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { CustomerService } from './customer.service';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
+import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 
 type WebhookForwardEnvelope = {
@@ -31,6 +32,7 @@ export class CustomerMetaWebhookService {
     private readonly customerService: CustomerService,
     private readonly customerConversationsService: CustomerConversationsService,
     private readonly potentialCustomersOutbound: CustomerPotentialCustomersOutboundService,
+    private readonly ventorAssignment: CustomerVentorAssignmentService,
     private readonly flowCompletedService: CustomerWhatsappFlowCompletedService,
   ) {}
 
@@ -117,6 +119,12 @@ export class CustomerMetaWebhookService {
         customer = (await this.customerModel.findById(doc._id).exec())!;
         created = true;
       }
+      const assignmentWindowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
+      await this.ventorAssignment.executeAssignCustomerIfUnassigned({
+        customer,
+        windowHours: assignmentWindowHours,
+        actorUserId: actorId,
+      });
       await this.customerConversationsService.executeUpsertFromMetaIngress({
         sessionId,
         chatId: normalizedWaId,

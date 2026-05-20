@@ -14,8 +14,6 @@ export class CustomerMetaWebhookRmqController {
     @Ctx() context: RmqContext,
   ): Promise<void> {
     try {
-      
-      
       await this.customerMetaWebhookService.executeProcessMetaIngress(payload);
     } catch (error: unknown) {
       const message: string = error instanceof Error ? error.message : String(error);
