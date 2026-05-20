@@ -11,6 +11,7 @@ import {
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { MetaLeadgenIngestEnvelope } from './types/meta-leadgen-ingest-envelope.type';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
+import { findCustomerByPhoneCandidates } from './utils/find-customer-by-phone-candidates.util';
 
 const META_LEADGEN_ACTOR_ID = 'meta-leadgen-ingest';
 
@@ -56,7 +57,10 @@ export class CustomerMetaLeadgenService {
       this.logger.warn(`leadgenId=${leadgenId}: no usable phone`);
       return;
     }
-    let customer = await this.findCustomerByPhoneCandidates(canonicalPhone);
+    let customer = await findCustomerByPhoneCandidates(
+      this.customerModel,
+      canonicalPhone,
+    );
     if (customer == null) {
       const name = envelope.contact.name.trim() || 'Lead';
       const lastName = envelope.contact.lastName.trim();
@@ -174,20 +178,4 @@ export class CustomerMetaLeadgenService {
     );
   }
 
-  private async findCustomerByPhoneCandidates(
-    canonicalPhone: string,
-  ): Promise<CustomerDocument | null> {
-    const digits = canonicalPhone.replace(/\D/g, '');
-    const candidates: string[] = [canonicalPhone, digits].filter(
-      (value, index, array) => value !== '' && array.indexOf(value) === index,
-    );
-    if (candidates.length === 0) {
-      return null;
-    }
-    return this.customerModel
-      .findOne({
-        $or: [{ phone: { $in: candidates } }, { whatsapp: { $in: candidates } }],
-      })
-      .exec();
-  }
 }
