@@ -13,6 +13,7 @@ import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { CustomerCallLogsService } from './customer-call-logs.service';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerAutocompleteService } from './customer-autocomplete.service';
+import { CustomerMetaLeadgenService } from './customer-meta-leadgen.service';
 import { CustomerService } from './customer.service';
 import { CustomerStaffPerformanceService } from './customer-staff-performance.service';
 import { StaffPerformanceBodyDto } from './dto/staff-performance.body.dto';
@@ -32,6 +33,7 @@ export class CustomerAdminController {
     private readonly customerAutocompleteService: CustomerAutocompleteService,
     private readonly customerStaffPerformanceService: CustomerStaffPerformanceService,
     private readonly customerAdminImportService: CustomerAdminImportService,
+    private readonly customerMetaLeadgenService: CustomerMetaLeadgenService,
   ) {}
 
   @Get()
@@ -84,6 +86,13 @@ export class CustomerAdminController {
   @Get(':customerId/call-logs')
   listCustomerCallLogs(@Param('customerId', ParseHexObjectIdPipe) customerId: string) {
     return this.customerCallLogsService.listForCustomer(customerId);
+  }
+
+  @Get(':customerId/meta-lead-mapped-fields')
+  getCustomerMetaLeadMappedFieldsAdmin(
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
+  ) {
+    return this.customerMetaLeadgenService.getMappedFieldsForCustomer(customerId);
   }
 
   @Get(':customerId')

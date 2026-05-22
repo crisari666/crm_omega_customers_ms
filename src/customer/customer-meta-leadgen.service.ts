@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CustomerService } from './customer.service';
@@ -12,6 +12,8 @@ import { Customer, CustomerDocument } from './schemas/customer.schema';
 import { MetaLeadgenIngestEnvelope } from './types/meta-leadgen-ingest-envelope.type';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { findCustomerByPhoneCandidates } from './utils/find-customer-by-phone-candidates.util';
+import { buildMetaLeadMappedFieldItems } from './utils/format-meta-lead-field-label.util';
+import type { CustomerMetaLeadMappedFieldsResponse } from './types/customer-meta-lead-mapped-fields.type';
 
 const META_LEADGEN_ACTOR_ID = 'meta-leadgen-ingest';
 
@@ -30,6 +32,41 @@ export class CustomerMetaLeadgenService {
     private readonly customerService: CustomerService,
     private readonly ventorAssignment: CustomerVentorAssignmentService,
   ) {}
+
+  /**
+   * Returns humanized Meta lead form fields linked to a customer (latest campaign).
+   */
+  async getMappedFieldsForCustomer(customerId: string): Promise<CustomerMetaLeadMappedFieldsResponse> {
+    const customerExists = await this.customerModel
+      .findById(customerId)
+      .select('_id')
+      .lean()
+      .exec();
+    if (customerExists == null) {
+      throw new NotFoundException(`Customer ${customerId} was not found`);
+    }
+    const campaign = await this.metaLeadCampaignModel
+      .findOne({ customerId: new Types.ObjectId(customerId) })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    if (campaign == null) {
+      return { hasLead: false, items: [] };
+    }
+    const mappedFields =
+      campaign.mappedFields != null && typeof campaign.mappedFields === 'object'
+        ? (campaign.mappedFields as Record<string, string>)
+        : {};
+    const items = buildMetaLeadMappedFieldItems(mappedFields);
+    if (items.length === 0) {
+      return { hasLead: false, items: [] };
+    }
+    return {
+      hasLead: true,
+      leadgenId: campaign.leadgenId,
+      items,
+    };
+  }
 
   async executeProcessLeadgenIngress(payload: unknown): Promise<void> {
     const envelope = this.parseEnvelope(payload);

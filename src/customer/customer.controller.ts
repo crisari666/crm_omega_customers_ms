@@ -19,6 +19,7 @@ import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
 import { ListCustomerMineQueryDto } from './dto/list-customer-mine.query.dto';
 import { CustomerEventsService } from './customer-events.service';
+import { CustomerMetaLeadgenService } from './customer-meta-leadgen.service';
 import { CustomerService } from './customer.service';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 
@@ -30,6 +31,7 @@ export class CustomerController {
   constructor(
     private readonly customerService: CustomerService,
     private readonly customerEventsService: CustomerEventsService,
+    private readonly customerMetaLeadgenService: CustomerMetaLeadgenService,
   ) {}
 
   /**
@@ -205,6 +207,16 @@ export class CustomerController {
     @Query() query: ListCustomerEventsQueryDto,
   ) {
     return this.customerEventsService.listByCustomerId(customerId, query);
+  }
+
+  /**
+   * Meta Lead Ads form fields (mappedFields) for a customer linked via leadgen ingest.
+   */
+  @Get(':customerId/meta-lead-mapped-fields')
+  getCustomerMetaLeadMappedFields(
+    @Param('customerId', ParseHexObjectIdPipe) customerId: string,
+  ) {
+    return this.customerMetaLeadgenService.getMappedFieldsForCustomer(customerId);
   }
 
   /**
