@@ -12,6 +12,10 @@ import {
   CustomerChangeLogSchema,
 } from './schemas/customer-change-log.schema';
 import {
+  CustomerAssignmentChangeLog,
+  CustomerAssignmentChangeLogSchema,
+} from './schemas/customer-assignment-change-log.schema';
+import {
   CustomerStepUpdateLog,
   CustomerStepUpdateLogSchema,
 } from './schemas/customer-step-update-log.schema';
@@ -94,6 +98,10 @@ import { CustomerAdminImportService } from './customer-admin-import.service';
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerDescription.name, schema: CustomerDescriptionSchema },
       { name: CustomerChangeLog.name, schema: CustomerChangeLogSchema },
+      {
+        name: CustomerAssignmentChangeLog.name,
+        schema: CustomerAssignmentChangeLogSchema,
+      },
       { name: CustomerStepUpdateLog.name, schema: CustomerStepUpdateLogSchema },
       { name: CustomerStep.name, schema: CustomerStepSchema },
       { name: CustomerCallLog.name, schema: CustomerCallLogSchema },

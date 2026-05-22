@@ -6,10 +6,15 @@ import {
   CustomerChangeLog,
   CustomerChangeLogDocument,
 } from './schemas/customer-change-log.schema';
+import {
+  CustomerAssignmentChangeLog,
+  CustomerAssignmentChangeLogDocument,
+} from './schemas/customer-assignment-change-log.schema';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 
 const AUDIT_SNAPSHOT_KEY = '__customerAuditSnapshot';
 const AUDIT_WAS_NEW_KEY = '__customerAuditWasNew';
+export const ASSIGNMENT_CHANGE_LOGGED_KEY = '__assignmentChangeLogged';
 
 const IGNORED_DIFF_FIELDS = new Set([
   'updatedAt',
@@ -31,6 +36,8 @@ export class CustomerAuditService {
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerChangeLog.name)
     private readonly changeLogModel: Model<CustomerChangeLogDocument>,
+    @InjectModel(CustomerAssignmentChangeLog.name)
+    private readonly assignmentChangeLogModel: Model<CustomerAssignmentChangeLogDocument>,
   ) {}
 
   /**
@@ -42,11 +49,22 @@ export class CustomerAuditService {
     }
     this.hooksAttached = true;
     const schema = this.customerModel.schema;
+    const stashBaseline = (doc: CustomerDocument): void => {
+      doc.$locals[AUDIT_SNAPSHOT_KEY] = doc.toObject({ depopulate: true });
+    };
+    schema.post('init', function () {
+      stashBaseline(this);
+    });
+    schema.post('findOne', function (doc: CustomerDocument | null) {
+      if (doc != null) {
+        stashBaseline(doc);
+      }
+    });
+    schema.post('find', function (docs: CustomerDocument[]) {
+      docs.forEach((doc) => stashBaseline(doc));
+    });
     schema.pre('save', function (next) {
       this.$locals[AUDIT_WAS_NEW_KEY] = this.isNew;
-      if (!this.isNew) {
-        this.$locals[AUDIT_SNAPSHOT_KEY] = this.toObject({ depopulate: true });
-      }
       next();
     });
     const self = this;
@@ -78,6 +96,15 @@ export class CustomerAuditService {
       action: 'update',
       changes,
     }).save();
+    if (params.summaryField === 'assignedTo') {
+      await this.recordAssignmentChange({
+        customerId: params.customerId,
+        actorUserId: params.actorUserId,
+        action: 'update',
+        assignedFrom: this.normalizeAssigneeValue(params.from),
+        assignedTo: this.normalizeAssigneeValue(params.to),
+      });
+    }
   }
 
   private async persistSaveAudit(doc: CustomerDocument): Promise<void> {
@@ -98,6 +125,16 @@ export class CustomerAuditService {
         action: 'create',
         changes,
       }).save();
+      const initialAssignee = this.normalizeAssigneeValue(after.assignedTo);
+      if (initialAssignee !== undefined) {
+        await this.recordAssignmentChange({
+          customerId: String(doc._id),
+          actorUserId,
+          action: 'create',
+          assignedFrom: undefined,
+          assignedTo: initialAssignee,
+        });
+      }
       return;
     }
     if (!snapshot) {
@@ -112,6 +149,59 @@ export class CustomerAuditService {
       actorUserId,
       action: 'update',
       changes,
+    }).save();
+    const assignmentChange = changes.find((entry) => entry.field === 'assignedTo');
+    if (
+      assignmentChange !== undefined &&
+      doc.$locals[ASSIGNMENT_CHANGE_LOGGED_KEY] !== true
+    ) {
+      await this.recordAssignmentChange({
+        customerId: String(doc._id),
+        actorUserId,
+        action: 'update',
+        assignedFrom: this.normalizeAssigneeValue(assignmentChange.from),
+        assignedTo: this.normalizeAssigneeValue(assignmentChange.to),
+      });
+    }
+  }
+
+  /**
+   * Persists a row in `CustomerAssignmentChangeLog` (used by assignee API and query updates).
+   */
+  async recordCustomerAssignmentChange(params: {
+    readonly customerId: string;
+    readonly actorUserId?: string;
+    readonly action: 'create' | 'update';
+    readonly assignedFrom?: unknown;
+    readonly assignedTo?: unknown;
+  }): Promise<void> {
+    await this.recordAssignmentChange({
+      customerId: params.customerId,
+      actorUserId: params.actorUserId,
+      action: params.action,
+      assignedFrom: this.normalizeAssigneeValue(params.assignedFrom),
+      assignedTo: this.normalizeAssigneeValue(params.assignedTo),
+    });
+  }
+
+  private async recordAssignmentChange(params: {
+    readonly customerId: string;
+    readonly actorUserId?: string;
+    readonly action: 'create' | 'update';
+    readonly assignedFrom?: string;
+    readonly assignedTo?: string;
+  }): Promise<void> {
+    const from = params.assignedFrom;
+    const to = params.assignedTo;
+    if (from === to) {
+      return;
+    }
+    await new this.assignmentChangeLogModel({
+      customerId: new Types.ObjectId(params.customerId),
+      actorUserId: params.actorUserId,
+      action: params.action,
+      assignedFrom: from,
+      assignedTo: to,
     }).save();
   }
 
@@ -140,16 +230,33 @@ export class CustomerAuditService {
       }
       const a = before[key];
       const b = after[key];
-      if (this.isSameValue(a, b)) {
+      const from = key === 'assignedTo' ? this.normalizeAssigneeValue(a) : a;
+      const to = key === 'assignedTo' ? this.normalizeAssigneeValue(b) : b;
+      if (this.isSameValue(from, to)) {
         continue;
       }
-      changes.push({ field: key, from: a, to: b });
+      changes.push({ field: key, from, to });
     }
     return changes;
   }
 
+  private normalizeAssigneeValue(value: unknown): string | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    const trimmed = String(value).trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+
   private isSameValue(a: unknown, b: unknown): boolean {
     if (a === b) {
+      return true;
+    }
+    if (
+      typeof a === 'string' &&
+      typeof b === 'string' &&
+      a.trim() === b.trim()
+    ) {
       return true;
     }
     if (a instanceof Date && b instanceof Date) {

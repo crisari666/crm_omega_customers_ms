@@ -36,3 +36,5 @@ export class CustomerChangeLog {
 
 export const CustomerChangeLogSchema =
   SchemaFactory.createForClass(CustomerChangeLog);
+
+CustomerChangeLogSchema.index({ createdAt: -1 });
