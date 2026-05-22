@@ -16,7 +16,10 @@ import { ListCustomersAdminQueryDto } from './dto/list-customers-admin.query.dto
 import { UpdateCustomerAdminDto } from './dto/update-customer-admin.dto';
 import { UpdateCustomerReferralDto } from './dto/update-customer-referral.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { CustomerAuditService } from './customer-audit.service';
+import {
+  ASSIGNMENT_CHANGE_LOGGED_KEY,
+  CustomerAuditService,
+} from './customer-audit.service';
 import {
   CustomerAdminListItem,
   CustomerAdminListResponse,
@@ -917,10 +920,24 @@ export class CustomerService {
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
+    const assignedFrom =
+      customer.assignedTo !== undefined && customer.assignedTo.trim() !== ''
+        ? customer.assignedTo.trim()
+        : undefined;
     const trimmed = dto.assignedTo.trim();
-    customer.assignedTo = trimmed === '' ? undefined : trimmed;
+    const assignedTo = trimmed === '' ? undefined : trimmed;
+    customer.assignedTo = assignedTo;
     customer.$locals['__auditActorUserId'] = actorUserId;
-    return customer.save();
+    customer.$locals[ASSIGNMENT_CHANGE_LOGGED_KEY] = true;
+    const saved = await customer.save();
+    await this.customerAuditService.recordCustomerAssignmentChange({
+      customerId,
+      actorUserId,
+      action: 'update',
+      assignedFrom,
+      assignedTo,
+    });
+    return saved;
   }
 
   async updateCustomerReferral(
