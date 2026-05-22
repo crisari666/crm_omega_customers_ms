@@ -20,6 +20,8 @@ import { StaffPerformanceBodyDto } from './dto/staff-performance.body.dto';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 import { CustomerAdminImportService } from './customer-admin-import.service';
 import { ImportCustomersAdminDto } from './dto/import-customers-admin.dto';
+import { CustomerAssignmentAuditService } from './customer-assignment-audit.service';
+import { ListCustomerAssignmentChangesQueryDto } from './dto/list-customer-assignment-changes.query.dto';
 
 /**
  * Admin CRM HTTP API (crm_lots_agents). Vendor app keeps using {@link CustomerController} routes (`customer/mine`, etc.).
@@ -34,6 +36,7 @@ export class CustomerAdminController {
     private readonly customerStaffPerformanceService: CustomerStaffPerformanceService,
     private readonly customerAdminImportService: CustomerAdminImportService,
     private readonly customerMetaLeadgenService: CustomerMetaLeadgenService,
+    private readonly customerAssignmentAuditService: CustomerAssignmentAuditService,
   ) {}
 
   @Get()
@@ -59,6 +62,13 @@ export class CustomerAdminController {
   @Get('events')
   listCustomerEventsAdmin(@Query() query: ListCustomerEventsQueryDto) {
     return this.customerEventsService.listAdmin(query);
+  }
+
+  @Get('assignment-changes')
+  listCustomerAssignmentChanges(
+    @Query() query: ListCustomerAssignmentChangesQueryDto,
+  ) {
+    return this.customerAssignmentAuditService.listAdmin(query);
   }
 
   @Post('import')
