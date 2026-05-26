@@ -12,6 +12,10 @@ Returns `configVersion`, `indicators[]`, `interestScore`, `requiredHumanAuditsPe
 
 CRM admin only (`UserLevel.admin` = 0). Lists answered calls with transcript and AI audit status.
 
+Month membership uses **call date** (`completedAt` from Twilio `completed` event; fallback `createdAt`), not AI `analyzedAt`.
+
+Returns `{ month, items[], total, skip, limit, summary }` where `summary` is `{ dateBasis: 'callCompletedAt', totalEligible, aiCompleted, aiPending, aiFailed, aiNone, avgInterestScore, topFailedIndicators: [{ label, count }] }` for the full filtered set (before pagination).
+
 ## GET call-audit/results?month=YYYY-MM&agentExternalRef=
 
 Supervisor resume: `{ month, items[] }` where each item is `{ callLogId, callSid, agentExternalRef, completedAt?, auditorUserId, reviewerNotes?, interestScore, indicatorsSummary: { passed, total, failedLabels[] }, analyzedAt? }`.

@@ -117,10 +117,22 @@ export type CallAuditAiReviewItemDto = {
   ai: CallAuditRecordDto | null;
 };
 
+export type CallAuditAiReviewSummaryDto = {
+  dateBasis: 'callCompletedAt';
+  totalEligible: number;
+  aiCompleted: number;
+  aiPending: number;
+  aiFailed: number;
+  aiNone: number;
+  avgInterestScore: number | null;
+  topFailedIndicators: Array<{ label: string; count: number }>;
+};
+
 export type CallAuditAiReviewListResponseDto = {
   month: string;
   items: CallAuditAiReviewItemDto[];
   total: number;
   skip: number;
   limit: number;
+  summary: CallAuditAiReviewSummaryDto;
 };

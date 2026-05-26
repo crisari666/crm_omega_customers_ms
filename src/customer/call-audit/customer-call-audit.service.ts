@@ -47,6 +47,12 @@ import {
   getDefaultCallAuditMonth,
 } from './utils/call-audit-month-range.util';
 import { buildCallAuditIndicatorsSummary } from './utils/build-call-audit-indicators-summary.util';
+import { buildCallAuditAiReviewSummary } from './utils/build-call-audit-ai-review-summary.util';
+import {
+  isInstantInCallAuditMonth,
+  resolveCallAuditCallDateIso,
+  widenCallAuditPrefetchRange,
+} from './utils/resolve-call-audit-call-date.util';
 import type { CallAuditSpeakerRole } from './constants/call-audit.constant';
 
 type CallLogLean = {
@@ -382,9 +388,10 @@ export class CustomerCallAuditService {
     );
     const utcOffset = timeZone === 'America/Bogota' ? '-05:00' : '-05:00';
     const { from, to } = getCallAuditMonthRange(monthValue, utcOffset);
+    const prefetch = widenCallAuditPrefetchRange(from, to);
     const callLogs = await this.callLogModel
       .find({
-        createdAt: { $gte: from, $lte: to },
+        createdAt: { $gte: prefetch.from, $lte: prefetch.to },
         agentExternalRef: { $exists: true, $nin: [null, ''] },
         $or: [
           { transcript: { $exists: true, $nin: [null, ''] } },
@@ -424,10 +431,17 @@ export class CustomerCallAuditService {
       if (this.resolveTranscript(row) === '') {
         continue;
       }
+      const callDateIso = resolveCallAuditCallDateIso(
+        derived.completedAtIso,
+        row.createdAt,
+      );
+      if (!isInstantInCallAuditMonth(callDateIso, from, to)) {
+        continue;
+      }
       eligible.push({
         ...row,
         callLogId: String(row._id),
-        completedAt: derived.completedAtIso,
+        completedAt: callDateIso,
       });
     }
     eligible.sort(
@@ -467,9 +481,10 @@ export class CustomerCallAuditService {
         (item) => item.aiStatus === 'none' || item.aiStatus === 'failed',
       );
     }
+    const summary = buildCallAuditAiReviewSummary(items);
     const total = items.length;
     const page = items.slice(skip, skip + limit);
-    return { month: monthValue, items: page, total, skip, limit };
+    return { month: monthValue, items: page, total, skip, limit, summary };
   }
 
   private resolveAiStatus(
