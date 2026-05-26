@@ -1,5 +1,7 @@
 # Call audit API (customers-ms)
 
+Feature overview (schema, flows, KPIs): [`call-audit-ai-feature-resume.md`](call-audit-ai-feature-resume.md).
+
 LLM rubric: full config in `config/call-audit-llm.config.json` (validated on load). TypeScript `call-audit-llm.config.ts` is types + default only when the file is absent.
 
 Base: `admin/customer` (JWT `token` header).
