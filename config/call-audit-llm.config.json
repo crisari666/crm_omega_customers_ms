@@ -1,7 +1,8 @@
 {
-  "version": "2026-05-v1",
+  "version": "2026-05-v2",
   "model": "deepseek-chat",
   "temperature": 0.2,
+  "maxTokens": 8192,
   "indicators": [
     {
       "key": "apertura",
@@ -36,8 +37,8 @@
     }
   },
   "prompts": {
-    "system": "Eres un auditor comercial experto para Holmen / La Ceiba (inmobiliaria).\nAnalizas transcripciones de llamadas telefónicas en español (Colombia).\nLa transcripción es un solo bloque de texto; las frases suelen separarse por puntos, sin etiquetas de hablante.\nDebes inferir exactamente DOS interlocutores: \"agent\" (asesor comercial) y \"customer\" (cliente/prospecto).\nEl asesor suele presentarse, mencionar la constructora y el motivo de la llamada.\nResponde ÚNICAMENTE con JSON válido según el esquema indicado, sin markdown ni texto adicional.",
-    "userTemplate": "Analiza esta llamada.\n\nMetadatos:\n{{callMetadata}}\n\nID asesor (referencia interna): {{agentExternalRef}}\n\nTranscripción (texto plano, sin diarización):\n{{transcript}}\n\nDevuelve JSON con:\n- speakerTurns: array ordenado de { \"role\": \"agent\"|\"customer\", \"text\": \"...\" } reconstruyendo el diálogo.\n- indicators: array con un objeto por cada clave requerida: {{indicatorKeys}}\n  Cada objeto: { \"key\", \"passed\": boolean, \"rationale\": string, \"evidence\": string (cita breve del texto) }\n- interestScore: entero {{interestMin}}-{{interestMax}} (nivel de interés del cliente en la oferta)\n- interestScoreRationale: string breve explicando el puntaje"
+    "system": "Eres un auditor comercial experto para Holmen / La Ceiba (inmobiliaria).\nAnalizas transcripciones de llamadas telefónicas en español (Colombia).\nLa transcripción es un solo bloque de texto; las frases suelen separarse por puntos, sin etiquetas de hablante.\nDebes inferir exactamente DOS interlocutores: \"agent\" (asesor comercial) y \"customer\" (cliente/prospecto).\nPrioriza SIEMPRE completar indicators, interestScore e interestScoreRationale antes que speakerTurns.\nspeakerTurns debe ser un resumen breve del diálogo (NO repetir la transcripción completa).\nResponde ÚNICAMENTE con JSON válido según el esquema indicado, sin markdown ni texto adicional.",
+    "userTemplate": "Analiza esta llamada.\n\nMetadatos:\n{{callMetadata}}\n\nID asesor (referencia interna): {{agentExternalRef}}\n\nTranscripción (texto plano, sin diarización):\n{{transcript}}\n\nDevuelve UN objeto JSON con las claves EN ESTE ORDEN (obligatorio):\n1. indicators: array con un objeto por cada clave: {{indicatorKeys}}\n   Cada objeto: { \"key\", \"passed\": boolean, \"rationale\": string, \"evidence\": string (cita breve, máx. 120 caracteres) }\n2. interestScore: entero {{interestMin}}-{{interestMax}} (interés del cliente en la oferta)\n3. interestScoreRationale: string breve (máx. 200 caracteres)\n4. speakerTurns: array ordenado de { \"role\": \"agent\"|\"customer\", \"text\": \"...\" }\n   Máximo 20 segmentos; cada text máx. 180 caracteres (resumen, no transcripción literal); fusiona turnos consecutivos del mismo hablante."
   },
   "outputSchema": {
     "speakerTurns": "Array<{ role: \"agent\"|\"customer\", text: string }> ordenado cronológicamente",

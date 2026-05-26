@@ -21,6 +21,8 @@ export type CallAuditLlmConfig = {
   readonly version: string;
   readonly model: string;
   readonly temperature: number;
+  /** Max completion tokens (raise for long calls; truncation breaks JSON parse). */
+  readonly maxTokens: number;
   readonly indicators: readonly CallAuditLlmIndicatorConfig[];
   readonly interestScore: CallAuditLlmInterestScoreConfig;
   readonly prompts: {
@@ -31,9 +33,10 @@ export type CallAuditLlmConfig = {
 };
 
 export const CALL_AUDIT_LLM_CONFIG: CallAuditLlmConfig = {
-  version: '2026-05-v1',
+  version: '2026-05-v2',
   model: 'deepseek-chat',
   temperature: 0.2,
+  maxTokens: 8192,
   indicators: [
     {
       key: 'apertura',
@@ -76,7 +79,8 @@ export const CALL_AUDIT_LLM_CONFIG: CallAuditLlmConfig = {
 Analizas transcripciones de llamadas telefónicas en español (Colombia).
 La transcripción es un solo bloque de texto; las frases suelen separarse por puntos, sin etiquetas de hablante.
 Debes inferir exactamente DOS interlocutores: "agent" (asesor comercial) y "customer" (cliente/prospecto).
-El asesor suele presentarse, mencionar la constructora y el motivo de la llamada.
+Prioriza SIEMPRE completar indicators, interestScore e interestScoreRationale antes que speakerTurns.
+speakerTurns debe ser un resumen breve del diálogo (NO repetir la transcripción completa).
 Responde ÚNICAMENTE con JSON válido según el esquema indicado, sin markdown ni texto adicional.`,
     userTemplate: `Analiza esta llamada.
 
@@ -88,12 +92,13 @@ ID asesor (referencia interna): {{agentExternalRef}}
 Transcripción (texto plano, sin diarización):
 {{transcript}}
 
-Devuelve JSON con:
-- speakerTurns: array ordenado de { "role": "agent"|"customer", "text": "..." } reconstruyendo el diálogo.
-- indicators: array con un objeto por cada clave requerida: {{indicatorKeys}}
-  Cada objeto: { "key", "passed": boolean, "rationale": string, "evidence": string (cita breve del texto) }
-- interestScore: entero {{interestMin}}-{{interestMax}} (nivel de interés del cliente en la oferta)
-- interestScoreRationale: string breve explicando el puntaje`,
+Devuelve UN objeto JSON con las claves EN ESTE ORDEN (obligatorio):
+1. indicators: array con un objeto por cada clave: {{indicatorKeys}}
+   Cada objeto: { "key", "passed": boolean, "rationale": string, "evidence": string (cita breve, máx. 120 caracteres) }
+2. interestScore: entero {{interestMin}}-{{interestMax}} (interés del cliente en la oferta)
+3. interestScoreRationale: string breve (máx. 200 caracteres)
+4. speakerTurns: array ordenado de { "role": "agent"|"customer", "text": "..." }
+   Máximo 20 segmentos; cada text máx. 180 caracteres (resumen, no transcripción literal); fusiona turnos consecutivos del mismo hablante.`,
   },
   outputSchema: {
     speakerTurns:

@@ -78,10 +78,16 @@ export class CallAuditDeepSeekService {
         { role: 'user', content: this.buildUserMessage(config, input) },
       ],
       temperature: config.temperature,
-      max_tokens: 4096,
+      max_tokens: config.maxTokens,
       response_format: { type: 'json_object' },
     });
-    const content = completion.choices[0]?.message?.content ?? '';
+    const choice = completion.choices[0];
+    const content = choice?.message?.content ?? '';
+    if (choice?.finish_reason === 'length') {
+      this.logger.warn(
+        `LLM response truncated (finish_reason=length, max_tokens=${config.maxTokens})`,
+      );
+    }
     if (content.trim() === '') {
       throw new Error('Empty LLM response');
     }

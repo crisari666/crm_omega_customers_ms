@@ -4,16 +4,22 @@ import {
   CALL_AUDIT_SPEAKER_AGENT,
   CALL_AUDIT_SPEAKER_CUSTOMER,
 } from '../constants/call-audit.constant';
+import { normalizeCallAuditLlmJsonContent } from './normalize-call-audit-llm-json.util';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function parseSpeakerTurns(raw: unknown): CallAuditLlmAnalysisResult['speakerTurns'] {
-  if (!Array.isArray(raw)) {
-    throw new Error('speakerTurns must be an array');
+function parseSpeakerTurns(
+  raw: unknown,
+): CallAuditLlmAnalysisResult['speakerTurns'] | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
   }
-  const turns: CallAuditLlmAnalysisResult['speakerTurns'] = [];
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const turns: NonNullable<CallAuditLlmAnalysisResult['speakerTurns']> = [];
   for (const item of raw) {
     if (!isRecord(item)) {
       continue;
@@ -34,7 +40,7 @@ function parseSpeakerTurns(raw: unknown): CallAuditLlmAnalysisResult['speakerTur
     turns.push({ role, text });
   }
   if (turns.length === 0) {
-    throw new Error('speakerTurns is empty or invalid');
+    return undefined;
   }
   return turns;
 }
@@ -94,17 +100,18 @@ export function parseCallAuditLlmResponse(
   rawJson: string,
   config: CallAuditLlmConfig,
 ): CallAuditLlmAnalysisResult {
+  const normalized = normalizeCallAuditLlmJsonContent(rawJson);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawJson) as unknown;
+    parsed = JSON.parse(normalized) as unknown;
   } catch {
-    console.log('rawJson', JSON.stringify(rawJson, null, 2));
-    throw new Error('LLM response is not valid JSON');
+    throw new Error(
+      'LLM response is not valid JSON (often caused by max_tokens truncation on long calls)',
+    );
   }
   if (!isRecord(parsed)) {
     throw new Error('LLM response must be a JSON object');
   }
-  const speakerTurns = parseSpeakerTurns(parsed.speakerTurns);
   const indicators = parseIndicators(parsed.indicators, config);
   const scoreRaw = parsed.interestScore;
   if (typeof scoreRaw !== 'number' && typeof scoreRaw !== 'string') {
@@ -115,6 +122,7 @@ export function parseCallAuditLlmResponse(
     typeof parsed.interestScoreRationale === 'string'
       ? parsed.interestScoreRationale.trim()
       : undefined;
+  const speakerTurns = parseSpeakerTurns(parsed.speakerTurns);
   return {
     speakerTurns,
     indicators,

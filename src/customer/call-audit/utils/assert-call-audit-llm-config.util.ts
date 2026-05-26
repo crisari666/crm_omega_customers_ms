@@ -23,6 +23,11 @@ export function assertCallAuditLlmConfig(raw: unknown): CallAuditLlmConfig {
   if (typeof temperature !== 'number' || !Number.isFinite(temperature)) {
     throw new Error('call-audit-llm.config.json: temperature must be a number');
   }
+  const maxTokensRaw = raw.maxTokens;
+  const maxTokens =
+    typeof maxTokensRaw === 'number' && Number.isFinite(maxTokensRaw) && maxTokensRaw >= 1024
+      ? Math.round(maxTokensRaw)
+      : 8192;
   if (!Array.isArray(raw.indicators) || raw.indicators.length === 0) {
     throw new Error('call-audit-llm.config.json: indicators must be a non-empty array');
   }
@@ -48,5 +53,5 @@ export function assertCallAuditLlmConfig(raw: unknown): CallAuditLlmConfig {
   if (!isRecord(raw.outputSchema)) {
     throw new Error('call-audit-llm.config.json: outputSchema is required');
   }
-  return raw as CallAuditLlmConfig;
+  return { ...raw, maxTokens } as CallAuditLlmConfig;
 }
