@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -34,7 +35,9 @@ import type {
   CallAuditLlmAnalysisResult,
   CallAuditAiReviewItemDto,
   CallAuditAiReviewListResponseDto,
-  CallAuditProgressResponseDto,
+  CallAuditResultsResponseDto,
+  CallAuditAuditorProgressResponseDto,
+  CallAuditResultItemDto,
   CallAuditRecordDto,
   CallAuditSpeakerTurn,
   CallAuditsByCallResponseDto,
@@ -43,6 +46,7 @@ import {
   getCallAuditMonthRange,
   getDefaultCallAuditMonth,
 } from './utils/call-audit-month-range.util';
+import { buildCallAuditIndicatorsSummary } from './utils/build-call-audit-indicators-summary.util';
 import type { CallAuditSpeakerRole } from './constants/call-audit.constant';
 
 type CallLogLean = {
@@ -154,32 +158,48 @@ export class CustomerCallAuditService {
     if (agentExternalRef === '') {
       throw new BadRequestException('Call has no agentExternalRef');
     }
+    const existingHuman = await this.callAuditModel
+      .findOne({
+        callLogId: new Types.ObjectId(callLogId),
+        source: CALL_AUDIT_SOURCE_HUMAN,
+      })
+      .exec();
+    const existingAuditorId = (existingHuman?.auditorUserId ?? '').trim();
+    if (
+      existingAuditorId !== '' &&
+      existingAuditorId !== auditorUserId.trim()
+    ) {
+      throw new ForbiddenException(
+        'This call was already audited by another user',
+      );
+    }
     const config = this.callAuditLlmConfigService.getConfig();
     const indicators = this.mapHumanIndicators(body, config);
     const interestScore = this.clampScore(body.interestScore, config.interestScore);
     const speakerTurns = this.mapSpeakerTurns(body.speakerTurns);
+    const setPayload: Record<string, unknown> = {
+      callSid: callLog.callSid,
+      agentExternalRef,
+      configVersion: config.version,
+      indicators,
+      interestScore,
+      interestScoreRationale: body.interestScoreRationale?.trim(),
+      speakerTurns,
+      reviewerNotes: body.reviewerNotes?.trim(),
+      status: CALL_AUDIT_STATUS_COMPLETED,
+      analyzedAt: new Date(),
+      llmError: undefined,
+    };
+    if (existingAuditorId === '') {
+      setPayload.auditorUserId = auditorUserId.trim();
+    }
     const doc = await this.callAuditModel
       .findOneAndUpdate(
         {
           callLogId: new Types.ObjectId(callLogId),
           source: CALL_AUDIT_SOURCE_HUMAN,
         },
-        {
-          $set: {
-            callSid: callLog.callSid,
-            agentExternalRef,
-            configVersion: config.version,
-            indicators,
-            interestScore,
-            interestScoreRationale: body.interestScoreRationale?.trim(),
-            speakerTurns,
-            auditorUserId,
-            reviewerNotes: body.reviewerNotes?.trim(),
-            status: CALL_AUDIT_STATUS_COMPLETED,
-            analyzedAt: new Date(),
-            llmError: undefined,
-          },
-        },
+        { $set: setPayload },
         { upsert: true, new: true },
       )
       .exec();
@@ -221,11 +241,101 @@ export class CustomerCallAuditService {
     };
   }
 
-  /** Monthly per-asesor human audit counts and pending answered calls with transcript. */
-  async getProgress(
+  /** Flat list of completed human audits for supervisor validation (resume view). */
+  async listAuditResults(
     month: string,
     agentExternalRefFilter?: string,
-  ): Promise<CallAuditProgressResponseDto> {
+  ): Promise<CallAuditResultsResponseDto> {
+    const monthValue = month.trim() !== '' ? month : getDefaultCallAuditMonth();
+    const timeZone = this.configService.get<string>(
+      'ventorAssignment.timeZone',
+      'America/Bogota',
+    );
+    const utcOffset = timeZone === 'America/Bogota' ? '-05:00' : '-05:00';
+    const { from, to } = getCallAuditMonthRange(monthValue, utcOffset);
+    const auditFilter: Record<string, unknown> = {
+      source: CALL_AUDIT_SOURCE_HUMAN,
+      status: CALL_AUDIT_STATUS_COMPLETED,
+      createdAt: { $gte: from, $lte: to },
+      auditorUserId: { $exists: true, $nin: [null, ''] },
+    };
+    const agentFilter = agentExternalRefFilter?.trim() ?? '';
+    if (agentFilter !== '') {
+      auditFilter.agentExternalRef = agentFilter;
+    }
+    const auditRows = await this.callAuditModel
+      .find(auditFilter)
+      .select({
+        callLogId: 1,
+        callSid: 1,
+        agentExternalRef: 1,
+        auditorUserId: 1,
+        reviewerNotes: 1,
+        interestScore: 1,
+        indicators: 1,
+        analyzedAt: 1,
+      })
+      .lean()
+      .exec();
+    const callLogIds = auditRows.map((row) => row.callLogId);
+    const callLogMetaById = new Map<
+      string,
+      { callSid: string; completedAt?: string }
+    >();
+    if (callLogIds.length > 0) {
+      const callLogs = await this.callLogModel
+        .find({ _id: { $in: callLogIds } })
+        .select({ _id: 1, callSid: 1, createdAt: 1 })
+        .lean<CallLogLean[]>()
+        .exec();
+      for (const row of callLogs) {
+        callLogMetaById.set(String(row._id), {
+          callSid: String(row.callSid ?? ''),
+          completedAt:
+            row.createdAt !== undefined
+              ? new Date(row.createdAt).toISOString()
+              : undefined,
+        });
+      }
+    }
+    const items: CallAuditResultItemDto[] = [];
+    for (const row of auditRows) {
+      const auditorUserId = String(row.auditorUserId ?? '').trim();
+      if (auditorUserId === '') {
+        continue;
+      }
+      const callLogId = String(row.callLogId);
+      const meta = callLogMetaById.get(callLogId);
+      items.push({
+        callLogId,
+        callSid: meta?.callSid ?? String(row.callSid ?? ''),
+        agentExternalRef: String(row.agentExternalRef ?? ''),
+        completedAt: meta?.completedAt,
+        auditorUserId,
+        reviewerNotes: row.reviewerNotes?.trim(),
+        interestScore: Number(row.interestScore ?? 1),
+        indicatorsSummary: buildCallAuditIndicatorsSummary(
+          (row.indicators ?? []).map((i) => ({
+            passed: i.passed === true,
+            label: String(i.label ?? i.key ?? ''),
+          })),
+        ),
+        analyzedAt:
+          row.analyzedAt !== undefined
+            ? new Date(row.analyzedAt).toISOString()
+            : undefined,
+      });
+    }
+    items.sort((a, b) => {
+      const aTime = a.analyzedAt ?? a.completedAt ?? '';
+      const bTime = b.analyzedAt ?? b.completedAt ?? '';
+      return bTime.localeCompare(aTime);
+    });
+    return { month: monthValue, items };
+  }
+
+  /** Monthly human-audit counts grouped by auditor user (coach / coordinator progress). */
+  async listAuditorProgress(month: string): Promise<CallAuditAuditorProgressResponseDto> {
     const monthValue = month.trim() !== '' ? month : getDefaultCallAuditMonth();
     const timeZone = this.configService.get<string>(
       'ventorAssignment.timeZone',
@@ -237,88 +347,26 @@ export class CustomerCallAuditService {
       'callAudit.requiredHumanAuditsPerMonth',
       3,
     );
-    const callLogs = await this.callLogModel
-      .find({
-        createdAt: { $gte: from, $lte: to },
-        agentExternalRef: { $exists: true, $nin: [null, ''] },
-        $or: [
-          { transcript: { $exists: true, $nin: [null, ''] } },
-          { text: { $exists: true, $nin: [null, ''] } },
-        ],
-      })
-      .select({
-        _id: 1,
-        callSid: 1,
-        agentExternalRef: 1,
-        events: 1,
-        status: 1,
-        transcript: 1,
-        text: 1,
-        durationSeconds: 1,
-        createdAt: 1,
-      })
-      .lean<CallLogLean[]>()
+    const rows = await this.callAuditModel
+      .aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            source: CALL_AUDIT_SOURCE_HUMAN,
+            status: CALL_AUDIT_STATUS_COMPLETED,
+            createdAt: { $gte: from, $lte: to },
+            auditorUserId: { $exists: true, $nin: [null, ''] },
+          },
+        },
+        { $group: { _id: '$auditorUserId', count: { $sum: 1 } } },
+      ])
       .exec();
-    const eligibleByAgent = new Map<
-      string,
-      Array<{ id: string; durationSeconds: number; createdAt: number }>
-    >();
-    for (const row of callLogs) {
-      const agentRef = String(row.agentExternalRef ?? '').trim();
-      if (agentRef === '') {
-        continue;
-      }
-      if (
-        agentExternalRefFilter !== undefined &&
-        agentExternalRefFilter.trim() !== '' &&
-        agentRef !== agentExternalRefFilter.trim()
-      ) {
-        continue;
-      }
-      const derived = deriveResolvedCallOutcome(row.events ?? [], row.status);
-      if (derived.outcome !== 'answered') {
-        continue;
-      }
-      const transcript = this.resolveTranscript(row);
-      if (transcript === '') {
-        continue;
-      }
-      const list = eligibleByAgent.get(agentRef) ?? [];
-      list.push({
-        id: String(row._id),
-        durationSeconds: Number(row.durationSeconds ?? 0),
-        createdAt: new Date(row.createdAt ?? 0).getTime(),
-      });
-      eligibleByAgent.set(agentRef, list);
-    }
-    const agentRefs = Array.from(eligibleByAgent.keys());
-    const humanCounts = await this.countHumanAuditsByAgents(agentRefs, from, to);
-    const auditedCallLogIds = await this.findHumanAuditedCallLogIds(
-      agentRefs,
-      from,
-      to,
-    );
-    const agents = agentRefs.map((agentExternalRef) => {
-      const eligible = eligibleByAgent.get(agentExternalRef) ?? [];
-      const auditedSet = auditedCallLogIds.get(agentExternalRef) ?? new Set<string>();
-      const pending = eligible
-        .filter((c) => !auditedSet.has(c.id))
-        .sort((a, b) => {
-          if (b.durationSeconds !== a.durationSeconds) {
-            return b.durationSeconds - a.durationSeconds;
-          }
-          return b.createdAt - a.createdAt;
-        })
-        .map((c) => c.id);
-      return {
-        agentExternalRef,
-        humanAuditCount: humanCounts.get(agentExternalRef) ?? 0,
-        required,
-        pendingCallLogIds: pending,
-      };
-    });
-    agents.sort((a, b) => a.agentExternalRef.localeCompare(b.agentExternalRef));
-    return { month: monthValue, required, agents };
+    const auditors = rows
+      .map((row) => ({
+        auditorUserId: String(row._id),
+        humanAuditCount: row.count,
+      }))
+      .sort((a, b) => a.auditorUserId.localeCompare(b.auditorUserId));
+    return { month: monthValue, required, auditors };
   }
 
   /** CRM admin list of answered calls with AI audit status (optional filter: missing/failed AI only). */
@@ -633,62 +681,6 @@ export class CustomerCallAuditService {
         evidence: row?.evidence,
       };
     });
-  }
-
-  private async countHumanAuditsByAgents(
-    agentRefs: string[],
-    from: Date,
-    to: Date,
-  ): Promise<Map<string, number>> {
-    const result = new Map<string, number>();
-    if (agentRefs.length === 0) {
-      return result;
-    }
-    const rows = await this.callAuditModel
-      .aggregate<{ _id: string; count: number }>([
-        {
-          $match: {
-            source: CALL_AUDIT_SOURCE_HUMAN,
-            status: CALL_AUDIT_STATUS_COMPLETED,
-            agentExternalRef: { $in: agentRefs },
-            createdAt: { $gte: from, $lte: to },
-          },
-        },
-        { $group: { _id: '$agentExternalRef', count: { $sum: 1 } } },
-      ])
-      .exec();
-    for (const row of rows) {
-      result.set(row._id, row.count);
-    }
-    return result;
-  }
-
-  private async findHumanAuditedCallLogIds(
-    agentRefs: string[],
-    from: Date,
-    to: Date,
-  ): Promise<Map<string, Set<string>>> {
-    const result = new Map<string, Set<string>>();
-    if (agentRefs.length === 0) {
-      return result;
-    }
-    const rows = await this.callAuditModel
-      .find({
-        source: CALL_AUDIT_SOURCE_HUMAN,
-        status: CALL_AUDIT_STATUS_COMPLETED,
-        agentExternalRef: { $in: agentRefs },
-        createdAt: { $gte: from, $lte: to },
-      })
-      .select({ callLogId: 1, agentExternalRef: 1 })
-      .lean()
-      .exec();
-    for (const row of rows) {
-      const agent = String(row.agentExternalRef);
-      const set = result.get(agent) ?? new Set<string>();
-      set.add(String(row.callLogId));
-      result.set(agent, set);
-    }
-    return result;
   }
 
   private toDto(doc: CustomerCallAuditDocument): CallAuditRecordDto {

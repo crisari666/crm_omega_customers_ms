@@ -25,7 +25,8 @@ import { ListCustomerAssignmentChangesQueryDto } from './dto/list-customer-assig
 import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.service';
 import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 import { ListCallAuditAiReviewQueryDto } from './call-audit/dto/list-call-audit-ai-review.query.dto';
-import { ListCallAuditProgressQueryDto } from './call-audit/dto/list-call-audit-progress.query.dto';
+import { ListCallAuditAuditorProgressQueryDto } from './call-audit/dto/list-call-audit-auditor-progress.query.dto';
+import { ListCallAuditResultsQueryDto } from './call-audit/dto/list-call-audit-results.query.dto';
 import { assertOfficeAdmin } from '../core/utils/assert-office-admin.util';
 import { SubmitHumanCallAuditDto } from './call-audit/dto/submit-human-call-audit.dto';
 
@@ -67,12 +68,19 @@ export class CustomerAdminController {
     return this.callAuditLlmConfigService.getPublicConfig();
   }
 
-  @Get('call-audit/progress')
-  getCallAuditProgress(@Query() query: ListCallAuditProgressQueryDto) {
-    return this.customerCallAuditService.getProgress(
+  @Get('call-audit/results')
+  listCallAuditResults(@Query() query: ListCallAuditResultsQueryDto) {
+    return this.customerCallAuditService.listAuditResults(
       query.month,
       query.agentExternalRef,
     );
+  }
+
+  @Get('call-audit/auditor-progress')
+  listCallAuditAuditorProgress(
+    @Query() query: ListCallAuditAuditorProgressQueryDto,
+  ) {
+    return this.customerCallAuditService.listAuditorProgress(query.month);
   }
 
   @Get('call-audit/ai-review')

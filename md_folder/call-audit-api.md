@@ -12,9 +12,13 @@ Returns `configVersion`, `indicators[]`, `interestScore`, `requiredHumanAuditsPe
 
 CRM admin only (`UserLevel.admin` = 0). Lists answered calls with transcript and AI audit status.
 
-## GET call-audit/progress?month=YYYY-MM&agentExternalRef=
+## GET call-audit/results?month=YYYY-MM&agentExternalRef=
 
-Returns `{ month, required, agents: [{ agentExternalRef, humanAuditCount, required, pendingCallLogIds[] }] }`.
+Supervisor resume: `{ month, items[] }` where each item is `{ callLogId, callSid, agentExternalRef, completedAt?, auditorUserId, reviewerNotes?, interestScore, indicatorsSummary: { passed, total, failedLabels[] }, analyzedAt? }`.
+
+## GET call-audit/auditor-progress?month=YYYY-MM
+
+Auditor quota: `{ month, required, auditors: [{ auditorUserId, humanAuditCount }] }` (counts all human audits in month per `auditorUserId`).
 
 ## GET call-logs/:callLogId/audits
 
@@ -23,6 +27,8 @@ Returns `{ callLogId, callSid, human, ai }` audit records or null.
 ## POST call-logs/:callLogId/audit
 
 Body: `{ indicators: [{ key, passed, rationale? }], interestScore, interestScoreRationale?, reviewerNotes?, speakerTurns? }`.
+
+403 if another user already owns the human audit (`auditorUserId` is immutable after first save).
 
 ## POST call-logs/:callLogId/audit/analyze
 

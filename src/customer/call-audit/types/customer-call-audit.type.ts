@@ -73,17 +73,38 @@ export type CallAuditsByCallResponseDto = {
   ai: CallAuditRecordDto | null;
 };
 
-export type CallAuditProgressAgentRowDto = {
-  agentExternalRef: string;
-  humanAuditCount: number;
-  required: number;
-  pendingCallLogIds: string[];
+export type CallAuditIndicatorsSummaryDto = {
+  passed: number;
+  total: number;
+  failedLabels: string[];
 };
 
-export type CallAuditProgressResponseDto = {
+export type CallAuditResultItemDto = {
+  callLogId: string;
+  callSid: string;
+  agentExternalRef: string;
+  completedAt?: string;
+  auditorUserId: string;
+  reviewerNotes?: string;
+  interestScore: number;
+  indicatorsSummary: CallAuditIndicatorsSummaryDto;
+  analyzedAt?: string;
+};
+
+export type CallAuditResultsResponseDto = {
+  month: string;
+  items: CallAuditResultItemDto[];
+};
+
+export type CallAuditAuditorProgressRowDto = {
+  auditorUserId: string;
+  humanAuditCount: number;
+};
+
+export type CallAuditAuditorProgressResponseDto = {
   month: string;
   required: number;
-  agents: CallAuditProgressAgentRowDto[];
+  auditors: CallAuditAuditorProgressRowDto[];
 };
 
 export type CallAuditAiReviewItemDto = {
