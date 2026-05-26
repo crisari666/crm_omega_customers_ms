@@ -382,6 +382,7 @@ export class CustomerCallAuditService {
     const monthValue = query.month.trim();
     const skip = query.skip ?? 0;
     const limit = query.limit ?? 100;
+    const excludeWithoutTranscript = query.excludeWithoutTranscript !== false;
     const timeZone = this.configService.get<string>(
       'ventorAssignment.timeZone',
       'America/Bogota',
@@ -428,7 +429,8 @@ export class CustomerCallAuditService {
       if (derived.outcome !== 'answered') {
         continue;
       }
-      if (this.resolveTranscript(row) === '') {
+      const hasTranscript = this.resolveTranscript(row) !== '';
+      if (!hasTranscript && excludeWithoutTranscript) {
         continue;
       }
       const callDateIso = resolveCallAuditCallDateIso(
@@ -472,6 +474,7 @@ export class CustomerCallAuditService {
         agentExternalRef: String(row.agentExternalRef ?? ''),
         completedAt: row.completedAt,
         durationSeconds: row.durationSeconds,
+        hasTranscript: this.resolveTranscript(row) !== '',
         aiStatus,
         ai: aiDoc !== undefined ? this.toDto(aiDoc) : null,
       };

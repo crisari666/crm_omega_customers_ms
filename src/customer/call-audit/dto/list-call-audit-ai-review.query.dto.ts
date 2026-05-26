@@ -26,6 +26,11 @@ export class ListCallAuditAiReviewQueryDto {
   onlyWithoutAi?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => value !== 'false' && value !== false)
+  @IsBoolean()
+  excludeWithoutTranscript?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

@@ -113,6 +113,7 @@ export type CallAuditAiReviewItemDto = {
   agentExternalRef: string;
   completedAt?: string;
   durationSeconds?: number;
+  hasTranscript: boolean;
   aiStatus: 'none' | 'pending' | 'completed' | 'failed';
   ai: CallAuditRecordDto | null;
 };

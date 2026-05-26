@@ -10,9 +10,9 @@ Base: `admin/customer` (JWT `token` header).
 
 Returns `configVersion`, `indicators[]`, `interestScore`, `requiredHumanAuditsPerMonth`.
 
-## GET call-audit/ai-review?month=YYYY-MM&agentExternalRef=&onlyWithoutAi=&skip=&limit=
+## GET call-audit/ai-review?month=YYYY-MM&agentExternalRef=&onlyWithoutAi=&excludeWithoutTranscript=&skip=&limit=
 
-CRM admin only (`UserLevel.admin` = 0). Lists answered calls with transcript and AI audit status.
+CRM admin only (`UserLevel.admin` = 0). Lists answered calls with AI audit status. Default `excludeWithoutTranscript=true` (omit calls with empty transcript). Set `excludeWithoutTranscript=false` to include answered calls without transcript (debug).
 
 Month membership uses **call date** (`completedAt` from Twilio `completed` event; fallback `createdAt`), not AI `analyzedAt`.
 

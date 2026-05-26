@@ -8,6 +8,7 @@ function baseItem(
     callLogId: '1',
     callSid: 'CA1',
     agentExternalRef: 'agent-1',
+    hasTranscript: true,
     aiStatus: 'none',
     ai: null,
     ...overrides,
