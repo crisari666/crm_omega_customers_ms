@@ -63,6 +63,13 @@ import { CustomerVentorAssignmentService } from './customer-ventor-assignment.se
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 import { CustomerAdminImportService } from './customer-admin-import.service';
 import { CustomerAssignmentAuditService } from './customer-assignment-audit.service';
+import {
+  CustomerCallAudit,
+  CustomerCallAuditSchema,
+} from './call-audit/schemas/customer-call-audit.schema';
+import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.service';
+import { CallAuditDeepSeekService } from './call-audit/call-audit-deepseek.service';
+import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 
 @Module({
   imports: [
@@ -109,6 +116,7 @@ import { CustomerAssignmentAuditService } from './customer-assignment-audit.serv
       { name: CustomerEvent.name, schema: CustomerEventSchema },
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
       { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
+      { name: CustomerCallAudit.name, schema: CustomerCallAuditSchema },
     ]),
   ],
   controllers: [
@@ -137,6 +145,9 @@ import { CustomerAssignmentAuditService } from './customer-assignment-audit.serv
     CustomerWhatsappFlowCompletedService,
     CustomerAdminImportService,
     CustomerAssignmentAuditService,
+    CallAuditLlmConfigService,
+    CallAuditDeepSeekService,
+    CustomerCallAuditService,
   ],
   exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
 })

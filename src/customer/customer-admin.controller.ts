@@ -22,6 +22,12 @@ import { CustomerAdminImportService } from './customer-admin-import.service';
 import { ImportCustomersAdminDto } from './dto/import-customers-admin.dto';
 import { CustomerAssignmentAuditService } from './customer-assignment-audit.service';
 import { ListCustomerAssignmentChangesQueryDto } from './dto/list-customer-assignment-changes.query.dto';
+import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.service';
+import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
+import { ListCallAuditAiReviewQueryDto } from './call-audit/dto/list-call-audit-ai-review.query.dto';
+import { ListCallAuditProgressQueryDto } from './call-audit/dto/list-call-audit-progress.query.dto';
+import { assertOfficeAdmin } from '../core/utils/assert-office-admin.util';
+import { SubmitHumanCallAuditDto } from './call-audit/dto/submit-human-call-audit.dto';
 
 /**
  * Admin CRM HTTP API (crm_lots_agents). Vendor app keeps using {@link CustomerController} routes (`customer/mine`, etc.).
@@ -37,6 +43,8 @@ export class CustomerAdminController {
     private readonly customerAdminImportService: CustomerAdminImportService,
     private readonly customerMetaLeadgenService: CustomerMetaLeadgenService,
     private readonly customerAssignmentAuditService: CustomerAssignmentAuditService,
+    private readonly callAuditLlmConfigService: CallAuditLlmConfigService,
+    private readonly customerCallAuditService: CustomerCallAuditService,
   ) {}
 
   @Get()
@@ -52,6 +60,55 @@ export class CustomerAdminController {
   @Get('call-logs')
   listCallLogsAdmin(@Query() query: ListCallLogsAdminQueryDto) {
     return this.customerCallLogsService.listAdmin(query);
+  }
+
+  @Get('call-audit/config')
+  getCallAuditConfig() {
+    return this.callAuditLlmConfigService.getPublicConfig();
+  }
+
+  @Get('call-audit/progress')
+  getCallAuditProgress(@Query() query: ListCallAuditProgressQueryDto) {
+    return this.customerCallAuditService.getProgress(
+      query.month,
+      query.agentExternalRef,
+    );
+  }
+
+  @Get('call-audit/ai-review')
+  listCallAuditAiReview(
+    @Query() query: ListCallAuditAiReviewQueryDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    assertOfficeAdmin(jwtUser);
+    return this.customerCallAuditService.listAiReviewForAdmin(query);
+  }
+
+  @Get('call-logs/:callLogId/audits')
+  getCallAuditsByCallLogId(
+    @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+  ) {
+    return this.customerCallAuditService.getAuditsByCallLogId(callLogId);
+  }
+
+  @Post('call-logs/:callLogId/audit')
+  submitHumanCallAudit(
+    @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+    @Body() body: SubmitHumanCallAuditDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerCallAuditService.submitHumanAudit(
+      callLogId,
+      body,
+      resolveOfficeUserId(jwtUser),
+    );
+  }
+
+  @Post('call-logs/:callLogId/audit/analyze')
+  analyzeCallAudit(
+    @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+  ) {
+    return this.customerCallAuditService.analyzeCallByCallLogId(callLogId);
   }
 
   @Post('staff-performance')

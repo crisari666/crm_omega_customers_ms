@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, isValidObjectId } from 'mongoose';
 import { IngestVoiceCallEventDto } from './dto/ingest-voice-call-event.dto';
@@ -7,6 +7,7 @@ import { SaveCallTranscriptionDto } from './dto/save-call-transcription.dto';
 import {
   CustomerCallLog,
   CustomerCallLogDocument,
+  CustomerCallUtterance,
 } from './schemas/customer-call-log.schema';
 import {
   callOutcomeMatchesFilter,
@@ -17,6 +18,7 @@ import {
   type CustomerCallLogAdminItemDto,
   type IngestResult,
 } from './types/customer-call-logs.type';
+import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 
 const ADMIN_LIST_FETCH_CAP = 5000;
 
@@ -26,6 +28,8 @@ export class CustomerCallLogsService {
     @InjectModel(CustomerCallLog.name)
     private readonly customerCallLogModel: Model<CustomerCallLogDocument>,
     private readonly customerEventsService: CustomerEventsService,
+    @Inject(forwardRef(() => CustomerCallAuditService))
+    private readonly customerCallAuditService: CustomerCallAuditService,
   ) {}
 
   async ingestVoiceCallEvent(payload: IngestVoiceCallEventDto): Promise<IngestResult> {
@@ -138,6 +142,7 @@ export class CustomerCallLogsService {
     from?: string;
     to?: string;
     direction?: string;
+    utterances?: CustomerCallUtterance[];
     durationSeconds?: number;
     recordingUrl?: string;
     transcript?: string;
@@ -176,6 +181,7 @@ export class CustomerCallLogsService {
       provider: doc.provider,
       from: doc.from,
       to: doc.to,
+      utterances: doc.utterances,
       direction: doc.direction,
       durationSeconds: doc.durationSeconds,
       recordingUrl: doc.recordingUrl,
@@ -205,6 +211,7 @@ export class CustomerCallLogsService {
       payload.utterances,
       payload.recordingUrl,
     );
+    this.customerCallAuditService.scheduleAnalyzeAfterTranscription(payload.callSid);
     return {
       accepted: true,
       callSid: payload.callSid,

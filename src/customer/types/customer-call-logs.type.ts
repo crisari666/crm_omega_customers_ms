@@ -1,3 +1,4 @@
+import { CustomerCallUtterance } from '../schemas/customer-call-log.schema';
 import type { ResolvedCallOutcome } from '../utils/call-log-outcome.util';
 
 export type CustomerCallLogAdminEventDto = {
@@ -13,6 +14,7 @@ export type CustomerCallLogAdminEventDto = {
 export type CustomerCallLogAdminItemDto = {
   id: string;
   callSid: string;
+  utterances?: CustomerCallUtterance[];
   provider: string;
   from?: string;
   to?: string;
