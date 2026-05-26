@@ -87,8 +87,12 @@ export class CustomerAdminController {
   @Get('call-logs/:callLogId/audits')
   getCallAuditsByCallLogId(
     @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
-    return this.customerCallAuditService.getAuditsByCallLogId(callLogId);
+    return this.customerCallAuditService.getAuditsByCallLogId(
+      callLogId,
+      jwtUser?.level === 0,
+    );
   }
 
   @Post('call-logs/:callLogId/audit')
@@ -107,7 +111,9 @@ export class CustomerAdminController {
   @Post('call-logs/:callLogId/audit/analyze')
   analyzeCallAudit(
     @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ) {
+    assertOfficeAdmin(jwtUser);
     return this.customerCallAuditService.analyzeCallByCallLogId(callLogId);
   }
 

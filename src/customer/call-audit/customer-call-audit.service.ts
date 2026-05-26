@@ -187,7 +187,10 @@ export class CustomerCallAuditService {
   }
 
   /** Returns human and AI audit records plus call transcript metadata for one call log. */
-  async getAuditsByCallLogId(callLogId: string): Promise<CallAuditsByCallResponseDto> {
+  async getAuditsByCallLogId(
+    callLogId: string,
+    includeAi = false,
+  ): Promise<CallAuditsByCallResponseDto> {
     const callLog = await this.findCallLogOrThrow(callLogId);
     const audits = await this.callAuditModel
       .find({ callLogId: new Types.ObjectId(callLogId) })
@@ -214,7 +217,7 @@ export class CustomerCallAuditService {
       resolvedOutcome: derived.outcome,
       durationSeconds: callLog.durationSeconds,
       human,
-      ai,
+      ai: includeAi ? ai : null,
     };
   }
 
