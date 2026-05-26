@@ -215,7 +215,7 @@ export class VentorScheduleService {
       .findOneAndUpdate(
         { _id: scheduleObjectId, userId },
         { $set: { status } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .populate<{ customerId: CustomerDocument }>({
         path: 'customerId',
@@ -266,7 +266,7 @@ export class VentorScheduleService {
       .findOneAndUpdate(
         { _id: scheduleObjectId },
         { $set: { status } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .populate<{ customerId: CustomerDocument }>({
         path: 'customerId',

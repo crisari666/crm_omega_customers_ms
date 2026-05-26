@@ -1026,7 +1026,7 @@ export class CustomerService {
             },
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
     if (!customer) {

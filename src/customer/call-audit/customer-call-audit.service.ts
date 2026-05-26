@@ -206,7 +206,7 @@ export class CustomerCallAuditService {
           source: CALL_AUDIT_SOURCE_HUMAN,
         },
         { $set: setPayload },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       )
       .exec();
     return this.toDto(doc);
@@ -650,7 +650,7 @@ export class CustomerCallAuditService {
             llmError: undefined,
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       )
       .exec();
     return this.toDto(doc);
