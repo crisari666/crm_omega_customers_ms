@@ -98,6 +98,7 @@ export function parseCallAuditLlmResponse(
   try {
     parsed = JSON.parse(rawJson) as unknown;
   } catch {
+    console.log('rawJson', JSON.stringify(rawJson, null, 2));
     throw new Error('LLM response is not valid JSON');
   }
   if (!isRecord(parsed)) {
