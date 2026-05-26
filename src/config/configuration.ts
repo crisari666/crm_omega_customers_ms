@@ -1,4 +1,5 @@
 import { join } from 'path';
+import { DEFAULT_REQUIRED_HUMAN_AUDITS_PER_MONTH } from '../customer/call-audit/constants/call-audit.constant';
 
 function trimEnv(value: string | undefined): string {
   return (value ?? '').trim();
@@ -60,6 +61,11 @@ export default (): {
     gatewayWindowHours: number;
     flowCompletedWindowDays: number;
   };
+  deepseek: { apiKey: string; baseUrl: string };
+  callAudit: {
+    llmConfigPath: string;
+    requiredHumanAuditsPerMonth: number;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -96,6 +102,18 @@ export default (): {
     Number.isFinite(gatewayWindowHoursRaw) && gatewayWindowHoursRaw > 0
       ? gatewayWindowHoursRaw
       : metaCampaignWindowHours;
+  const requiredAuditsRaw = Number.parseInt(
+    trimEnv(process.env.CALL_AUDIT_REQUIRED_PER_MONTH) ||
+      String(DEFAULT_REQUIRED_HUMAN_AUDITS_PER_MONTH),
+    10,
+  );
+  const requiredHumanAuditsPerMonth =
+    Number.isFinite(requiredAuditsRaw) && requiredAuditsRaw > 0
+      ? requiredAuditsRaw
+      : DEFAULT_REQUIRED_HUMAN_AUDITS_PER_MONTH;
+  const llmConfigPath =
+    trimEnv(process.env.CALL_AUDIT_LLM_CONFIG_PATH) ||
+    join(process.cwd(), 'config', 'call-audit-llm.config.json');
   return {
     database: {
       uri: buildMongoUri(),
@@ -125,6 +143,14 @@ export default (): {
       metaCampaignWindowHours,
       gatewayWindowHours,
       flowCompletedWindowDays,
+    },
+    deepseek: {
+      apiKey: trimEnv(process.env.DEEPSEEK_API_KEY),
+      baseUrl: trimEnv(process.env.DEEPSEEK_BASE_URL) || 'https://api.deepseek.com',
+    },
+    callAudit: {
+      llmConfigPath,
+      requiredHumanAuditsPerMonth,
     },
   };
 };
