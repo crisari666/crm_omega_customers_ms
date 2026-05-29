@@ -66,6 +66,8 @@ export class WhatsappMarketingCampaignService {
       templateName: dto.templateName.trim(),
       templateLanguage: (dto.templateLanguage ?? 'es').trim(),
       templateComponents: dto.templateComponents,
+      templateHeaderMediaId: dto.templateHeaderMediaId?.trim() || undefined,
+      templateHeaderMediaType: dto.templateHeaderMediaType ?? 'image',
       audienceMode: dto.audienceMode,
       audienceFilter: dto.audienceFilter as Record<string, unknown> | undefined,
       manualCustomerIds: dto.manualCustomerIds ?? [],
@@ -104,6 +106,13 @@ export class WhatsappMarketingCampaignService {
     }
     if (dto.templateComponents != null) {
       campaign.templateComponents = dto.templateComponents;
+    }
+    if (dto.templateHeaderMediaId != null) {
+      const trimmed = dto.templateHeaderMediaId.trim();
+      campaign.templateHeaderMediaId = trimmed.length > 0 ? trimmed : undefined;
+    }
+    if (dto.templateHeaderMediaType != null) {
+      campaign.templateHeaderMediaType = dto.templateHeaderMediaType;
     }
     if (dto.audienceMode != null) {
       campaign.audienceMode = dto.audienceMode;
@@ -334,6 +343,8 @@ export class WhatsappMarketingCampaignService {
       ...this.mapCampaignListItem(doc),
       templateLanguage: doc.templateLanguage,
       templateComponents: doc.templateComponents as Record<string, unknown>[] | undefined,
+      templateHeaderMediaId: doc.templateHeaderMediaId,
+      templateHeaderMediaType: doc.templateHeaderMediaType,
       audienceMode: doc.audienceMode,
       audienceFilter: doc.audienceFilter as MarketingAudienceFilter | undefined,
       manualCustomerIds: doc.manualCustomerIds ?? [],

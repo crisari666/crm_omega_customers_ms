@@ -56,6 +56,13 @@ export class WhatsappMarketingCampaign {
   @Prop({ type: Object, required: false })
   templateComponents?: Record<string, unknown>[];
 
+  /** Meta uploaded media id for template header (IMAGE or VIDEO). */
+  @Prop({ type: String, required: false, trim: true })
+  templateHeaderMediaId?: string;
+
+  @Prop({ type: String, enum: ['image', 'video'], required: false, default: 'image' })
+  templateHeaderMediaType?: 'image' | 'video';
+
   @Prop({
     type: String,
     enum: ['filter', 'manual', 'combined'],

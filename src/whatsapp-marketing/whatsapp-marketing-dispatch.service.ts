@@ -14,6 +14,7 @@ import {
 } from './schemas/whatsapp-marketing-campaign-recipient.schema';
 import { WhatsappMarketingOutboundService } from './whatsapp-marketing-outbound.service';
 import { createEmptyCampaignStats } from './utils/whatsapp-marketing-stats.util';
+import { buildMarketingTemplateComponents } from './utils/build-marketing-template-components.util';
 import type { MarketingCampaignMsEvent } from './types/marketing-campaign-ms-event.type';
 
 @Injectable()
@@ -49,7 +50,9 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
   async executeTickAllSendingCampaigns(): Promise<void> {
     const campaigns = await this.campaignModel
       .find({ status: 'sending' })
-      .select('_id batchSize batchDelayMs templateName templateLanguage templateComponents')
+      .select(
+        '_id batchSize batchDelayMs templateName templateLanguage templateComponents templateHeaderMediaId templateHeaderMediaType',
+      )
       .lean()
       .exec();
     for (const campaign of campaigns) {
@@ -87,9 +90,11 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
   ): Promise<void> {
     recipient.status = 'sending';
     await recipient.save();
-    const components = Array.isArray(campaign.templateComponents)
-      ? (campaign.templateComponents as Record<string, unknown>[])
-      : undefined;
+    const components = buildMarketingTemplateComponents({
+      templateHeaderMediaId: campaign.templateHeaderMediaId,
+      templateHeaderMediaType: campaign.templateHeaderMediaType,
+      templateComponents: campaign.templateComponents,
+    });
     const event: MarketingCampaignMsEvent = {
       type: 'marketing_campaign',
       payload: {

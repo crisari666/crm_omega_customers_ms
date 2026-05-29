@@ -34,6 +34,15 @@ export class CreateWhatsappMarketingCampaignDto {
   @IsArray()
   templateComponents?: Record<string, unknown>[];
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  templateHeaderMediaId?: string;
+
+  @IsOptional()
+  @IsEnum(['image', 'video'])
+  templateHeaderMediaType?: 'image' | 'video';
+
   @IsEnum(['filter', 'manual', 'combined'])
   audienceMode!: 'filter' | 'manual' | 'combined';
 

@@ -34,6 +34,8 @@ export type WhatsappMarketingCampaignListItem = {
 export type WhatsappMarketingCampaignDetail = WhatsappMarketingCampaignListItem & {
   readonly templateLanguage: string;
   readonly templateComponents?: Record<string, unknown>[];
+  readonly templateHeaderMediaId?: string;
+  readonly templateHeaderMediaType?: 'image' | 'video';
   readonly audienceMode: WhatsappMarketingAudienceMode;
   readonly audienceFilter?: MarketingAudienceFilter;
   readonly manualCustomerIds: string[];
