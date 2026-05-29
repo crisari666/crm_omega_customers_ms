@@ -158,7 +158,7 @@ export default (): {
       requiredHumanAuditsPerMonth,
     },
     whatsappMarketing: {
-      phoneNumberId: trimEnv(process.env.WHATSAPP_PHONE_NUMBER_ID),
+      phoneNumberId: trimEnv(process.env.WHATSAPP_CLOUD_CUSTOMERS_PHONE_NUMBER_ID),
       defaultBatchSize: (() => {
         const raw = Number.parseInt(trimEnv(process.env.WHATSAPP_MARKETING_BATCH_SIZE) || '5', 10);
         return Number.isFinite(raw) && raw > 0 ? raw : 5;
