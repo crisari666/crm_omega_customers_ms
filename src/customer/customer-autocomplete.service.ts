@@ -18,7 +18,7 @@ type CustomerAutocompleteLeanRow = {
 
 /**
  * Lightweight customer search for admin autocomplete pickers.
- * Matches by `name`, `lastName`, `phone`, `document` (case-insensitive).
+ * Matches by `name`, `lastName`, `phone`, `email`, `document` (case-insensitive).
  */
 @Injectable()
 export class CustomerAutocompleteService {
@@ -42,6 +42,7 @@ export class CustomerAutocompleteService {
           { name: rx },
           { lastName: rx },
           { phone: rx },
+          { email: rx },
           { document: rx },
         ],
       })
