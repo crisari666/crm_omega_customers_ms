@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,6 +11,8 @@ import { CustomerService } from './customer.service';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
+import { WhatsappMarketingRecoveryReplyService } from '../whatsapp-marketing/whatsapp-marketing-recovery-reply.service';
+import { WhatsappMarketingStatusService } from '../whatsapp-marketing/whatsapp-marketing-status.service';
 
 type WebhookForwardEnvelope = {
   readonly source?: string;
@@ -19,7 +21,8 @@ type WebhookForwardEnvelope = {
 };
 
 /**
- * Ingests Meta WhatsApp webhooks from omega_gateway: resolve/create {@link Customer},
+ * Ingests Meta WhatsApp webhooks from omega_gateway only (Meta does not POST to whatsapp_cloud_ms).
+ * Handles marketing campaign replies/statuses, resolve/create {@link Customer},
  * upsert WhatsApp chat/message, optionally request `potential_customer` template.
  */
 @Injectable()
@@ -34,6 +37,10 @@ export class CustomerMetaWebhookService {
     private readonly potentialCustomersOutbound: CustomerPotentialCustomersOutboundService,
     private readonly ventorAssignment: CustomerVentorAssignmentService,
     private readonly flowCompletedService: CustomerWhatsappFlowCompletedService,
+    @Inject(forwardRef(() => WhatsappMarketingRecoveryReplyService))
+    private readonly marketingRecoveryReply: WhatsappMarketingRecoveryReplyService,
+    @Inject(forwardRef(() => WhatsappMarketingStatusService))
+    private readonly marketingStatusService: WhatsappMarketingStatusService,
   ) {}
 
   /**
@@ -91,11 +98,8 @@ export class CustomerMetaWebhookService {
     if (messages.length === 0 && statuses.length === 0) {
       return;
     }
+    await this.executeProcessMarketingMessageStatuses(statuses);
     if (messages.length === 0) {
-      for (const status of statuses) {
-        const waId: string = resolveCustomerWaIdFromMetaWebhookValue(value, status, 'status');
-        this.logger.debug(`status webhook ${status.status} waId=${waId} messageId=${status.id}`);
-      }
       return;
     }
     const contacts = value.contacts ?? [];
@@ -104,6 +108,15 @@ export class CustomerMetaWebhookService {
       const normalizedWaId: string = resolveCustomerWaIdFromMetaWebhookValue(value, msg, 'message');
       const sessionId: string = `cloud:${phoneNumberId}:${normalizedWaId}`;
       const contactName: string = this.resolveContactName(contacts, normalizedWaId);
+      const marketingReplyHandled = await this.executeTryMarketingCampaignReply({
+        msg,
+        normalizedWaId,
+        contactName,
+        phoneNumberId,
+      });
+      if (marketingReplyHandled) {
+        continue;
+      }
       let customer = await this.findCustomerByWaCandidates(normalizedWaId);
       let created = false;
       if (!customer) {
@@ -198,6 +211,73 @@ export class CustomerMetaWebhookService {
       return null;
     }
     return msg.interactive.nfm_reply?.response_json ?? null;
+  }
+
+  /** Delivery/read/failed updates for outbound marketing templates (gateway ingress). */
+  private async executeProcessMarketingMessageStatuses(
+    statuses: NonNullable<MetaWebhookMessagesValue['statuses']>,
+  ): Promise<void> {
+    for (const status of statuses) {
+      const messageId = status.id.trim();
+      if (messageId.length === 0) {
+        continue;
+      }
+      const normalizedStatus = status.status.trim().toLowerCase();
+      if (
+        normalizedStatus !== 'sent' &&
+        normalizedStatus !== 'delivered' &&
+        normalizedStatus !== 'read' &&
+        normalizedStatus !== 'failed'
+      ) {
+        continue;
+      }
+      const statusRecord = status as {
+        errors?: Array<{ code?: number; title?: string }>;
+      };
+      const firstError = statusRecord.errors?.[0];
+      await this.marketingStatusService.executeApplyMessageStatus({
+        whatsappMessageId: messageId,
+        status: normalizedStatus,
+        timestamp: status.timestamp,
+        errorCode:
+          firstError != null && typeof firstError.code === 'number'
+            ? String(firstError.code)
+            : undefined,
+        errorMessage:
+          firstError != null && typeof firstError.title === 'string'
+            ? firstError.title
+            : undefined,
+      });
+    }
+  }
+
+  private async executeTryMarketingCampaignReply(input: {
+    msg: NonNullable<MetaWebhookMessagesValue['messages']>[number];
+    normalizedWaId: string;
+    contactName: string;
+    phoneNumberId: string;
+  }): Promise<boolean> {
+    const contextId =
+      typeof input.msg.context?.id === 'string' ? input.msg.context.id.trim() : '';
+    if (contextId.length === 0) {
+      return false;
+    }
+    if (input.msg.type !== 'button' && input.msg.type !== 'text') {
+      return false;
+    }
+    const timestamp = Number.parseInt(input.msg.timestamp, 10);
+    const result = await this.marketingRecoveryReply.executeHandleMarketingReply({
+      contextMessageId: contextId,
+      waId: input.normalizedWaId,
+      messageType: input.msg.type,
+      buttonPayload: input.msg.button?.payload,
+      textBody: input.msg.text?.body,
+      rawMessageId: input.msg.id,
+      timestamp: Number.isFinite(timestamp) ? timestamp : Math.floor(Date.now() / 1000),
+      contactName: input.contactName,
+      phoneNumberId: input.phoneNumberId,
+    });
+    return result.handled;
   }
 
   private extractInboundBody(msg: NonNullable<MetaWebhookMessagesValue['messages']>[number]): string {

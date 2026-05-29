@@ -6,8 +6,9 @@ export type MetaWebhookMessagesValue = {
     id: string;
     timestamp: string;
     type: string;
+    context?: { id?: string };
     text?: { body: string };
-    button?: { text: string };
+    button?: { text: string; payload?: string };
     interactive?: {
       type: string;
       nfm_reply?: { body?: string; response_json?: unknown };
