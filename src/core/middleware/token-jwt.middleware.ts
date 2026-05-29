@@ -10,6 +10,7 @@ const GLOBAL_API_PREFIX = '/customers-rest';
 const CUSTOMER_PREFIX = '/customer';
 const VENTOR_SCHEDULE_PREFIX = '/ventor-schedule';
 const ADMIN_CUSTOMER_PREFIX = '/admin/customer';
+const ADMIN_WHATSAPP_MARKETING_PREFIX = '/admin/whatsapp-marketing';
 const BEARER_PREFIX_REGEX = /^Bearer\s+/i;
 
 function normalizeApiPathname(originalUrl: string): string {
@@ -80,7 +81,8 @@ export class TokenJwtMiddleware implements NestMiddleware {
     const isCustomer = pathname.startsWith(CUSTOMER_PREFIX);
     const isVentorSchedule = pathname.startsWith(VENTOR_SCHEDULE_PREFIX);
     const isAdminCustomer = pathname.startsWith(ADMIN_CUSTOMER_PREFIX);
-    if (!isCustomer && !isVentorSchedule && !isAdminCustomer) {
+    const isAdminWhatsappMarketing = pathname.startsWith(ADMIN_WHATSAPP_MARKETING_PREFIX);
+    if (!isCustomer && !isVentorSchedule && !isAdminCustomer && !isAdminWhatsappMarketing) {
       return true;
     }
     const normalized =

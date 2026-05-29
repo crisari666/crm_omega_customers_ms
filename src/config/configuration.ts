@@ -66,6 +66,11 @@ export default (): {
     llmConfigPath: string;
     requiredHumanAuditsPerMonth: number;
   };
+  whatsappMarketing: {
+    phoneNumberId: string;
+    defaultBatchSize: number;
+    defaultBatchDelayMs: number;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -151,6 +156,17 @@ export default (): {
     callAudit: {
       llmConfigPath,
       requiredHumanAuditsPerMonth,
+    },
+    whatsappMarketing: {
+      phoneNumberId: trimEnv(process.env.WHATSAPP_PHONE_NUMBER_ID),
+      defaultBatchSize: (() => {
+        const raw = Number.parseInt(trimEnv(process.env.WHATSAPP_MARKETING_BATCH_SIZE) || '5', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 5;
+      })(),
+      defaultBatchDelayMs: (() => {
+        const raw = Number.parseInt(trimEnv(process.env.WHATSAPP_MARKETING_DELAY_MS) || '200', 10);
+        return Number.isFinite(raw) && raw >= 0 ? raw : 200;
+      })(),
     },
   };
 };
