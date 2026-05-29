@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module, OnModuleInit, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -70,9 +70,11 @@ import {
 import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.service';
 import { CallAuditDeepSeekService } from './call-audit/call-audit-deepseek.service';
 import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
+import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketing.module';
 
 @Module({
   imports: [
+    forwardRef(() => WhatsappMarketingModule),
     CustomerConversationsModule,
     ClientsModule.registerAsync([
       {
@@ -149,7 +151,13 @@ import { CustomerCallAuditService } from './call-audit/customer-call-audit.servi
     CallAuditDeepSeekService,
     CustomerCallAuditService,
   ],
-  exports: [CustomerService, VoiceRmqTopologyService, CustomerEventsService],
+  exports: [
+    CustomerService,
+    CustomerVentorAssignmentService,
+    CustomerPotentialCustomersOutboundService,
+    VoiceRmqTopologyService,
+    CustomerEventsService,
+  ],
 })
 export class CustomerModule implements OnModuleInit {
   constructor(private readonly customerAuditService: CustomerAuditService) {}
