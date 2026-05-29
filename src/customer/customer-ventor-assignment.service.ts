@@ -28,6 +28,8 @@ export class CustomerVentorAssignmentService {
     readonly windowHours?: number;
     readonly windowStartIso?: string;
     readonly windowEndIso?: string;
+    /** When set, prefer a ventor not in this list (falls back to full pool if none left). */
+    readonly excludeVentorIds?: readonly string[];
   }): Promise<VentorLoadBalancePickResult | null> {
     const ventors = await this.executeFetchPhysicalVentors();
     if (ventors.length === 0) {
@@ -57,10 +59,18 @@ export class CustomerVentorAssignmentService {
     this.logger.log(
       `Ventor load balance ${startIso}..${endIso} counts=${JSON.stringify(countsByVentorId)}`,
     );
+    const excludedIds = new Set(
+      (input.excludeVentorIds ?? []).map((id) => id.trim()).filter((id) => id.length > 0),
+    );
+    const sortedVentors = [...ventors].sort((a, b) => a.id.localeCompare(b.id));
+    const eligibleVentors =
+      excludedIds.size > 0
+        ? sortedVentors.filter((ventor) => !excludedIds.has(ventor.id))
+        : sortedVentors;
+    const pickPool = eligibleVentors.length > 0 ? eligibleVentors : sortedVentors;
     let chosen: VentorAssignmentCandidate | null = null;
     let bestCount = Number.POSITIVE_INFINITY;
-    const sortedVentors = [...ventors].sort((a, b) => a.id.localeCompare(b.id));
-    for (const ventor of sortedVentors) {
+    for (const ventor of pickPool) {
       const assignmentCount = countsByVentorId[ventor.id] ?? 0;
       if (assignmentCount < bestCount) {
         bestCount = assignmentCount;
@@ -109,6 +119,33 @@ export class CustomerVentorAssignmentService {
     }
     this.logger.log(
       `Assigned customer ${String(input.customer._id)} to ventor ${pick.ventor.id} (window ${pick.windowStartIso}..${pick.windowEndIso})`,
+    );
+    return input.customer;
+  }
+
+  /**
+   * Reassigns customer to load-balanced ventor (prefers a different ventor than current assignee).
+   */
+  async executeReassignCustomerByLoadBalance(input: {
+    readonly customer: CustomerDocument;
+    readonly windowHours: number;
+    readonly actorUserId: string;
+  }): Promise<CustomerDocument | null> {
+    const previousAssignee = (input.customer.assignedTo ?? '').trim();
+    const pick = await this.executePickVentorByLoadBalance({
+      windowHours: input.windowHours,
+      excludeVentorIds: previousAssignee.length > 0 ? [previousAssignee] : [],
+    });
+    if (pick == null) {
+      return null;
+    }
+    const nextAssignee = pick.ventor.id;
+    input.customer.assignedTo = nextAssignee;
+    input.customer.assignedDate = new Date().toISOString();
+    input.customer.$locals['__auditActorUserId'] = input.actorUserId;
+    await input.customer.save();
+    this.logger.log(
+      `Reassigned customer ${String(input.customer._id)} from ventor ${previousAssignee || '(none)'} to ${nextAssignee} (window ${pick.windowStartIso}..${pick.windowEndIso})`,
     );
     return input.customer;
   }
