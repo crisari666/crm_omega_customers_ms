@@ -13,6 +13,7 @@ import { CustomerVentorAssignmentService } from './customer-ventor-assignment.se
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 import { WhatsappMarketingRecoveryReplyService } from '../whatsapp-marketing/whatsapp-marketing-recovery-reply.service';
 import { WhatsappMarketingStatusService } from '../whatsapp-marketing/whatsapp-marketing-status.service';
+import { CustomerMetaInboundReplyService } from './customer-meta-inbound-reply.service';
 
 type WebhookForwardEnvelope = {
   readonly source?: string;
@@ -41,6 +42,7 @@ export class CustomerMetaWebhookService {
     private readonly marketingRecoveryReply: WhatsappMarketingRecoveryReplyService,
     @Inject(forwardRef(() => WhatsappMarketingStatusService))
     private readonly marketingStatusService: WhatsappMarketingStatusService,
+    private readonly inboundReplyService: CustomerMetaInboundReplyService,
   ) {}
 
   /**
@@ -173,6 +175,13 @@ export class CustomerMetaWebhookService {
         customer.metaPotentialTemplateSent !== true &&
         funnelStatus !== 'ready_for_llm';
       if (!shouldSendTemplate) {
+        await this.inboundReplyService.executeTrySendAssignedVentorContactReply({
+          customer,
+          normalizedWaId,
+          phoneNumberId,
+          contactName,
+          msg,
+        });
         continue;
       }
       await this.customerModel.updateOne(

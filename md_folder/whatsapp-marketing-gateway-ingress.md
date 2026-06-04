@@ -4,7 +4,7 @@ Meta WABA webhooks must target **omega_gateway** (`POST /webhooks/customers` or 
 
 | Event | Gateway pattern | Handler |
 |-------|-----------------|---------|
-| Inbound reply (button/text + `context.id`) | `customers.meta.webhook.ingress.v1` | `WhatsappMarketingRecoveryReplyService` — preserve step → keep assignee + discount text; other steps → assign if unassigned or **reassign** ventor (load balance, exclude current) + assignment template via `potential_customers.ms_ws` |
+| Inbound reply (button/text + `context.id`) | `customers.meta.webhook.ingress.v1` | `WhatsappMarketingRecoveryReplyService` — **standard**: assign if unassigned else keep assignee + auto-reply via `potential_customers.ms_ws`; **recovery_potential**: preserve step → discount text; other steps → assign or **reassign** + assignment template |
 | Outbound status (sent/delivered/read/failed) | same | `CustomerMetaWebhookService` → `WhatsappMarketingStatusService` |
 | Outbound send | RMQ `marketing_campaign.ms_ws` | `whatsapp_cloud_ms` (send only) |
 

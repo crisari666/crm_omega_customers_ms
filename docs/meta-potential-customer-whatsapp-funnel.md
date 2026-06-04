@@ -34,7 +34,14 @@ sequenceDiagram
   Note over Customers: patch Customer, pick ventor, assign, change log
   Customers->>WsMs: RMQ potential_customers.ms_ws (assignment text)
   WsMs->>Meta: text message
+  Meta->>Gateway: inbound text (post-flow)
+  Gateway->>Customers: ingress
+  Note over Customers: ready_for_llm + assignedTo, no template
+  Customers->>WsMs: RMQ potential_customers.ms_ws (ventor contact text)
+  WsMs->>Meta: text message
 ```
+
+**Inbound auto-reply (phase 1):** After flow, each inbound text/button that does **not** trigger `potential_customer` template → `CustomerMetaInboundReplyService` sends assigned ventor contact (`send.potential_customer_text`). **Phase 2:** DeepSeek La Ceiba replies (whatsapp_cloud_ms), not via local webhook.
 
 ---
 
@@ -72,6 +79,7 @@ Queue consumed: `crm.customers.whatsapp_integration` (see `configuration.ts` `in
 |------|----------------|
 | `customer-meta-webhook-rmq.controller.ts` | `@EventPattern('customers.meta.webhook.ingress.v1')` |
 | `customer-meta-webhook.service.ts` | Parse Meta `entry[].changes[]` (`field === 'messages'`), create/find **Customer**, **assign ventor** (gateway 24h window), upsert chat/message, emit template when needed |
+| `customer-meta-inbound-reply.service.ts` | When template is skipped and `ready_for_llm` + `assignedTo`, emit ventor contact text on each inbound text/button |
 | `customer-meta-leadgen-rmq.controller.ts` | `@EventPattern('customers.meta.leadgen.ingest.v1')` |
 | `customer-meta-leadgen.service.ts` | Upsert **`meta_lead_campaigns`**, find/create **Customer**, assign ventor via **`CustomerVentorAssignmentService`** (24h window) |
 | `customer-ventor-assignment.service.ts` | Fetch physical ventors from office_back; count `assignedTo` in configurable window; pick minimum load |
@@ -143,7 +151,7 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 **Actions:**
 
 - `send.potential_customer_template` → `WhatsappCloudService.sendTemplatePotentialCustomer` (`potential_customer`, `es`)
-- `send.potential_customer_text` → `sendTextMessage` (ventor assignment notice)
+- `send.potential_customer_text` → `sendCustomersTextMessage` (customers line; ventor assignment / marketing auto-reply)
 
 **Module:** `src/potential-customers/potential-customers.module.ts` (imported in `app.module.ts`).
 
@@ -153,9 +161,9 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 
 `WhatsappCloudController` webhook: on `interactive.type === 'nfm_reply'`, emit **`customers.whatsapp.flow.completed.v1`** to `crm.customers.whatsapp_integration` (`CUSTOMERS_MS_INTEGRATION` client).
 
-### LLM gate
+### LLM (phase 2 — not production ingress today)
 
-Before `maybeSendDeepSeekLotesReply`: RPC **`customers.whatsapp.customer.lookup.v1`** (`send` to customers-ms). LLM only if `found === true`.
+`maybeSendDeepSeekLotesReply` in local `POST /whatsapp-cloud/webhook` only. Production CRM WABA uses gateway → customers-ms; DeepSeek will be wired via new RMQ action when phase 2 lands.
 
 ### Constants
 

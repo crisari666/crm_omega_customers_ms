@@ -53,6 +53,7 @@ import { CustomerMetaLeadgenRmqController } from './customer-meta-leadgen-rmq.co
 import { CustomerMetaLeadgenService } from './customer-meta-leadgen.service';
 import { CustomerMetaWebhookRmqController } from './customer-meta-webhook-rmq.controller';
 import { CustomerMetaWebhookService } from './customer-meta-webhook.service';
+import { CustomerMetaInboundReplyService } from './customer-meta-inbound-reply.service';
 import {
   MetaLeadCampaign,
   MetaLeadCampaignSchema,
@@ -141,6 +142,7 @@ import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketin
     CustomerWhatsappEventsPublisher,
     CustomerStaffPerformanceService,
     CustomerMetaWebhookService,
+    CustomerMetaInboundReplyService,
     CustomerMetaLeadgenService,
     CustomerVentorAssignmentService,
     CustomerPotentialCustomersOutboundService,
