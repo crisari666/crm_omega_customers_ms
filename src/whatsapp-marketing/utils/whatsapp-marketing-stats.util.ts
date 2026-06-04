@@ -13,6 +13,24 @@ export function createEmptyCampaignStats(): WhatsappMarketingCampaignStats {
   };
 }
 
+export function normalizeCampaignStats(
+  raw: Partial<WhatsappMarketingCampaignStats> | null | undefined,
+): WhatsappMarketingCampaignStats {
+  const empty = createEmptyCampaignStats();
+  if (raw == null) {
+    return { ...empty };
+  }
+  return {
+    total: raw.total ?? empty.total,
+    pending: raw.pending ?? empty.pending,
+    sent: raw.sent ?? empty.sent,
+    delivered: raw.delivered ?? empty.delivered,
+    read: raw.read ?? empty.read,
+    failed: raw.failed ?? empty.failed,
+    cancelled: raw.cancelled ?? empty.cancelled,
+  };
+}
+
 const STATUS_COUNT_KEYS: Record<
   WhatsappMarketingRecipientStatus,
   keyof WhatsappMarketingCampaignStats | null

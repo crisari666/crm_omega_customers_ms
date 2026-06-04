@@ -77,6 +77,7 @@ export class WhatsappMarketingDispatchService {
       .limit(campaign.batchSize)
       .exec();
     if (pending.length === 0) {
+      await this.executeRecalculateCampaignStats(campaign._id as Types.ObjectId);
       await this.executeFinalizeCampaignIfDone(campaign);
       return;
     }
@@ -219,6 +220,7 @@ export class WhatsappMarketingDispatchService {
   private async executeFinalizeCampaignIfDone(
     campaign: WhatsappMarketingCampaignDocument,
   ): Promise<void> {
+    await this.executeRecalculateCampaignStats(campaign._id as Types.ObjectId);
     const pendingCount = await this.recipientModel.countDocuments({
       campaignId: campaign._id,
       status: { $in: ['pending', 'sending'] },

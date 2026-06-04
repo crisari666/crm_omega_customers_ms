@@ -20,7 +20,10 @@ import {
 } from './schemas/whatsapp-marketing-campaign-recipient.schema';
 import { WhatsappMarketingAudienceService } from './whatsapp-marketing-audience.service';
 import { WhatsappMarketingDispatchService } from './whatsapp-marketing-dispatch.service';
-import { createEmptyCampaignStats } from './utils/whatsapp-marketing-stats.util';
+import {
+  createEmptyCampaignStats,
+  normalizeCampaignStats,
+} from './utils/whatsapp-marketing-stats.util';
 import type { CreateWhatsappMarketingCampaignDto } from './dto/create-whatsapp-marketing-campaign.dto';
 import type { UpdateWhatsappMarketingCampaignDto } from './dto/update-whatsapp-marketing-campaign.dto';
 import type { AudiencePreviewBodyDto } from './dto/audience-preview.dto';
@@ -168,7 +171,12 @@ export class WhatsappMarketingCampaignService {
     if (campaign == null) {
       throw new NotFoundException('Campaign not found');
     }
-    return this.mapCampaignDetail(campaign);
+    await this.dispatchService.executeRecalculateCampaignStats(campaign._id as Types.ObjectId);
+    const refreshed = await this.campaignModel.findById(campaignId).exec();
+    if (refreshed == null) {
+      throw new NotFoundException('Campaign not found');
+    }
+    return this.mapCampaignDetail(refreshed);
   }
 
   async executeListRecipients(
@@ -334,7 +342,7 @@ export class WhatsappMarketingCampaignService {
       templateName: doc.templateName,
       campaignType: doc.campaignType,
       status: doc.status,
-      stats: { ...doc.stats },
+      stats: normalizeCampaignStats(doc.stats),
       createdAt: this.readTimestamp(doc, 'createdAt'),
     };
   }
