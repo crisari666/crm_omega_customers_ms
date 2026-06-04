@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import {
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX,
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
+} from '../constants/whatsapp-marketing-batch-delay.constants';
 
 export type WhatsappMarketingCampaignDocument = HydratedDocument<WhatsappMarketingCampaign>;
 
@@ -94,8 +98,18 @@ export class WhatsappMarketingCampaign {
   @Prop({ type: Number, required: true, default: 5, min: 1, max: 50 })
   batchSize: number;
 
-  @Prop({ type: Number, required: true, default: 200, min: 0, max: 20 * 60 * 1000 })
+  @Prop({
+    type: Number,
+    required: true,
+    default: WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
+    min: WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
+    max: WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX,
+  })
   batchDelayMs: number;
+
+  /** When the next batch may be sent (cron respects this; null = due immediately). */
+  @Prop({ type: Date, required: false, default: null })
+  nextBatchAt?: Date | null;
 
   @Prop({
     type: String,

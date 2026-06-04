@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { Customer, CustomerSchema } from '../customer/schemas/customer.schema';
 import { CustomerModule } from '../customer/customer.module';
 import { CustomerConversationsModule } from '../customer-conversations/customer-conversations.module';
@@ -23,11 +24,13 @@ import { WhatsappMarketingCampaignService } from './whatsapp-marketing-campaign.
 import { WhatsappMarketingAudienceService } from './whatsapp-marketing-audience.service';
 import { WhatsappMarketingOutboundService } from './whatsapp-marketing-outbound.service';
 import { WhatsappMarketingDispatchService } from './whatsapp-marketing-dispatch.service';
+import { WhatsappMarketingDispatchCronService } from './whatsapp-marketing-dispatch-cron.service';
 import { WhatsappMarketingStatusService } from './whatsapp-marketing-status.service';
 import { WhatsappMarketingRecoveryReplyService } from './whatsapp-marketing-recovery-reply.service';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     CustomerConversationsModule,
     forwardRef(() => CustomerModule),
     MongooseModule.forFeature([
@@ -61,6 +64,7 @@ import { WhatsappMarketingRecoveryReplyService } from './whatsapp-marketing-reco
     WhatsappMarketingAudienceService,
     WhatsappMarketingOutboundService,
     WhatsappMarketingDispatchService,
+    WhatsappMarketingDispatchCronService,
     WhatsappMarketingStatusService,
     WhatsappMarketingRecoveryReplyService,
   ],

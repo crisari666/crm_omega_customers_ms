@@ -33,6 +33,7 @@ import type {
   WhatsappMarketingRecipientListResponse,
 } from './types/whatsapp-marketing-api.type';
 import type { MarketingAudienceFilter } from './types/marketing-audience-filter.type';
+import { WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN } from './constants/whatsapp-marketing-batch-delay.constants';
 
 @Injectable()
 export class WhatsappMarketingCampaignService {
@@ -80,7 +81,7 @@ export class WhatsappMarketingCampaignService {
           ? new Types.ObjectId(dto.replyAdvanceToCustomerStepId)
           : undefined,
       batchSize: dto.batchSize,
-      batchDelayMs: dto.batchDelayMs ?? 200,
+      batchDelayMs: dto.batchDelayMs ?? WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
       status: 'draft',
       stats: createEmptyCampaignStats(),
       createdBy: actorUserId,
@@ -233,9 +234,9 @@ export class WhatsappMarketingCampaignService {
     });
     await this.dispatchService.executeBuildRecipientsForCampaign(campaign, customerIds);
     campaign.status = 'sending';
+    campaign.nextBatchAt = new Date();
     campaign.updatedBy = actorUserId;
     await campaign.save();
-    void this.dispatchService.executeProcessCampaignBatch(String(campaign._id));
     return this.mapCampaignDetail(campaign);
   }
 

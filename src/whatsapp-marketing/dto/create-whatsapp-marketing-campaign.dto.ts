@@ -13,6 +13,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MarketingAudienceFilterDto } from './marketing-audience-filter.dto';
+import {
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX,
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
+} from '../constants/whatsapp-marketing-batch-delay.constants';
 
 export class CreateWhatsappMarketingCampaignDto {
   @IsString()
@@ -78,7 +82,7 @@ export class CreateWhatsappMarketingCampaignDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(0)
-  @Max(20 * 60 * 1000)
+  @Min(WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN)
+  @Max(WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX)
   batchDelayMs?: number;
 }

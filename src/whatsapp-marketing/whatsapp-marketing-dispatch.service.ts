@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
@@ -16,11 +16,16 @@ import { WhatsappMarketingOutboundService } from './whatsapp-marketing-outbound.
 import { createEmptyCampaignStats } from './utils/whatsapp-marketing-stats.util';
 import { buildMarketingTemplateComponents } from './utils/build-marketing-template-components.util';
 import type { MarketingCampaignMsEvent } from './types/marketing-campaign-ms-event.type';
+import {
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX,
+  WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN,
+} from './constants/whatsapp-marketing-batch-delay.constants';
+
+const DISPATCH_CLAIM_MS = 30 * 60 * 1000;
 
 @Injectable()
-export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleDestroy {
+export class WhatsappMarketingDispatchService {
   private readonly logger = new Logger(WhatsappMarketingDispatchService.name);
-  private intervalHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @InjectModel(WhatsappMarketingCampaign.name)
@@ -34,25 +39,14 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
     private readonly configService: ConfigService,
   ) {}
 
-  onModuleInit(): void {
-    this.intervalHandle = setInterval(() => {
-      void this.executeTickAllSendingCampaigns();
-    }, 3000);
-  }
-
-  onModuleDestroy(): void {
-    if (this.intervalHandle != null) {
-      clearInterval(this.intervalHandle);
-      this.intervalHandle = null;
-    }
-  }
-
   async executeTickAllSendingCampaigns(): Promise<void> {
+    const now = new Date();
     const campaigns = await this.campaignModel
-      .find({ status: 'sending' })
-      .select(
-        '_id batchSize batchDelayMs templateName templateLanguage templateComponents templateHeaderMediaId templateHeaderMediaType',
-      )
+      .find({
+        status: 'sending',
+        $or: [{ nextBatchAt: null }, { nextBatchAt: { $lte: now } }],
+      })
+      .select('_id')
       .lean()
       .exec();
     for (const campaign of campaigns) {
@@ -61,8 +55,20 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
   }
 
   async executeProcessCampaignBatch(campaignId: string): Promise<void> {
-    const campaign = await this.campaignModel.findById(campaignId).exec();
-    if (campaign == null || campaign.status !== 'sending') {
+    const now = new Date();
+    const claimUntil = new Date(now.getTime() + DISPATCH_CLAIM_MS);
+    const campaign = await this.campaignModel
+      .findOneAndUpdate(
+        {
+          _id: campaignId,
+          status: 'sending',
+          $or: [{ nextBatchAt: null }, { nextBatchAt: { $lte: now } }],
+        },
+        { $set: { nextBatchAt: claimUntil } },
+        { new: true },
+      )
+      .exec();
+    if (campaign == null) {
       return;
     }
     const pending = await this.recipientModel
@@ -77,10 +83,17 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
     for (const recipient of pending) {
       await this.executeSendOneRecipient(campaign, recipient);
     }
-    if (campaign.batchDelayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, campaign.batchDelayMs));
-    }
+    const batchDelayMs = this.resolveBatchDelayMs(campaign.batchDelayMs);
+    const nextBatchAt = new Date(Date.now() + batchDelayMs);
+    await this.campaignModel.updateOne({ _id: campaign._id }, { $set: { nextBatchAt } }).exec();
     await this.executeFinalizeCampaignIfDone(campaign);
+  }
+
+  private resolveBatchDelayMs(batchDelayMs: number): number {
+    return Math.min(
+      WHATSAPP_MARKETING_BATCH_DELAY_MS_MAX,
+      Math.max(WHATSAPP_MARKETING_BATCH_DELAY_MS_MIN, batchDelayMs),
+    );
   }
 
   async executeSendOneRecipient(
@@ -212,6 +225,7 @@ export class WhatsappMarketingDispatchService implements OnModuleInit, OnModuleD
     });
     if (pendingCount === 0 && campaign.status === 'sending') {
       campaign.status = 'completed';
+      campaign.nextBatchAt = null;
       await campaign.save();
     }
   }
