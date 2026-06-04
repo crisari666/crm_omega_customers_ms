@@ -94,7 +94,7 @@ export class WhatsappMarketingCampaign {
   @Prop({ type: Number, required: true, default: 5, min: 1, max: 50 })
   batchSize: number;
 
-  @Prop({ type: Number, required: true, default: 200, min: 0, max: 5000 })
+  @Prop({ type: Number, required: true, default: 200, min: 0, max: 20 * 60 * 1000 })
   batchDelayMs: number;
 
   @Prop({

@@ -79,6 +79,6 @@ export class CreateWhatsappMarketingCampaignDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  @Max(5000)
+  @Max(20 * 60 * 1000)
   batchDelayMs?: number;
 }
