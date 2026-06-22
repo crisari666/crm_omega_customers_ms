@@ -546,6 +546,11 @@ export class CustomerService {
       filter.customerStepId = new Types.ObjectId(stepId);
     }
 
+    const createdBy = query.createdBy?.trim();
+    if (createdBy !== undefined && createdBy !== '') {
+      filter.createdBy = createdBy;
+    }
+
     const enabledClause =
       query.enabled === true
         ? {

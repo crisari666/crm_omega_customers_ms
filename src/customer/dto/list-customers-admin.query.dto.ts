@@ -47,6 +47,14 @@ export class ListCustomersAdminQueryDto {
   assignedTo?: string;
 
   /**
+   * When set, only customers whose `createdBy` matches this office user id.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  createdBy?: string;
+
+  /**
    * When true (and `assignedTo` is not set), only customers with no assignee.
    */
   @IsOptional()
