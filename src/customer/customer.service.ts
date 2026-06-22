@@ -26,7 +26,7 @@ import {
   CustomerStepDistributionItem,
 } from './types/customer-admin-list-item.type';
 import type { CustomerAdminDetail } from './types/customer-admin-detail.type';
-import { Customer, CustomerDocument } from './schemas/customer.schema';
+import { Customer, CustomerDocument, DocumentType } from './schemas/customer.schema';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
@@ -49,6 +49,10 @@ import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 
 const DUPLICATE_PHONE_MESSAGE =
   'Ya existe un cliente con este número de teléfono.';
+const DUPLICATE_EMAIL_MESSAGE =
+  'Ya existe un cliente con este correo electrónico.';
+const DUPLICATE_DOCUMENT_MESSAGE =
+  'Ya existe un cliente con este documento.';
 
 function isMongoDuplicateKeyError(err: unknown): boolean {
   return (
@@ -123,6 +127,70 @@ export class CustomerService {
       return { phone: normalizedWhatsapp, whatsapp: normalizedWhatsapp };
     }
     return { phone: '', whatsapp: '' };
+  }
+
+  private async assertNoDuplicateCustomerContacts(input: {
+    phone?: string;
+    email?: string;
+    document?: string;
+    documentType?: DocumentType;
+    excludeCustomerId?: string;
+  }): Promise<void> {
+    const excludeId =
+      input.excludeCustomerId !== undefined && input.excludeCustomerId.trim() !== ''
+        ? new Types.ObjectId(input.excludeCustomerId)
+        : null;
+    if (input.phone !== undefined && input.phone.trim() !== '') {
+      const normalized = normalizeCustomerPhone(input.phone);
+      const phoneFilter: Record<string, unknown> = { phone: normalized };
+      if (excludeId !== null) {
+        phoneFilter._id = { $ne: excludeId };
+      }
+      const existingPhone = await this.customerModel
+        .findOne(phoneFilter)
+        .select('_id')
+        .exec();
+      if (existingPhone) {
+        throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
+      }
+    }
+    if (input.email !== undefined && input.email.trim() !== '') {
+      const emailTrimmed = input.email.trim();
+      const escaped = emailTrimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const emailFilter: Record<string, unknown> = {
+        email: { $regex: new RegExp(`^${escaped}$`, 'i') },
+      };
+      if (excludeId !== null) {
+        emailFilter._id = { $ne: excludeId };
+      }
+      const existingEmail = await this.customerModel
+        .findOne(emailFilter)
+        .select('_id')
+        .exec();
+      if (existingEmail) {
+        throw new ConflictException(DUPLICATE_EMAIL_MESSAGE);
+      }
+    }
+    if (
+      input.document !== undefined &&
+      input.document.trim() !== '' &&
+      input.documentType !== undefined
+    ) {
+      const docFilter: Record<string, unknown> = {
+        document: input.document.trim(),
+        documentType: input.documentType,
+      };
+      if (excludeId !== null) {
+        docFilter._id = { $ne: excludeId };
+      }
+      const existingDocument = await this.customerModel
+        .findOne(docFilter)
+        .select('_id')
+        .exec();
+      if (existingDocument) {
+        throw new ConflictException(DUPLICATE_DOCUMENT_MESSAGE);
+      }
+    }
   }
 
   /**
@@ -679,6 +747,13 @@ export class CustomerService {
     if (dto.isInternational !== undefined) {
       customer.isInternational = dto.isInternational;
     }
+    await this.assertNoDuplicateCustomerContacts({
+      phone: customer.phone,
+      email: customer.email,
+      document: customer.document,
+      documentType: customer.documentType,
+      excludeCustomerId: customerId,
+    });
     try {
       await customer.save();
     } catch (err) {
@@ -700,14 +775,22 @@ export class CustomerService {
         date: entry.date ? new Date(entry.date) : new Date(),
         addedBy: createdBy,
       })) ?? [];
-    const canonicalPhone = this.normalizeCustomerContactNumbers({
-      phone: dto.phone,
-    }).phone;
+    const canonicalPhone = normalizeCustomerPhone(dto.phone);
+    const canonicalWhatsapp =
+      dto.whatsapp !== undefined && dto.whatsapp.trim() !== ''
+        ? normalizeCustomerPhone(dto.whatsapp)
+        : canonicalPhone;
+    await this.assertNoDuplicateCustomerContacts({
+      phone: canonicalPhone,
+      email: dto.email,
+      document: dto.document,
+      documentType: dto.documentType,
+    });
     const created = new this.customerModel({
       name: dto.name,
       lastName: dto.lastName,
       phone: canonicalPhone,
-      whatsapp: canonicalPhone,
+      whatsapp: canonicalWhatsapp,
       email: dto.email,
       documentType: dto.documentType,
       document: dto.document,
@@ -812,17 +895,12 @@ export class CustomerService {
       customer.lastName = dto.lastName;
     }
     if (dto.phone !== undefined) {
-      const p = this.normalizeCustomerContactNumbers({
-        phone: dto.phone,
-      }).phone;
-      customer.phone = p;
-      customer.whatsapp = p;
-    } else if (dto.whatsapp !== undefined) {
-      const w = this.normalizeCustomerContactNumbers({
-        whatsapp: dto.whatsapp,
-      }).whatsapp;
-      customer.phone = w;
-      customer.whatsapp = w;
+      customer.phone = normalizeCustomerPhone(dto.phone);
+    }
+    if (dto.whatsapp !== undefined) {
+      customer.whatsapp = normalizeCustomerPhone(dto.whatsapp);
+    } else if (dto.phone !== undefined) {
+      customer.whatsapp = customer.phone;
     }
     if (dto.email !== undefined) {
       customer.email = dto.email;
@@ -849,6 +927,13 @@ export class CustomerService {
     if (dto.isInternational !== undefined) {
       customer.isInternational = dto.isInternational;
     }
+    await this.assertNoDuplicateCustomerContacts({
+      phone: customer.phone,
+      email: customer.email,
+      document: customer.document,
+      documentType: customer.documentType,
+      excludeCustomerId: customerId,
+    });
     try {
       return await customer.save();
     } catch (err) {
