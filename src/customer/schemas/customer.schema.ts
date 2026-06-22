@@ -6,6 +6,7 @@ export type CustomerDocument = HydratedDocument<Customer>;
 export enum DocumentType {
   Cc = 'cc',
   Passport = 'passport',
+  ForeignCc = 'foreign_cc',
 }
 
 /**

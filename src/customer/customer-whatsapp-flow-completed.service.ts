@@ -138,6 +138,8 @@ export class CustomerWhatsappFlowCompletedService {
       const lower: string = docTypeRaw.toLowerCase();
       if (lower.includes('pass')) {
         customer.documentType = DocumentType.Passport;
+      } else if (lower.includes('extranjera') || lower.includes('extranjero')) {
+        customer.documentType = DocumentType.ForeignCc;
       } else if (lower.includes('cc') || lower.includes('cédula') || lower.includes('cedula')) {
         customer.documentType = DocumentType.Cc;
       }
