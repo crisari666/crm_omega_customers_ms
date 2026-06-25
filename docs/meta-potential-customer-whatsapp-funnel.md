@@ -113,7 +113,7 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 ### Ventor assignment (`customer-whatsapp-flow-completed.service`)
 
 1. `GET {OFFICE_BACK_INTERNAL_BASE_URL}/rest/internal/ventors/physical-assignment-candidates` with header `X-Internal-Key`.
-2. Filter ventors: `level = ventor (4)`, `physical = true`, `enable = true` (office_back).
+2. Filter ventors: `level = ventor (4)`, `physical = true`, `enable = true`, `autoCustomerAssignmentDisabled !== true` (office_back). Legacy ventors without the field remain eligible; new ventors default to disabled until admin enables via handle-user switch.
 3. Count customers per ventor: `assignedTo` + `assignedDate` in **[today−28d 00:00:00, now]** (ISO strings).
 4. `console.log` `{ windowStart, windowEnd, timeZone, countsByVentorId }`.
 5. Pick minimum count; tie-break by lexicographic ventor id.
