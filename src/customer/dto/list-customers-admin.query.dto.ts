@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
+
   IsBoolean,
   IsDateString,
   IsInt,
@@ -45,6 +47,15 @@ export class ListCustomersAdminQueryDto {
   @IsString()
   @MaxLength(64)
   assignedTo?: string;
+
+  /**
+   * When set (and `assignedTo` is not), only customers whose `assignedTo` is in this list.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  assignedToIn?: string[];
 
   /**
    * When set, only customers whose `createdBy` matches this office user id.
