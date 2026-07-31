@@ -133,6 +133,41 @@ export class CustomerMetaLeadgenService {
         },
       },
     );
+    await this.executePersistMetaLeadAttribution(customer, leadgenId, envelope.mappedFields);
+  }
+
+  /**
+   * Denormalizes Meta leadgen id and optional fbclid onto the customer for CAPI matching.
+   */
+  private async executePersistMetaLeadAttribution(
+    customer: CustomerDocument,
+    leadgenId: string,
+    mappedFields: Record<string, string>,
+  ): Promise<void> {
+    const setFields: Record<string, string> = { metaLeadgenId: leadgenId };
+    const fbclid = this.resolveFbclidFromMappedFields(mappedFields);
+    if (fbclid.length > 0) {
+      setFields.metaFbclid = fbclid;
+    }
+    await this.customerModel.updateOne({ _id: customer._id }, { $set: setFields });
+    customer.metaLeadgenId = leadgenId;
+    if (fbclid.length > 0) {
+      customer.metaFbclid = fbclid;
+    }
+  }
+
+  private resolveFbclidFromMappedFields(mappedFields: Record<string, string>): string {
+    const keys = Object.keys(mappedFields);
+    for (const key of keys) {
+      const normalized = key.trim().toLowerCase().replace(/[\s-]+/g, '_');
+      if (normalized === 'fbclid' || normalized === 'click_id' || normalized === 'fbc') {
+        const value = mappedFields[key]?.trim() ?? '';
+        if (value.length > 0) {
+          return value;
+        }
+      }
+    }
+    return '';
   }
 
   private parseEnvelope(payload: unknown): MetaLeadgenIngestEnvelope | null {

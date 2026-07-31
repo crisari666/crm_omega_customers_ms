@@ -47,6 +47,7 @@ import {
 } from '../customer-steps/schemas/customer-step.schema';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { buildAdminListFilter } from './utils/build-admin-list-filter.util';
+import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 
 const DUPLICATE_PHONE_MESSAGE =
   'Ya existe un cliente con este número de teléfono.';
@@ -107,6 +108,7 @@ export class CustomerService {
     @InjectModel(CustomerStepUpdateLog.name)
     private readonly customerStepUpdateLogModel: Model<CustomerStepUpdateLogDocument>,
     private readonly customerAuditService: CustomerAuditService,
+    private readonly metaConversionsApiService: MetaConversionsApiService,
   ) {}
 
   executePing(): string {
@@ -869,7 +871,11 @@ export class CustomerService {
       customer.customerStepId = nextStepId;
     }
     customer.$locals['__auditActorUserId'] = actorUserId;
-    return customer.save();
+    const saved = await customer.save();
+    if (prevId !== nextId && this.metaConversionsApiService.isLeadStepId(nextId)) {
+      this.metaConversionsApiService.executeSendLeadEventForCustomer(String(saved._id));
+    }
+    return saved;
   }
 
   private async resolveCustomerStepObjectId(

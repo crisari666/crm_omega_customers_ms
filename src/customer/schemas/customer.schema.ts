@@ -82,6 +82,18 @@ export class Customer {
   @Prop({ type: Boolean, default: false })
   metaPotentialTemplateSent?: boolean;
 
+  /** Click-to-WhatsApp click ID from inbound message `referral.ctwa_clid` (do not hash). */
+  @Prop({ type: String, required: false, index: true })
+  metaCtwaClid?: string;
+
+  /** Raw Meta `fbclid` when available; used to build CAPI `fbc`. */
+  @Prop({ type: String, required: false })
+  metaFbclid?: string;
+
+  /** Meta Lead Ads `leadgen_id` denormalized for Conversions API `user_data.lead_id`. */
+  @Prop({ type: String, required: false, index: true })
+  metaLeadgenId?: string;
+
   @Prop({ type: Types.ObjectId, ref: 'CustomerStep', required: false, index: true })
   customerStepId?: Types.ObjectId;
 

@@ -72,6 +72,7 @@ import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.se
 import { CallAuditDeepSeekService } from './call-audit/call-audit-deepseek.service';
 import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketing.module';
+import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 
 @Module({
   imports: [
@@ -152,6 +153,7 @@ import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketin
     CallAuditLlmConfigService,
     CallAuditDeepSeekService,
     CustomerCallAuditService,
+    MetaConversionsApiService,
   ],
   exports: [
     CustomerService,
@@ -159,6 +161,7 @@ import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketin
     CustomerPotentialCustomersOutboundService,
     VoiceRmqTopologyService,
     CustomerEventsService,
+    MetaConversionsApiService,
   ],
 })
 export class CustomerModule implements OnModuleInit {

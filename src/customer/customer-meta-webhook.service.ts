@@ -134,6 +134,7 @@ export class CustomerMetaWebhookService {
         customer = (await this.customerModel.findById(doc._id).exec())!;
         created = true;
       }
+      await this.executePersistMetaClickIdFromReferral(customer, msg);
       const assignmentWindowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
       await this.ventorAssignment.executeAssignCustomerIfUnassigned({
         customer,
@@ -211,6 +212,28 @@ export class CustomerMetaWebhookService {
       return { name: parts[0], lastName: '' };
     }
     return { name: parts[0], lastName: parts.slice(1).join(' ') };
+  }
+
+  /**
+   * Persists `referral.ctwa_clid` on the customer when present (refresh when newer value arrives).
+   */
+  private async executePersistMetaClickIdFromReferral(
+    customer: CustomerDocument,
+    msg: NonNullable<MetaWebhookMessagesValue['messages']>[number],
+  ): Promise<void> {
+    const ctwaClid =
+      typeof msg.referral?.ctwa_clid === 'string' ? msg.referral.ctwa_clid.trim() : '';
+    if (ctwaClid.length === 0) {
+      return;
+    }
+    if (customer.metaCtwaClid === ctwaClid) {
+      return;
+    }
+    await this.customerModel.updateOne(
+      { _id: customer._id },
+      { $set: { metaCtwaClid: ctwaClid } },
+    );
+    customer.metaCtwaClid = ctwaClid;
   }
 
   private extractNfmReplyFlowResponse(

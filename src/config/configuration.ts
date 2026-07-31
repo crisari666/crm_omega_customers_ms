@@ -71,6 +71,14 @@ export default (): {
     defaultBatchSize: number;
     defaultBatchDelayMs: number;
   };
+  metaCapi: {
+    accessToken: string;
+    datasetId: string;
+    apiVersion: string;
+    leadStepId: string;
+    leadEventSource: string;
+    enabled: boolean;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -166,6 +174,21 @@ export default (): {
       defaultBatchDelayMs: (() => {
         const raw = Number.parseInt(trimEnv(process.env.WHATSAPP_MARKETING_DELAY_MS) || '200', 10);
         return Number.isFinite(raw) && raw >= 0 ? raw : 200;
+      })(),
+    },
+    metaCapi: {
+      accessToken: trimEnv(process.env.META_CAPI_ACCESS_TOKEN),
+      datasetId: trimEnv(process.env.META_CAPI_DATASET_ID) || '7399429630115923',
+      apiVersion: trimEnv(process.env.META_CAPI_API_VERSION) || 'v26.0',
+      leadStepId:
+        trimEnv(process.env.META_CAPI_LEAD_STEP_ID) || '69e64b5c04041548fb4dcadf',
+      leadEventSource: trimEnv(process.env.META_CAPI_LEAD_EVENT_SOURCE) || 'Omega CRM',
+      enabled: (() => {
+        const raw = trimEnv(process.env.META_CAPI_ENABLED).toLowerCase();
+        if (raw === 'false' || raw === '0' || raw === 'no') {
+          return false;
+        }
+        return true;
       })(),
     },
   };

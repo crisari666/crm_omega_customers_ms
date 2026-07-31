@@ -7,6 +7,12 @@ export type MetaWebhookMessagesValue = {
     timestamp: string;
     type: string;
     context?: { id?: string };
+    referral?: {
+      ctwa_clid?: string;
+      source_id?: string;
+      source_url?: string;
+      source_type?: string;
+    };
     text?: { body: string };
     button?: { text: string; payload?: string };
     interactive?: {
