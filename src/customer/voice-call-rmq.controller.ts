@@ -58,7 +58,9 @@ export class VoiceCallRmqController {
     const channel = context.getChannelRef();
     const message = context.getMessage();
     try {
-      const dto: IngestVoiceCallEventDto = plainToInstance(IngestVoiceCallEventDto, data);
+      const dto: IngestVoiceCallEventDto = plainToInstance(IngestVoiceCallEventDto, data, {
+        enableImplicitConversion: true,
+      });
       const errors = await validate(dto);
       if (errors.length > 0) {
         throw new Error(`Call event validation failed: ${JSON.stringify(errors)}`);

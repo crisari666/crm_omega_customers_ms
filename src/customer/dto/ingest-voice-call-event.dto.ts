@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsArray,
   IsIn,
@@ -24,6 +25,36 @@ const EVENT_TYPES = [
   'canceled',
   'transcription-updated',
 ] as const;
+
+const VOICE_CALL_DIRECTIONS = [
+  'inbound',
+  'outbound',
+  'inbound-dial',
+  'outbound-dial',
+] as const;
+
+/**
+ * Maps Twilio Direction (e.g. outbound-api) onto CRM voice-call direction enums.
+ */
+export function normalizeIngestVoiceCallDirection(value: unknown): string | undefined {
+  if (value == null || value === '') {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if ((VOICE_CALL_DIRECTIONS as readonly string[]).includes(normalized)) {
+    return normalized;
+  }
+  if (normalized.includes('outbound')) {
+    return normalized.includes('dial') ? 'outbound-dial' : 'outbound';
+  }
+  if (normalized.includes('inbound')) {
+    return normalized.includes('dial') ? 'inbound-dial' : 'inbound';
+  }
+  return undefined;
+}
 
 export class IngestVoiceCallEventDto {
   @IsString()
@@ -61,8 +92,9 @@ export class IngestVoiceCallEventDto {
   status?: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) => normalizeIngestVoiceCallDirection(value))
   @IsString()
-  @IsIn(['inbound', 'outbound', 'inbound-dial', 'outbound-dial'])
+  @IsIn([...VOICE_CALL_DIRECTIONS])
   direction?: string;
 
   @IsOptional()
