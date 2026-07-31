@@ -19,6 +19,9 @@ export type CustomerStaffPerformanceReportDto = {
       readonly dontAnswered: number;
       readonly failed: number;
     };
+    readonly attendedCount: number;
+    readonly unattendedCount: number;
+    readonly avgTimeToAttendMs: number | null;
     readonly steps: Readonly<Record<string, number>>;
   }>;
 };

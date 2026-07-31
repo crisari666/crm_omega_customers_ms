@@ -9,6 +9,8 @@ export type CustomerAssignmentChangeItem = {
   readonly assignedFrom?: string;
   readonly assignedTo?: string;
   readonly action: 'create' | 'update';
+  readonly attendedAt?: string;
+  readonly timeToAttendMs?: number;
 };
 
 export type ListCustomerAssignmentChangesResult = {
@@ -16,6 +18,8 @@ export type ListCustomerAssignmentChangesResult = {
   readonly total: number;
   readonly limit: number;
   readonly skip: number;
+  readonly attendedCount: number;
+  readonly avgTimeToAttendMs: number | null;
 };
 
 export type CustomerAssignmentChangeAggRow = {
@@ -26,6 +30,7 @@ export type CustomerAssignmentChangeAggRow = {
   readonly createdAt: Date;
   readonly assignedFrom?: string;
   readonly assignedTo?: string;
+  readonly attendedAt?: Date | null;
   readonly customerName?: string;
   readonly customerLastName?: string;
   readonly customerPhone?: string;

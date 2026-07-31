@@ -18,6 +18,7 @@ import {
   type CustomerEventItem,
   type ListCustomerEventsResult,
 } from './types/customer-events.type';
+import { CustomerAuditService } from './customer-audit.service';
 
 @Injectable()
 export class CustomerEventsService {
@@ -26,6 +27,7 @@ export class CustomerEventsService {
     private readonly customerEventModel: Model<CustomerEventDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+    private readonly customerAuditService: CustomerAuditService,
   ) {}
 
   async createEvent(args: CreateEventArgs): Promise<CustomerEventItem> {
@@ -41,6 +43,11 @@ export class CustomerEventsService {
     });
     const occurredAt = this.readDocumentCreatedAt(created);
     await this.executeBumpCustomerLastUpdate(customerObjectId, occurredAt);
+    await this.customerAuditService.markAssignmentAttendedIfNeeded({
+      customerId: customerObjectId,
+      actorUserId: args.actorUserId,
+      attendedAt: occurredAt,
+    });
     return this.mapItem(created);
   }
 
@@ -113,16 +120,22 @@ export class CustomerEventsService {
     if (matched) {
       return;
     }
+    const actorUserId = args.userId?.trim() ? args.userId.trim() : 'system';
     const created = await this.customerEventModel.create({
       customerId: customerObjectId,
       eventType: 'CALL_CRM',
       description: args.description ?? 'CRM call created',
       score: undefined,
-      userId: args.userId?.trim() ? args.userId : 'system',
+      userId: actorUserId,
       metadata: { [dedupeMetadataKey]: dedupeKey, callSid: args.callSid },
     });
     const occurredAt = this.readDocumentCreatedAt(created);
     await this.executeBumpCustomerLastUpdate(customerObjectId, occurredAt);
+    await this.customerAuditService.markAssignmentAttendedIfNeeded({
+      customerId: customerObjectId,
+      actorUserId,
+      attendedAt: occurredAt,
+    });
   }
 
   private async listInternal(

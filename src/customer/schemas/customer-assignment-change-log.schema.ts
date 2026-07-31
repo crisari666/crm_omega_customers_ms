@@ -25,6 +25,13 @@ export class CustomerAssignmentChangeLog {
   /** New office user id (`assignedTo` after change). */
   @Prop({ type: String, required: false, index: true })
   assignedTo?: string;
+
+  /**
+   * First time the assignee ventor attended the customer (call or any customer event).
+   * Set once; never cleared on reassignment.
+   */
+  @Prop({ type: Date, required: false, index: true })
+  attendedAt?: Date;
 }
 
 export const CustomerAssignmentChangeLogSchema = SchemaFactory.createForClass(
@@ -34,3 +41,8 @@ export const CustomerAssignmentChangeLogSchema = SchemaFactory.createForClass(
 CustomerAssignmentChangeLogSchema.index({ assignedTo: 1, createdAt: -1 });
 CustomerAssignmentChangeLogSchema.index({ customerId: 1, createdAt: -1 });
 CustomerAssignmentChangeLogSchema.index({ createdAt: -1 });
+CustomerAssignmentChangeLogSchema.index({
+  assignedTo: 1,
+  attendedAt: 1,
+  createdAt: -1,
+});

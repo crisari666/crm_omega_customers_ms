@@ -7,6 +7,10 @@ import {
   CustomerCallLogDocument,
 } from './schemas/customer-call-log.schema';
 import {
+  CustomerAssignmentChangeLog,
+  CustomerAssignmentChangeLogDocument,
+} from './schemas/customer-assignment-change-log.schema';
+import {
   CustomerStep,
   CustomerStepDocument,
 } from '../customer-steps/schemas/customer-step.schema';
@@ -75,6 +79,8 @@ export class CustomerStaffPerformanceService {
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerCallLog.name)
     private readonly customerCallLogModel: Model<CustomerCallLogDocument>,
+    @InjectModel(CustomerAssignmentChangeLog.name)
+    private readonly assignmentChangeLogModel: Model<CustomerAssignmentChangeLogDocument>,
     @InjectModel(CustomerStep.name)
     private readonly customerStepModel: Model<CustomerStepDocument>,
   ) {}
@@ -107,6 +113,7 @@ export class CustomerStaffPerformanceService {
     }
     const customerColl = this.customerModel.collection.name;
     const callColl = this.customerCallLogModel.collection.name;
+    const assignmentLogColl = this.assignmentChangeLogModel.collection.name;
     const documents = staff.map((member) => ({
       userId: member.userId,
       displayName: member.displayName,
@@ -258,12 +265,76 @@ export class CustomerStaffPerformanceService {
         },
       },
       {
+        $lookup: {
+          from: assignmentLogColl,
+          let: {
+            uid: '$userId',
+            rs: '$rangeStart',
+            re: '$rangeEnd',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$assignedTo', '$$uid'] },
+                    { $gte: ['$createdAt', '$$rs'] },
+                    { $lte: ['$createdAt', '$$re'] },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                attendedCount: {
+                  $sum: {
+                    $cond: [{ $ne: [{ $ifNull: ['$attendedAt', null] }, null] }, 1, 0],
+                  },
+                },
+                unattendedCount: {
+                  $sum: {
+                    $cond: [{ $eq: [{ $ifNull: ['$attendedAt', null] }, null] }, 1, 0],
+                  },
+                },
+                avgTimeToAttendMs: {
+                  $avg: {
+                    $cond: [
+                      { $ne: [{ $ifNull: ['$attendedAt', null] }, null] },
+                      { $subtract: ['$attendedAt', '$createdAt'] },
+                      null,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          as: '_attendanceAgg',
+        },
+      },
+      {
+        $addFields: {
+          attendedCount: {
+            $ifNull: [{ $arrayElemAt: ['$_attendanceAgg.attendedCount', 0] }, 0],
+          },
+          unattendedCount: {
+            $ifNull: [{ $arrayElemAt: ['$_attendanceAgg.unattendedCount', 0] }, 0],
+          },
+          avgTimeToAttendMs: {
+            $ifNull: [{ $arrayElemAt: ['$_attendanceAgg.avgTimeToAttendMs', 0] }, null],
+          },
+        },
+      },
+      {
         $project: {
           userId: 1,
           displayName: 1,
           totalAssignedInRange: 1,
           steps: 1,
           calls: 1,
+          attendedCount: 1,
+          unattendedCount: 1,
+          avgTimeToAttendMs: 1,
         },
       },
     ];
@@ -278,6 +349,9 @@ export class CustomerStaffPerformanceService {
         dontAnswered: number;
         failed: number;
       };
+      attendedCount: number;
+      unattendedCount: number;
+      avgTimeToAttendMs: number | null;
     }>;
     const nativeDb = this.mongoConnection.db;
     if (nativeDb == null) {
@@ -298,6 +372,12 @@ export class CustomerStaffPerformanceService {
       displayName: row.displayName,
       totalAssignedInRange: row.totalAssignedInRange,
       calls: row.calls,
+      attendedCount: row.attendedCount ?? 0,
+      unattendedCount: row.unattendedCount ?? 0,
+      avgTimeToAttendMs:
+        typeof row.avgTimeToAttendMs === 'number' && Number.isFinite(row.avgTimeToAttendMs)
+          ? row.avgTimeToAttendMs
+          : null,
       steps: row.steps ?? {},
     }));
     return {

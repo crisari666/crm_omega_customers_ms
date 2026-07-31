@@ -184,6 +184,43 @@ export class CustomerAuditService {
     });
   }
 
+  /**
+   * Marks the latest open assignment log row as attended when the assignee creates an event/call.
+   * Idempotent: only sets `attendedAt` when still unset.
+   */
+  async markAssignmentAttendedIfNeeded(params: {
+    readonly customerId: string | Types.ObjectId;
+    readonly actorUserId: string;
+    readonly attendedAt?: Date;
+  }): Promise<void> {
+    const actorUserId = params.actorUserId.trim();
+    if (actorUserId === '' || actorUserId === 'system') {
+      return;
+    }
+    const customerObjectId =
+      params.customerId instanceof Types.ObjectId
+        ? params.customerId
+        : Types.ObjectId.isValid(params.customerId)
+          ? new Types.ObjectId(params.customerId)
+          : null;
+    if (customerObjectId === null) {
+      return;
+    }
+    const attendedAt = params.attendedAt ?? new Date();
+    await this.assignmentChangeLogModel
+      .findOneAndUpdate(
+        {
+          customerId: customerObjectId,
+          assignedTo: actorUserId,
+          attendedAt: null,
+          createdAt: { $lte: attendedAt },
+        },
+        { $set: { attendedAt } },
+        { sort: { createdAt: -1 } },
+      )
+      .exec();
+  }
+
   private async recordAssignmentChange(params: {
     readonly customerId: string;
     readonly actorUserId?: string;

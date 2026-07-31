@@ -2,7 +2,7 @@
 
 Lists rows from **`CustomerAssignmentChangeLog`** (dedicated collection) when `assignedTo` was set to the given office user, within a date range.
 
-Written on each `assignedTo` change via `CustomerAuditService` (customer save hooks and query updates).
+Written on each `assignedTo` change via `CustomerAuditService` (customer save hooks and query updates). `attendedAt` is set once when that assignee creates any customer event / CRM call.
 
 ## Query (required)
 
@@ -29,12 +29,16 @@ Optional: `limit` (100 \| 200 \| 500, default 100), `skip` (default 0).
       "actorUserId": "adminUserId",
       "assignedFrom": "previousUserId",
       "assignedTo": "assigneeUserId",
-      "action": "update"
+      "action": "update",
+      "attendedAt": "2026-05-22T14:30:00.000Z",
+      "timeToAttendMs": 9000000
     }
   ],
   "total": 1,
   "limit": 100,
-  "skip": 0
+  "skip": 0,
+  "attendedCount": 1,
+  "avgTimeToAttendMs": 9000000
 }
 ```
 

@@ -31,7 +31,7 @@ export class CustomerAssignmentAuditService {
       assignedTo: assigneeUserId,
       createdAt: { $gte: dateFrom, $lte: dateTo },
     };
-    const [docs, total] = await Promise.all([
+    const [docs, total, summaryRows] = await Promise.all([
       this.assignmentChangeLogModel
         .aggregate<CustomerAssignmentChangeAggRow>([
           { $match: filter },
@@ -61,6 +61,7 @@ export class CustomerAssignmentAuditService {
               createdAt: 1,
               assignedFrom: 1,
               assignedTo: 1,
+              attendedAt: 1,
               customerName: '$customer.name',
               customerLastName: '$customer.lastName',
               customerPhone: '$customer.phone',
@@ -69,12 +70,41 @@ export class CustomerAssignmentAuditService {
         ])
         .exec(),
       this.assignmentChangeLogModel.countDocuments(filter).exec(),
+      this.assignmentChangeLogModel
+        .aggregate<{ attendedCount: number; avgTimeToAttendMs: number | null }>([
+          { $match: filter },
+          {
+            $group: {
+              _id: null,
+              attendedCount: {
+                $sum: {
+                  $cond: [{ $ne: [{ $ifNull: ['$attendedAt', null] }, null] }, 1, 0],
+                },
+              },
+              avgTimeToAttendMs: {
+                $avg: {
+                  $cond: [
+                    { $ne: [{ $ifNull: ['$attendedAt', null] }, null] },
+                    { $subtract: ['$attendedAt', '$createdAt'] },
+                    null,
+                  ],
+                },
+              },
+            },
+          },
+        ])
+        .exec(),
     ]);
+    const summary = summaryRows[0];
+    const avgRaw = summary?.avgTimeToAttendMs;
     return {
       items: docs.map((doc) => this.mapRow(doc)),
       total,
       limit,
       skip,
+      attendedCount: summary?.attendedCount ?? 0,
+      avgTimeToAttendMs:
+        typeof avgRaw === 'number' && Number.isFinite(avgRaw) ? avgRaw : null,
     };
   }
 
@@ -87,6 +117,12 @@ export class CustomerAssignmentAuditService {
       doc.assignedTo !== undefined && doc.assignedTo !== null
         ? String(doc.assignedTo)
         : undefined;
+    const attendedAt =
+      doc.attendedAt instanceof Date ? doc.attendedAt.toISOString() : undefined;
+    const timeToAttendMs =
+      doc.attendedAt instanceof Date
+        ? doc.attendedAt.getTime() - doc.createdAt.getTime()
+        : undefined;
     return {
       changeLogId: String(doc._id),
       customerId: String(doc.customerId),
@@ -98,6 +134,8 @@ export class CustomerAssignmentAuditService {
       assignedFrom: assignedFrom === '' ? undefined : assignedFrom,
       assignedTo: assignedTo === '' ? undefined : assignedTo,
       action: doc.action,
+      attendedAt,
+      timeToAttendMs,
     };
   }
 }

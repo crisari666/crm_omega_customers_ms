@@ -27,10 +27,14 @@ describe('CustomerStaffPerformanceService', () => {
         }),
       }),
     };
+    const assignmentLogModel = {
+      collection: { name: 'customerassignmentchangelogs' },
+    };
     const service = new CustomerStaffPerformanceService(
       connection as never,
       customerModel as never,
       callLogModel as never,
+      assignmentLogModel as never,
       stepModel as never,
     );
     return { service, aggregateMock };
@@ -57,6 +61,9 @@ describe('CustomerStaffPerformanceService', () => {
           totalAssignedInRange: 0,
           steps: {},
           calls: { totalCalls: 0, answered: 0, dontAnswered: 0, failed: 0 },
+          attendedCount: 0,
+          unattendedCount: 0,
+          avgTimeToAttendMs: null,
         },
       ]),
     });
@@ -68,6 +75,8 @@ describe('CustomerStaffPerformanceService', () => {
     });
     expect(out.rows.length).toBe(1);
     expect(out.rows[0].displayName).toBe('Test User');
+    expect(out.rows[0].attendedCount).toBe(0);
+    expect(out.rows[0].avgTimeToAttendMs).toBeNull();
     expect(aggregateMock).toHaveBeenCalled();
   });
 });
