@@ -176,8 +176,8 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 | Route | Auth | Returns |
 |-------|------|---------|
 | `GET /rest/internal/ventors/physical-assignment-candidates` | Header `X-Internal-Key` = `OFFICE_BACK_INTERNAL_API_KEY` | `{ ventors: [{ id, name, lastName, phone, phoneJob }] }` |
-| `POST /rest/internal/users/fcm-tokens` | Header `X-Internal-Key` | body `{ userIds }` → `{ tokens: Record<userId, string \| null> }` |
-| `GET /rest/internal/users/:userId/fcm-token` | Header `X-Internal-Key` | `{ userId, fcmToken }` |
+| `POST /rest/internal/users/fcm-tokens` | Header `X-Internal-Key` | body `{ userIds }` → `{ tokens: Record<userId, string[]> }` |
+| `GET /rest/internal/users/:userId/fcm-token` | Header `X-Internal-Key` | `{ userId, fcmToken, fcmTokens }` |
 
 **Env:** `FIREBASE_ADMIN_CREDENTIALS` — path to la-ceiba Admin SDK JSON (align with Flutter / customers-ms). See customers-ms `docs/firebase-assignment-push.md`.
 
