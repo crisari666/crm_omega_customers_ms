@@ -59,6 +59,7 @@ export class CustomerAssignmentPushService {
         sends.push(
           this.sendToToken({
             token,
+            userId,
             title: copy.title,
             body: copy.body,
             customerId: params.customerId,
@@ -71,8 +72,9 @@ export class CustomerAssignmentPushService {
         `Assignment push done customerId=${params.customerId} kind=${kind} recipients=${recipientIds.join(',')}`,
       );
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Assignment push failed customerId=${params.customerId}: ${message}`);
+      this.logger.warn(
+        `Assignment push failed customerId=${params.customerId}: ${this.formatErrorDetails(err)}`,
+      );
     }
   }
 
@@ -146,38 +148,77 @@ export class CustomerAssignmentPushService {
 
   private async sendToToken(input: {
     readonly token: string;
+    readonly userId: string;
     readonly title: string;
     readonly body: string;
     readonly customerId: string;
     readonly kind: AssignmentKind;
   }): Promise<void> {
     if (!this.isFirebaseReady) {
-      this.logger.warn('Firebase Admin not ready; skip send');
+      this.logger.warn(
+        `Firebase Admin not ready; skip send userId=${input.userId} customerId=${input.customerId} fcmToken=${input.token}`,
+      );
       return;
     }
-    await admin.messaging().send({
-      token: input.token,
-      notification: {
-        title: input.title,
-        body: input.body,
-      },
-      data: {
-        type: 'customer_assignment',
-        route: '/clients',
-        customerId: input.customerId,
-        assignmentKind: input.kind,
-      },
-      android: {
-        priority: 'high',
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
+    this.logger.log(
+      `Assignment push send userId=${input.userId} customerId=${input.customerId} kind=${input.kind} fcmToken=${input.token}`,
+    );
+    try {
+      await admin.messaging().send({
+        token: input.token,
+        notification: {
+          title: input.title,
+          body: input.body,
+        },
+        data: {
+          type: 'customer_assignment',
+          route: '/clients',
+          customerId: input.customerId,
+          assignmentKind: input.kind,
+        },
+        android: {
+          priority: 'high',
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+            },
           },
         },
-      },
-    });
+      });
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Assignment push send failed userId=${input.userId} customerId=${input.customerId} fcmToken=${input.token} ${this.formatErrorDetails(err)}`,
+      );
+      throw err;
+    }
+  }
+
+  private formatErrorDetails(err: unknown): string {
+    if (!(err instanceof Error)) {
+      return `error=${String(err)}`;
+    }
+    const parts: string[] = [`error=${err.message}`];
+    if ('code' in err && typeof (err as { code: unknown }).code === 'string') {
+      parts.push(`code=${(err as { code: string }).code}`);
+    }
+    if (
+      'errorInfo' in err &&
+      (err as { errorInfo: unknown }).errorInfo != null
+    ) {
+      try {
+        parts.push(
+          `errorInfo=${JSON.stringify((err as { errorInfo: unknown }).errorInfo)}`,
+        );
+      } catch {
+        parts.push('errorInfo=[unserializable]');
+      }
+    }
+    if (err.stack != null && err.stack.trim() !== '') {
+      parts.push(`stack=${err.stack}`);
+    }
+    return parts.join(' ');
   }
 
   private initializeFirebase(): void {
