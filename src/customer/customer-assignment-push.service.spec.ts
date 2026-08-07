@@ -31,7 +31,7 @@ describe('CustomerAssignmentPushService', () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        tokens: { '111111111111111111111111': 'token-a' },
+        tokens: { '111111111111111111111111': ['token-a'] },
       }),
     }) as unknown as typeof fetch;
     const service = buildService();

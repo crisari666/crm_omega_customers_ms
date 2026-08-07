@@ -44,8 +44,8 @@ export class CustomerAssignmentPushService {
       const tokensByUserId = await this.fetchFcmTokens(recipientIds);
       const sends: Array<Promise<void>> = [];
       for (const userId of recipientIds) {
-        const token = tokensByUserId[userId];
-        if (token == null || token.trim() === '') {
+        const tokens = tokensByUserId[userId] ?? [];
+        if (tokens.length === 0) {
           this.logger.warn(
             `Assignment push skip: no FCM token userId=${userId} customerId=${params.customerId}`,
           );
@@ -56,16 +56,18 @@ export class CustomerAssignmentPushService {
           kind,
           isNewAssignee,
         });
-        sends.push(
-          this.sendToToken({
-            token,
-            userId,
-            title: copy.title,
-            body: copy.body,
-            customerId: params.customerId,
-            kind,
-          }),
-        );
+        for (const token of tokens) {
+          sends.push(
+            this.sendToToken({
+              token,
+              userId,
+              title: copy.title,
+              body: copy.body,
+              customerId: params.customerId,
+              kind,
+            }),
+          );
+        }
       }
       await Promise.all(sends);
       this.logger.log(
@@ -115,7 +117,7 @@ export class CustomerAssignmentPushService {
 
   private async fetchFcmTokens(
     userIds: readonly string[],
-  ): Promise<Record<string, string | null>> {
+  ): Promise<Record<string, string[]>> {
     const baseUrl = (
       this.configService.get<string>('officeBackInternal.baseUrl', '') ?? ''
     ).trim();
@@ -141,9 +143,33 @@ export class CustomerAssignmentPushService {
       return {};
     }
     const data = (await response.json()) as {
-      tokens?: Record<string, string | null>;
+      tokens?: Record<string, string[] | string | null>;
     };
-    return data.tokens ?? {};
+    return this.normalizeTokensByUserId(data.tokens ?? {});
+  }
+
+  private normalizeTokensByUserId(
+    raw: Record<string, string[] | string | null>,
+  ): Record<string, string[]> {
+    const result: Record<string, string[]> = {};
+    for (const [userId, value] of Object.entries(raw)) {
+      if (Array.isArray(value)) {
+        result[userId] = [
+          ...new Set(
+            value
+              .map((token) => (token != null ? String(token).trim() : ''))
+              .filter((token) => token !== ''),
+          ),
+        ];
+        continue;
+      }
+      if (typeof value === 'string' && value.trim() !== '') {
+        result[userId] = [value.trim()];
+        continue;
+      }
+      result[userId] = [];
+    }
+    return result;
   }
 
   private async sendToToken(input: {
@@ -163,6 +189,12 @@ export class CustomerAssignmentPushService {
     this.logger.log(
       `Assignment push send userId=${input.userId} customerId=${input.customerId} kind=${input.kind} fcmToken=${input.token}`,
     );
+    const detailRoute = `/clients/${input.customerId}`;
+    const agentWebBase = (
+      this.configService.get<string>('firebase.agentWebAppBaseUrl', '') ?? ''
+    ).trim().replace(/\/$/, '');
+    const webClickLink =
+      agentWebBase !== '' ? `${agentWebBase}${detailRoute}` : undefined;
     try {
       await admin.messaging().send({
         token: input.token,
@@ -172,7 +204,7 @@ export class CustomerAssignmentPushService {
         },
         data: {
           type: 'customer_assignment',
-          route: '/clients',
+          route: detailRoute,
           customerId: input.customerId,
           assignmentKind: input.kind,
         },
@@ -186,12 +218,20 @@ export class CustomerAssignmentPushService {
             },
           },
         },
+        ...(webClickLink != null
+          ? {
+              webpush: {
+                fcmOptions: {
+                  link: webClickLink,
+                },
+              },
+            }
+          : {}),
       });
     } catch (err: unknown) {
       this.logger.warn(
         `Assignment push send failed userId=${input.userId} customerId=${input.customerId} fcmToken=${input.token} ${this.formatErrorDetails(err)}`,
       );
-      throw err;
     }
   }
 
