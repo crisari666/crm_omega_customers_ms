@@ -64,6 +64,7 @@ import { CustomerVentorAssignmentService } from './customer-ventor-assignment.se
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
 import { CustomerAdminImportService } from './customer-admin-import.service';
 import { CustomerAssignmentAuditService } from './customer-assignment-audit.service';
+import { CustomerAssignmentPushService } from './customer-assignment-push.service';
 import {
   CustomerCallAudit,
   CustomerCallAuditSchema,
@@ -150,6 +151,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerWhatsappFlowCompletedService,
     CustomerAdminImportService,
     CustomerAssignmentAuditService,
+    CustomerAssignmentPushService,
     CallAuditLlmConfigService,
     CallAuditDeepSeekService,
     CustomerCallAuditService,

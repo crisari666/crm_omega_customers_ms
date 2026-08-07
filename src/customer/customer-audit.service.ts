@@ -11,6 +11,7 @@ import {
   CustomerAssignmentChangeLogDocument,
 } from './schemas/customer-assignment-change-log.schema';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
+import { CustomerAssignmentPushService } from './customer-assignment-push.service';
 
 const AUDIT_SNAPSHOT_KEY = '__customerAuditSnapshot';
 const AUDIT_WAS_NEW_KEY = '__customerAuditWasNew';
@@ -38,6 +39,7 @@ export class CustomerAuditService {
     private readonly changeLogModel: Model<CustomerChangeLogDocument>,
     @InjectModel(CustomerAssignmentChangeLog.name)
     private readonly assignmentChangeLogModel: Model<CustomerAssignmentChangeLogDocument>,
+    private readonly assignmentPushService: CustomerAssignmentPushService,
   ) {}
 
   /**
@@ -240,6 +242,11 @@ export class CustomerAuditService {
       assignedFrom: from,
       assignedTo: to,
     }).save();
+    void this.assignmentPushService.executeNotifyAssignmentChange({
+      customerId: params.customerId,
+      assignedFrom: from,
+      assignedTo: to,
+    });
   }
 
   private buildCreateChanges(

@@ -54,6 +54,7 @@ export default (): {
     allowedMimeTypes: readonly string[];
   };
   officeBackInternal: { baseUrl: string; apiKey: string };
+  firebase: { adminCredentialsPath: string };
   customersMetaIngest: { actorUserId: string };
   ventorAssignment: {
     timeZone: string;
@@ -147,6 +148,9 @@ export default (): {
     officeBackInternal: {
       baseUrl: officeBase,
       apiKey: officeKey,
+    },
+    firebase: {
+      adminCredentialsPath: trimEnv(process.env.FIREBASE_ADMIN_CREDENTIALS),
     },
     customersMetaIngest: {
       actorUserId: metaActor,

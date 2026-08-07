@@ -587,6 +587,10 @@ export class CustomerService {
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} was not found`);
     }
+    const previousAssignee =
+      customer.assignedTo !== undefined && customer.assignedTo.trim() !== ''
+        ? customer.assignedTo.trim()
+        : undefined;
     customer.$locals['__auditActorUserId'] = actorUserId;
     if (dto.name !== undefined) {
       customer.name = dto.name;
@@ -627,11 +631,17 @@ export class CustomerService {
         };
       });
     }
+    let nextAssignee = previousAssignee;
+    let didChangeAssignee = false;
     if (dto.assignedTo !== undefined) {
       const t = dto.assignedTo.trim();
-      customer.assignedTo = t === '' ? undefined : t;
+      nextAssignee = t === '' ? undefined : t;
+      customer.assignedTo = nextAssignee;
       customer.assignedDate = new Date().toISOString();
-
+      didChangeAssignee = previousAssignee !== nextAssignee;
+      if (didChangeAssignee) {
+        customer.$locals[ASSIGNMENT_CHANGE_LOGGED_KEY] = true;
+      }
     }
     if (dto.enabled !== undefined) {
       customer.enabled = dto.enabled;
@@ -656,6 +666,15 @@ export class CustomerService {
         throw new ConflictException(DUPLICATE_PHONE_MESSAGE);
       }
       throw err;
+    }
+    if (didChangeAssignee) {
+      await this.customerAuditService.recordCustomerAssignmentChange({
+        customerId,
+        actorUserId,
+        action: 'update',
+        assignedFrom: previousAssignee,
+        assignedTo: nextAssignee,
+      });
     }
     return this.getCustomerAdminDetail(customerId);
   }

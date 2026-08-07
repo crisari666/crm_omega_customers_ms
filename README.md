@@ -79,6 +79,16 @@ Payment receipts can be stored as image files on the server (JPEG, PNG, WebP). C
 
 HTTP: `POST /customers-rest/customer-payment/with-evidence` (multipart, field `evidence` + payment fields), `GET /customers-rest/customer-payment/:paymentId/evidence` (requires the same office JWT `token` header as other routes).
 
+## Firebase assignment push (ventor app)
+
+When a customer's `assignedTo` changes, this service sends FCM to the new and previous assignees (tokens stored in omega_office_back). See [docs/firebase-assignment-push.md](docs/firebase-assignment-push.md).
+
+| Variable | Description |
+|----------|-------------|
+| `FIREBASE_ADMIN_CREDENTIALS` | Absolute path to la-ceiba Firebase Admin SDK JSON (gitignored). |
+| `CRM_BACKEND_URL` | office_back base URL including `/rest/` prefix. |
+| `OFFICE_BACK_INTERNAL_API_KEY` | Must match office_back for internal FCM token lookup. |
+
 ## License
 
 Nest is [MIT licensed](LICENSE).

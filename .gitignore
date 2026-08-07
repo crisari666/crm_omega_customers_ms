@@ -42,6 +42,10 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Firebase Admin SDK service account (use FIREBASE_ADMIN_CREDENTIALS path)
+*-firebase-adminsdk-*.json
+la-ceiba-*-firebase-adminsdk-*.json
+
 # temp directory
 .temp
 .tmp
