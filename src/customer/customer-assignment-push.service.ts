@@ -232,6 +232,7 @@ export class CustomerAssignmentPushService {
       return;
     }
     try {
+      console.log('credentialsPath', credentialsPath, 'admin.apps.length', admin.apps.length);
       if (admin.apps.length === 0) {
         admin.initializeApp({
           credential: admin.credential.cert(credentialsPath),
