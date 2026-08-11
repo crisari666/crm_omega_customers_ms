@@ -14,6 +14,7 @@ import { OFFICE_USER_LEVEL_MAIN_LEAD } from '../core/constants/office-user-level
 import { assertOfficeMainLead } from '../core/utils/assert-office-main-lead.util';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
+import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto';
 import { UpdateVentorScheduleStatusDto } from './dto/update-ventor-schedule-status.dto';
 import { VentorScheduleByDayQueryDto } from './dto/ventor-schedule-by-day-query.dto';
 import { VENTOR_SCHEDULE_BY_DAY_VIEW } from './dto/ventor-schedule-by-day-view.const';
@@ -49,6 +50,8 @@ function serializeEvent(doc: VentorScheduleEventDocument) {
     scheduledAt: o.scheduledAt?.toISOString?.() ?? o.scheduledAt,
     eventType: o.eventType,
     note: o.note,
+    googleMeetUrl: o.googleMeetUrl,
+    googleCalendarEventId: o.googleCalendarEventId,
     status: o.status,
     createdAt:
       (o as { createdAt?: Date }).createdAt?.toISOString?.() ??
@@ -110,6 +113,16 @@ export class VentorScheduleController {
       query.date,
     );
     return list.map((d) => serializeEvent(d));
+  }
+
+  @Post(':id/meet-sync')
+  async meetSync(
+    @Param('id', ParseHexObjectIdPipe) id: string,
+    @Body() body: SyncVentorMeetCallDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const userId = resolveOfficeUserId(jwtUser);
+    return this.ventorScheduleService.syncMeetCall(userId, id, body);
   }
 
   @Patch(':id/status')

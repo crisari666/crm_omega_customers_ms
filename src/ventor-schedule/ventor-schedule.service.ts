@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,7 +8,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
+import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto';
 import { CustomerEventsService } from '../customer/customer-events.service';
+import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
+import type { CustomerCallLogAdminItemDto } from '../customer/types/customer-call-logs.type';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
@@ -45,6 +49,7 @@ export class VentorScheduleService {
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
     private readonly customerEventsService: CustomerEventsService,
+    private readonly customerCallLogsService: CustomerCallLogsService,
   ) {}
 
   private async assertCustomerAccessible(
@@ -125,6 +130,8 @@ export class VentorScheduleService {
       scheduledAt,
       eventType: dto.eventType,
       note: dto.note,
+      googleMeetUrl: dto.googleMeetUrl,
+      googleCalendarEventId: dto.googleCalendarEventId,
       status: VentorScheduleEventStatus.Pending,
     });
     const saved = await doc.save();
@@ -136,7 +143,53 @@ export class VentorScheduleService {
         saved.scheduledAt,
       );
     }
+    const meetUrl = dto.googleMeetUrl?.trim();
+    if (
+      dto.eventType === VentorScheduleEventType.Virtual &&
+      meetUrl
+    ) {
+      await this.customerCallLogsService.createGoogleMeetScheduleLog({
+        scheduleEventId: String(saved._id),
+        customerId: dto.customerId,
+        agentUserId: userId,
+        scheduledAt: saved.scheduledAt,
+        googleMeetUrl: meetUrl,
+        googleCalendarEventId: dto.googleCalendarEventId,
+        organizerEmail: dto.organizerEmail,
+      });
+    }
     return saved;
+  }
+
+  /**
+   * Syncs Meet attendance + transcript into the linked google_meet call log.
+   */
+  async syncMeetCall(
+    userId: string,
+    scheduleEventId: string,
+    body: SyncVentorMeetCallDto,
+  ): Promise<CustomerCallLogAdminItemDto> {
+    if (!Types.ObjectId.isValid(scheduleEventId)) {
+      throw new NotFoundException('Schedule event not found');
+    }
+    const doc = await this.scheduleModel.findById(scheduleEventId).exec();
+    if (!doc) {
+      throw new NotFoundException('Schedule event not found');
+    }
+    if (doc.userId !== userId) {
+      throw new ForbiddenException('Schedule event is not in your scope');
+    }
+    if (doc.eventType !== VentorScheduleEventType.Virtual) {
+      throw new BadRequestException('Meet sync is only for virtual events');
+    }
+    if (!doc.googleMeetUrl?.trim()) {
+      throw new BadRequestException('Schedule event has no Google Meet URL');
+    }
+    return this.customerCallLogsService.applyGoogleMeetSync({
+      scheduleEventId: String(doc._id),
+      agentUserId: userId,
+      body,
+    });
   }
 
   async findByUserAndDay(

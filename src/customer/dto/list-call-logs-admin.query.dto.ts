@@ -22,6 +22,10 @@ export class ListCallLogsAdminQueryDto {
   outcome?: 'all' | 'answered' | 'busy' | 'no_answer';
 
   @IsOptional()
+  @IsIn(['all', 'voip', 'meet'])
+  channel?: 'all' | 'voip' | 'meet';
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

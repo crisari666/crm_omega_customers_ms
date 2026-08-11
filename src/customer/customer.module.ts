@@ -37,6 +37,7 @@ import {
   CustomerEventSchema,
 } from './schemas/customer-event.schema';
 import { CustomerCallLogsService } from './customer-call-logs.service';
+import { GoogleMeetArtifactsService } from './google-meet-artifacts.service';
 import {
   VentorScheduleEvent,
   VentorScheduleEventSchema,
@@ -138,6 +139,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerService,
     CustomerAuditService,
     CustomerCallLogsService,
+    GoogleMeetArtifactsService,
     CustomerEventsService,
     CustomerAutocompleteService,
     VoiceRmqTopologyService,
@@ -163,6 +165,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerPotentialCustomersOutboundService,
     VoiceRmqTopologyService,
     CustomerEventsService,
+    CustomerCallLogsService,
     MetaConversionsApiService,
   ],
 })

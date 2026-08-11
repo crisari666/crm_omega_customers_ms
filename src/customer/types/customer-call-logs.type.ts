@@ -16,6 +16,9 @@ export type CustomerCallLogAdminItemDto = {
   callSid: string;
   utterances?: CustomerCallUtterance[];
   provider: string;
+  /** Derived channel for UI: Meet vs Twilio VoIP. */
+  channel: 'voip' | 'meet';
+  googleMeetUrl?: string;
   from?: string;
   to?: string;
   direction?: string;
