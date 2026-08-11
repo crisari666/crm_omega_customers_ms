@@ -63,6 +63,13 @@ export class CustomerAdminController {
     return this.customerCallLogsService.listAdmin(query);
   }
 
+  @Post('call-logs/:callLogId/meet-transcript/refresh')
+  refreshMeetTranscript(
+    @Param('callLogId', ParseHexObjectIdPipe) callLogId: string,
+  ) {
+    return this.customerCallLogsService.refetchGoogleMeetTranscript(callLogId);
+  }
+
   @Get('call-audit/config')
   getCallAuditConfig() {
     return this.callAuditLlmConfigService.getPublicConfig();
