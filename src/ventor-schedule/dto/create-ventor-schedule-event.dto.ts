@@ -1,4 +1,11 @@
-import { IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { VentorScheduleEventType } from '../schemas/ventor-schedule-event.schema';
 
 export class CreateVentorScheduleEventDto {
@@ -24,4 +31,20 @@ export class CreateVentorScheduleEventDto {
   @IsString()
   @MaxLength(2000)
   note?: string;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  @MaxLength(2000)
+  googleMeetUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  googleCalendarEventId?: string;
+
+  /** Google account email that owns the Meet (for admin SA transcript refresh). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(320)
+  organizerEmail?: string;
 }

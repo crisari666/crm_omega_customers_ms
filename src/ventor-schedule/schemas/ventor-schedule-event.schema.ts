@@ -38,6 +38,12 @@ export class VentorScheduleEvent {
   @Prop()
   note?: string;
 
+  @Prop()
+  googleMeetUrl?: string;
+
+  @Prop()
+  googleCalendarEventId?: string;
+
   @Prop({
     type: String,
     enum: VentorScheduleEventStatus,
