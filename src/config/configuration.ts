@@ -53,6 +53,12 @@ export default (): {
     maxFileBytes: number;
     allowedMimeTypes: readonly string[];
   };
+  customerDownPayment: {
+    contractDirectory: string;
+    feeEvidenceDirectory: string;
+    maxFileBytes: number;
+    allowedMimeTypes: readonly string[];
+  };
   officeBackInternal: { baseUrl: string; apiKey: string };
   firebase: { adminCredentialsPath: string; agentWebAppBaseUrl: string };
   customersMetaIngest: { actorUserId: string };
@@ -92,6 +98,35 @@ export default (): {
   const maxFileBytes =
     Number.isFinite(parsedMaxEvidence) && parsedMaxEvidence > 0 ? parsedMaxEvidence : 5242880;
   const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const;
+  const downPaymentAllowedMimeTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/pdf',
+  ] as const;
+  const contractDirRaw = trimEnv(process.env.CUSTOMER_DOWN_PAYMENT_CONTRACT_DIR);
+  const contractDirectory =
+    contractDirRaw !== ''
+      ? contractDirRaw
+      : join(process.cwd(), 'uploads', 'customer-down-payment-contracts');
+  const feeEvidenceDirRaw = trimEnv(
+    process.env.CUSTOMER_DOWN_PAYMENT_FEE_EVIDENCE_DIR,
+  );
+  const feeEvidenceDirectory =
+    feeEvidenceDirRaw !== ''
+      ? feeEvidenceDirRaw
+      : join(process.cwd(), 'uploads', 'customer-payment-fee-evidence');
+  const maxDownPaymentFileBytesRaw = trimEnv(
+    process.env.CUSTOMER_DOWN_PAYMENT_FILE_MAX_BYTES,
+  );
+  const parsedMaxDownPaymentFile = Number.parseInt(
+    maxDownPaymentFileBytesRaw || '10485760',
+    10,
+  );
+  const downPaymentMaxFileBytes =
+    Number.isFinite(parsedMaxDownPaymentFile) && parsedMaxDownPaymentFile > 0
+      ? parsedMaxDownPaymentFile
+      : 10485760;
   const officeBase = process.env.CRM_BACKEND_URL
   const officeKey = trimEnv(process.env.OFFICE_BACK_INTERNAL_API_KEY);
   const metaActor = trimEnv(process.env.CUSTOMERS_META_INGEST_ACTOR_ID) || 'meta-gateway-ingest';
@@ -144,6 +179,12 @@ export default (): {
       directory: evidenceDirectory,
       maxFileBytes,
       allowedMimeTypes,
+    },
+    customerDownPayment: {
+      contractDirectory,
+      feeEvidenceDirectory,
+      maxFileBytes: downPaymentMaxFileBytes,
+      allowedMimeTypes: downPaymentAllowedMimeTypes,
     },
     officeBackInternal: {
       baseUrl: officeBase,
