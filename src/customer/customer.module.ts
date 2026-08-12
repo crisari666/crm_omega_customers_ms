@@ -167,6 +167,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerEventsService,
     CustomerCallLogsService,
     MetaConversionsApiService,
+    CustomerAssignmentPushService,
   ],
 })
 export class CustomerModule implements OnModuleInit {

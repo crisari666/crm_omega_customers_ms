@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 
 type AssignmentKind = 'assigned' | 'reassigned' | 'unassigned';
+type OnLandAssignmentKind = 'assigned' | 'reassigned' | 'cleared';
 
 /**
  * Sends FCM pushes when a customer's assignee changes (tokens from office_back).
@@ -65,6 +66,9 @@ export class CustomerAssignmentPushService {
               body: copy.body,
               customerId: params.customerId,
               kind,
+              dataType: 'customer_assignment',
+              route: `/clients/${params.customerId}`,
+              extraData: { assignmentKind: kind },
             }),
           );
         }
@@ -76,6 +80,155 @@ export class CustomerAssignmentPushService {
     } catch (err: unknown) {
       this.logger.warn(
         `Assignment push failed customerId=${params.customerId}: ${this.formatErrorDetails(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Notifies related agents when a down payment (cierre) is created.
+   * Never throws — payment create must not fail for push errors.
+   */
+  async executeNotifyDownPaymentCreated(params: {
+    readonly customerId: string;
+    readonly lotNumber: string;
+    readonly projectName: string;
+    readonly customerName: string;
+    readonly recipientUserIds: readonly string[];
+  }): Promise<void> {
+    try {
+      const recipientIds = [
+        ...new Set(
+          params.recipientUserIds
+            .map((id) => id.trim())
+            .filter((id) => id !== ''),
+        ),
+      ];
+      if (recipientIds.length === 0) {
+        return;
+      }
+      const tokensByUserId = await this.fetchFcmTokens(recipientIds);
+      const customerLabel =
+        params.customerName.trim() !== ''
+          ? params.customerName.trim()
+          : 'Un cliente';
+      const projectLabel =
+        params.projectName.trim() !== ''
+          ? params.projectName.trim()
+          : 'el proyecto';
+      const body = `${customerLabel} acaba de comprar el lote ${params.lotNumber} en ${projectLabel}. ¡Excelente trabajo!`;
+      const sends: Array<Promise<void>> = [];
+      for (const userId of recipientIds) {
+        const tokens = tokensByUserId[userId] ?? [];
+        if (tokens.length === 0) {
+          this.logger.warn(
+            `Down payment push skip: no FCM token userId=${userId} customerId=${params.customerId}`,
+          );
+          continue;
+        }
+        for (const token of tokens) {
+          sends.push(
+            this.sendToToken({
+              token,
+              userId,
+              title: '🔥 ¡Nuevo cierre!',
+              body,
+              customerId: params.customerId,
+              kind: 'assigned',
+              dataType: 'down_payment_created',
+              route: `/clients/${params.customerId}`,
+              extraData: {
+                lotNumber: params.lotNumber,
+                projectName: projectLabel,
+              },
+            }),
+          );
+        }
+      }
+      await Promise.all(sends);
+      this.logger.log(
+        `Down payment push done customerId=${params.customerId} recipients=${recipientIds.join(',')}`,
+      );
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Down payment push failed customerId=${params.customerId}: ${this.formatErrorDetails(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Notifies on-land agent (and previous agent on reassign/clear) when a visit is assigned.
+   * Never throws — schedule assign must not fail for push errors.
+   */
+  async executeNotifyOnLandAgentAssigned(params: {
+    readonly customerId: string;
+    readonly scheduleEventId: string;
+    readonly onLandAgentFrom?: string | null;
+    readonly onLandAgentTo?: string | null;
+    readonly customerDisplayName?: string;
+  }): Promise<void> {
+    try {
+      const from =
+        params.onLandAgentFrom != null && params.onLandAgentFrom.trim() !== ''
+          ? params.onLandAgentFrom.trim()
+          : undefined;
+      const to =
+        params.onLandAgentTo != null && params.onLandAgentTo.trim() !== ''
+          ? params.onLandAgentTo.trim()
+          : undefined;
+      if (from === to) {
+        return;
+      }
+      const kind: OnLandAssignmentKind =
+        to == null ? 'cleared' : from == null ? 'assigned' : 'reassigned';
+      const recipientIds = [
+        ...new Set([from, to].filter((id): id is string => id != null)),
+      ];
+      if (recipientIds.length === 0) {
+        return;
+      }
+      const tokensByUserId = await this.fetchFcmTokens(recipientIds);
+      const displayName = (params.customerDisplayName ?? '').trim();
+      const sends: Array<Promise<void>> = [];
+      for (const userId of recipientIds) {
+        const tokens = tokensByUserId[userId] ?? [];
+        if (tokens.length === 0) {
+          this.logger.warn(
+            `On-land assign push skip: no FCM token userId=${userId} customerId=${params.customerId}`,
+          );
+          continue;
+        }
+        const isNewAgent = to != null && userId === to;
+        const copy = this.buildOnLandNotificationCopy({
+          kind,
+          isNewAgent,
+          customerDisplayName: displayName,
+        });
+        for (const token of tokens) {
+          sends.push(
+            this.sendToToken({
+              token,
+              userId,
+              title: copy.title,
+              body: copy.body,
+              customerId: params.customerId,
+              kind: kind === 'cleared' ? 'unassigned' : kind,
+              dataType: 'on_land_visit_assigned',
+              route: `/clients/${params.customerId}`,
+              extraData: {
+                scheduleEventId: params.scheduleEventId,
+                onLandAssignmentKind: kind,
+              },
+            }),
+          );
+        }
+      }
+      await Promise.all(sends);
+      this.logger.log(
+        `On-land assign push done customerId=${params.customerId} scheduleEventId=${params.scheduleEventId} kind=${kind} recipients=${recipientIds.join(',')}`,
+      );
+    } catch (err: unknown) {
+      this.logger.warn(
+        `On-land assign push failed customerId=${params.customerId}: ${this.formatErrorDetails(err)}`,
       );
     }
   }
@@ -112,6 +265,33 @@ export class CustomerAssignmentPushService {
     return {
       title: 'Cliente reasignado',
       body: 'Un cliente fue reasignado a otro asesor.',
+    };
+  }
+
+  private buildOnLandNotificationCopy(input: {
+    readonly kind: OnLandAssignmentKind;
+    readonly isNewAgent: boolean;
+    readonly customerDisplayName: string;
+  }): { readonly title: string; readonly body: string } {
+    const who =
+      input.customerDisplayName !== ''
+        ? input.customerDisplayName
+        : 'un cliente';
+    if (input.isNewAgent) {
+      return {
+        title: 'Visita en terreno asignada',
+        body: `Te asignaron la visita en terreno de ${who}. Ábrelo en Clientes.`,
+      };
+    }
+    if (input.kind === 'cleared') {
+      return {
+        title: 'Visita en terreno liberada',
+        body: `Ya no eres el agente en terreno de ${who}.`,
+      };
+    }
+    return {
+      title: 'Visita en terreno reasignada',
+      body: `La visita en terreno de ${who} fue asignada a otro asesor.`,
     };
   }
 
@@ -179,6 +359,9 @@ export class CustomerAssignmentPushService {
     readonly body: string;
     readonly customerId: string;
     readonly kind: AssignmentKind;
+    readonly dataType: string;
+    readonly route: string;
+    readonly extraData?: Record<string, string>;
   }): Promise<void> {
     if (!this.isFirebaseReady) {
       this.logger.warn(
@@ -187,14 +370,13 @@ export class CustomerAssignmentPushService {
       return;
     }
     this.logger.log(
-      `Assignment push send userId=${input.userId} customerId=${input.customerId} kind=${input.kind} fcmToken=${input.token}`,
+      `Push send type=${input.dataType} userId=${input.userId} customerId=${input.customerId} kind=${input.kind} fcmToken=${input.token}`,
     );
-    const detailRoute = `/clients/${input.customerId}`;
     const agentWebBase = (
       this.configService.get<string>('firebase.agentWebAppBaseUrl', '') ?? ''
     ).trim().replace(/\/$/, '');
     const webClickLink =
-      agentWebBase !== '' ? `${agentWebBase}${detailRoute}` : undefined;
+      agentWebBase !== '' ? `${agentWebBase}${input.route}` : undefined;
     try {
       await admin.messaging().send({
         token: input.token,
@@ -203,10 +385,10 @@ export class CustomerAssignmentPushService {
           body: input.body,
         },
         data: {
-          type: 'customer_assignment',
-          route: detailRoute,
+          type: input.dataType,
+          route: input.route,
           customerId: input.customerId,
-          assignmentKind: input.kind,
+          ...(input.extraData ?? {}),
         },
         android: {
           priority: 'high',
@@ -230,7 +412,7 @@ export class CustomerAssignmentPushService {
       });
     } catch (err: unknown) {
       this.logger.warn(
-        `Assignment push send failed userId=${input.userId} customerId=${input.customerId} fcmToken=${input.token} ${this.formatErrorDetails(err)}`,
+        `Push send failed type=${input.dataType} userId=${input.userId} customerId=${input.customerId} fcmToken=${input.token} ${this.formatErrorDetails(err)}`,
       );
     }
   }
