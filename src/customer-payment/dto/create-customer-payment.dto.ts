@@ -1,12 +1,14 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { CUSTOMER_PAYMENT_METHODS } from '../constants/payment-method.constants';
 
 export class CreateCustomerPaymentDto {
   @IsString()
@@ -29,8 +31,9 @@ export class CreateCustomerPaymentDto {
   receiptNumber?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @IsIn(CUSTOMER_PAYMENT_METHODS, {
+    message: `paymentMethod must be one of: ${CUSTOMER_PAYMENT_METHODS.join(', ')}`,
+  })
   paymentMethod?: string;
 
   @IsOptional()

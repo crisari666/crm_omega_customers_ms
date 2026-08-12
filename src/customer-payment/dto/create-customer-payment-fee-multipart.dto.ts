@@ -1,6 +1,4 @@
-import { Type } from 'class-transformer';
 import {
-  Allow,
   IsDateString,
   IsIn,
   IsNumber,
@@ -9,21 +7,16 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CUSTOMER_PAYMENT_METHODS } from '../constants/payment-method.constants';
 
 /**
- * Same fields as {@link CreateCustomerPaymentDto} for multipart form bodies.
+ * Multipart body fields for adding a fee under a down payment.
  */
-export class CreateCustomerPaymentMultipartDto {
-  @IsString()
-  customerId: string;
-
-  @IsString()
-  projectId: string;
-
+export class CreateCustomerPaymentFeeMultipartDto {
   @Type(() => Number)
   @IsNumber()
-  @Min(0.01, { message: 'paymentValue must be greater than zero' })
+  @Min(1)
   paymentValue: number;
 
   @IsDateString()
@@ -31,7 +24,7 @@ export class CreateCustomerPaymentMultipartDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(120)
   receiptNumber?: string;
 
   @IsOptional()
@@ -44,8 +37,4 @@ export class CreateCustomerPaymentMultipartDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
-
-  /** Multipart file field; consumed by Multer (`@UploadedFile()`), not validated here. */
-  @Allow()
-  evidence?: unknown;
 }
