@@ -10,11 +10,14 @@ import {
 } from '@nestjs/common';
 import { JwtUser } from '../core/decorators/jwt-user.decorator';
 import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
-import { OFFICE_USER_LEVEL_MAIN_LEAD } from '../core/constants/office-user-level.constant';
-import { assertOfficeMainLead } from '../core/utils/assert-office-main-lead.util';
+import {
+  assertOfficeOnLandCoordinator,
+  isOfficeOnLandCoordinator,
+} from '../core/utils/assert-office-main-lead.util';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
 import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto';
+import { UpdateOnLandAgentDto } from './dto/update-on-land-agent.dto';
 import { UpdateVentorScheduleStatusDto } from './dto/update-ventor-schedule-status.dto';
 import { VentorScheduleByDayQueryDto } from './dto/ventor-schedule-by-day-query.dto';
 import { VENTOR_SCHEDULE_BY_DAY_VIEW } from './dto/ventor-schedule-by-day-view.const';
@@ -46,6 +49,7 @@ function serializeEvent(doc: VentorScheduleEventDocument) {
   return {
     id: String(o._id),
     userId: o.userId,
+    onLandAgentUserId: o.onLandAgentUserId ?? null,
     customerId,
     scheduledAt: o.scheduledAt?.toISOString?.() ?? o.scheduledAt,
     eventType: o.eventType,
@@ -101,7 +105,7 @@ export class VentorScheduleController {
   ) {
     const view = query.view ?? VENTOR_SCHEDULE_BY_DAY_VIEW.Self;
     if (view === VENTOR_SCHEDULE_BY_DAY_VIEW.MainLeadOnLand) {
-      assertOfficeMainLead(jwtUser);
+      assertOfficeOnLandCoordinator(jwtUser);
       const list = await this.ventorScheduleService.findAllOnLandByDay(
         query.date,
       );
@@ -125,6 +129,22 @@ export class VentorScheduleController {
     return this.ventorScheduleService.syncMeetCall(userId, id, body);
   }
 
+  @Patch(':id/on-land-agent')
+  async patchOnLandAgent(
+    @Param('id', ParseHexObjectIdPipe) id: string,
+    @Body() body: UpdateOnLandAgentDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const userId = resolveOfficeUserId(jwtUser);
+    const doc = await this.ventorScheduleService.assignOnLandAgent({
+      actorUserId: userId,
+      isCoordinator: isOfficeOnLandCoordinator(jwtUser),
+      eventId: id,
+      onLandAgentUserId: body.onLandAgentUserId,
+    });
+    return serializeEvent(doc);
+  }
+
   @Patch(':id/status')
   async patchStatus(
     @Param('id') id: string,
@@ -141,10 +161,10 @@ export class VentorScheduleController {
       return serializeEvent(doc);
     } catch (err: unknown) {
       if (err instanceof NotFoundException) {
-        if (jwtUser?.level !== OFFICE_USER_LEVEL_MAIN_LEAD) {
+        if (!isOfficeOnLandCoordinator(jwtUser)) {
           throw err;
         }
-        const doc = await this.ventorScheduleService.updateStatusAsMainLead(
+        const doc = await this.ventorScheduleService.updateStatusAsCoordinator(
           userId,
           id,
           body.status,

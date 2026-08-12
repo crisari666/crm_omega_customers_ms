@@ -9,6 +9,7 @@ import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
 import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto';
+import { CustomerAssignmentPushService } from '../customer/customer-assignment-push.service';
 import { CustomerEventsService } from '../customer/customer-events.service';
 import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
 import type { CustomerCallLogAdminItemDto } from '../customer/types/customer-call-logs.type';
@@ -25,6 +26,8 @@ const ON_LAND_CUSTOMER_EVENT_DESCRIPTION = {
   customSentLand: 'Customer sent to land: visit scheduled.',
   visitCancelled: 'On-land visit cancelled.',
   visitCompleted: 'On-land visit completed.',
+  agentAssigned: 'On-land agent assigned to visit.',
+  agentCleared: 'On-land agent assignment cleared.',
 } as const;
 
 function parseUtcDateTime(dateYmd: string, timeHm: string): Date {
@@ -50,6 +53,7 @@ export class VentorScheduleService {
     private readonly customerModel: Model<CustomerDocument>,
     private readonly customerEventsService: CustomerEventsService,
     private readonly customerCallLogsService: CustomerCallLogsService,
+    private readonly customerAssignmentPushService: CustomerAssignmentPushService,
   ) {}
 
   private async assertCustomerAccessible(
@@ -199,8 +203,8 @@ export class VentorScheduleService {
     const { start, end } = utcDayRange(dateYmd);
     const rows = await this.scheduleModel
       .find({
-        userId,
         scheduledAt: { $gte: start, $lt: end },
+        $or: [{ userId }, { onLandAgentUserId: userId }],
       })
       .sort({ scheduledAt: 1 })
       .populate({
@@ -258,15 +262,21 @@ export class VentorScheduleService {
     }
     const scheduleObjectId = new Types.ObjectId(eventId);
     const prior = await this.scheduleModel
-      .findOne({ _id: scheduleObjectId, userId })
-      .select('status eventType customerId scheduledAt')
+      .findOne({
+        _id: scheduleObjectId,
+        $or: [{ userId }, { onLandAgentUserId: userId }],
+      })
+      .select('status eventType customerId scheduledAt userId onLandAgentUserId')
       .exec();
     if (!prior) {
       throw new NotFoundException('Event not found');
     }
     const updated = await this.scheduleModel
       .findOneAndUpdate(
-        { _id: scheduleObjectId, userId },
+        {
+          _id: scheduleObjectId,
+          $or: [{ userId }, { onLandAgentUserId: userId }],
+        },
         { $set: { status } },
         { returnDocument: 'after' },
       )
@@ -294,7 +304,7 @@ export class VentorScheduleService {
     return updated as unknown as VentorScheduleEventDocument;
   }
 
-  async updateStatusAsMainLead(
+  async updateStatusAsCoordinator(
     actorUserId: string,
     eventId: string,
     status: VentorScheduleEventStatus,
@@ -312,7 +322,7 @@ export class VentorScheduleService {
     }
     if (prior.eventType !== VentorScheduleEventType.OnLand) {
       throw new ForbiddenException(
-        'Only on_land events can be updated by main lead',
+        'Only on_land events can be updated by coordinator',
       );
     }
     const updated = await this.scheduleModel
@@ -343,6 +353,116 @@ export class VentorScheduleService {
       becameDone,
     });
     return updated as unknown as VentorScheduleEventDocument;
+  }
+
+  /** @deprecated Prefer {@link updateStatusAsCoordinator} */
+  async updateStatusAsMainLead(
+    actorUserId: string,
+    eventId: string,
+    status: VentorScheduleEventStatus,
+  ): Promise<VentorScheduleEventDocument> {
+    return this.updateStatusAsCoordinator(actorUserId, eventId, status);
+  }
+
+  /**
+   * Assigns or clears the on-land attending agent for a pending on_land event.
+   */
+  async assignOnLandAgent(args: {
+    readonly actorUserId: string;
+    readonly isCoordinator: boolean;
+    readonly eventId: string;
+    readonly onLandAgentUserId: string | null;
+  }): Promise<VentorScheduleEventDocument> {
+    if (!Types.ObjectId.isValid(args.eventId)) {
+      throw new NotFoundException('Event not found');
+    }
+    const scheduleObjectId = new Types.ObjectId(args.eventId);
+    const prior = await this.scheduleModel.findById(scheduleObjectId).exec();
+    if (!prior) {
+      throw new NotFoundException('Event not found');
+    }
+    if (prior.eventType !== VentorScheduleEventType.OnLand) {
+      throw new BadRequestException('Only on_land events can be assigned');
+    }
+    if (prior.status !== VentorScheduleEventStatus.Pending) {
+      throw new BadRequestException('Only pending on_land events can be assigned');
+    }
+    const canAssign =
+      args.isCoordinator ||
+      prior.userId === args.actorUserId ||
+      (prior.onLandAgentUserId === args.actorUserId &&
+        args.onLandAgentUserId === null);
+    if (!canAssign) {
+      throw new ForbiddenException('Not allowed to assign on-land agent');
+    }
+    if (
+      args.onLandAgentUserId != null &&
+      args.onLandAgentUserId.trim() === ''
+    ) {
+      throw new BadRequestException('onLandAgentUserId is invalid');
+    }
+    const nextAgentId =
+      args.onLandAgentUserId == null ? null : args.onLandAgentUserId.trim();
+    const updated = await this.scheduleModel
+      .findOneAndUpdate(
+        { _id: scheduleObjectId },
+        nextAgentId == null
+          ? { $unset: { onLandAgentUserId: 1 } }
+          : { $set: { onLandAgentUserId: nextAgentId } },
+        { returnDocument: 'after' },
+      )
+      .populate<{ customerId: CustomerDocument }>({
+        path: 'customerId',
+        select: 'name lastName interestedProjects',
+      })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException('Event not found');
+    }
+    await this.customerEventsService.createEvent({
+      customerId: String(prior.customerId),
+      actorUserId: args.actorUserId,
+      body: {
+        eventType: 'CUSTOMER_ON_LAND_AGENT_ASSIGNED',
+        description:
+          nextAgentId == null
+            ? ON_LAND_CUSTOMER_EVENT_DESCRIPTION.agentCleared
+            : ON_LAND_CUSTOMER_EVENT_DESCRIPTION.agentAssigned,
+        metadata: {
+          ...this.buildScheduleEventMetadata(scheduleObjectId, prior.scheduledAt),
+          onLandAgentUserId: nextAgentId,
+          previousOnLandAgentUserId: prior.onLandAgentUserId ?? null,
+        },
+      },
+    });
+    const populatedCustomer = updated.customerId as unknown as
+      | CustomerDocument
+      | Types.ObjectId
+      | string;
+    const customerDisplayName = this.resolveCustomerDisplayName(populatedCustomer);
+    await this.customerAssignmentPushService.executeNotifyOnLandAgentAssigned({
+      customerId: String(prior.customerId),
+      scheduleEventId: args.eventId,
+      onLandAgentFrom: prior.onLandAgentUserId ?? null,
+      onLandAgentTo: nextAgentId,
+      customerDisplayName,
+    });
+    return updated as unknown as VentorScheduleEventDocument;
+  }
+
+  private resolveCustomerDisplayName(
+    customer: CustomerDocument | Types.ObjectId | string,
+  ): string {
+    if (
+      customer == null ||
+      typeof customer === 'string' ||
+      customer instanceof Types.ObjectId
+    ) {
+      return '';
+    }
+    const name = (customer.name ?? '').trim();
+    const lastName = (customer.lastName ?? '').trim();
+    return [name, lastName].filter((part) => part !== '').join(' ');
   }
 
   private async emitOnLandStatusCustomerEventsIfNeeded(args: {
