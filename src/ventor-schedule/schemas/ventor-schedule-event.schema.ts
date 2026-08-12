@@ -44,6 +44,10 @@ export class VentorScheduleEvent {
   @Prop()
   googleCalendarEventId?: string;
 
+  /** Office user id of the agent attending the on-land visit (nullable until assigned). */
+  @Prop({ index: true })
+  onLandAgentUserId?: string;
+
   @Prop({
     type: String,
     enum: VentorScheduleEventStatus,
@@ -59,3 +63,4 @@ export const VentorScheduleEventSchema = SchemaFactory.createForClass(
 
 VentorScheduleEventSchema.index({ userId: 1, scheduledAt: 1 });
 VentorScheduleEventSchema.index({ eventType: 1, scheduledAt: 1 });
+VentorScheduleEventSchema.index({ onLandAgentUserId: 1, scheduledAt: 1 });

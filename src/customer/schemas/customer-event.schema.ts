@@ -11,6 +11,7 @@ export const CUSTOMER_EVENT_TYPES = [
   'CUSTOM_SENT_LAND',
   'CUSTOMER_CANCELLED_VISIT_LAND',
   'CUSTOMER_VISIT_LAND',
+  'CUSTOMER_ON_LAND_AGENT_ASSIGNED',
 ] as const;
 
 export type CustomerEventType = (typeof CUSTOMER_EVENT_TYPES)[number];
