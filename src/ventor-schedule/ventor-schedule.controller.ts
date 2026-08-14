@@ -106,7 +106,9 @@ export class VentorScheduleController {
     const view = query.view ?? VENTOR_SCHEDULE_BY_DAY_VIEW.Self;
     if (view === VENTOR_SCHEDULE_BY_DAY_VIEW.MainLeadOnLand) {
       assertOfficeOnLandCoordinator(jwtUser);
-      const list = await this.ventorScheduleService.findAllOnLandByDay(
+      const userId = resolveOfficeUserId(jwtUser);
+      const list = await this.ventorScheduleService.findCoordinatorAgendaByDay(
+        userId,
         query.date,
       );
       return list.map((d) => serializeEvent(d));

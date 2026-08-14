@@ -215,14 +215,19 @@ export class VentorScheduleService {
     return rows as VentorScheduleEventDocument[];
   }
 
-  async findAllOnLandByDay(
+  /**
+   * Coordinator day agenda: all on-land visits plus events owned by the
+   * coordinator (virtual Meet, office, call).
+   */
+  async findCoordinatorAgendaByDay(
+    userId: string,
     dateYmd: string,
   ): Promise<VentorScheduleEventDocument[]> {
     const { start, end } = utcDayRange(dateYmd);
     const rows = await this.scheduleModel
       .find({
-        eventType: VentorScheduleEventType.OnLand,
         scheduledAt: { $gte: start, $lt: end },
+        $or: [{ eventType: VentorScheduleEventType.OnLand }, { userId }],
       })
       .sort({ scheduledAt: 1 })
       .populate({

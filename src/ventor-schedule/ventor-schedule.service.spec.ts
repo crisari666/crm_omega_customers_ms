@@ -3,6 +3,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
 import { Customer } from '../customer/schemas/customer.schema';
+import { CustomerAssignmentPushService } from '../customer/customer-assignment-push.service';
+import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
 import { CustomerEventsService } from '../customer/customer-events.service';
 import {
   VentorScheduleEvent,
@@ -37,17 +39,21 @@ describe('VentorScheduleService', () => {
     (
       scheduleModel as unknown as { findOneAndUpdate: typeof findOneAndUpdateMock }
     ).findOneAndUpdate = findOneAndUpdateMock;
-
     const customerFindById = jest.fn();
     const customerModel = {
       findById: customerFindById,
     };
-
     const recordEventMock = jest.fn().mockResolvedValue(undefined);
     const customerEventsService = {
       createEvent: recordEventMock,
     };
-
+    const customerCallLogsService = {
+      createGoogleMeetScheduleLog: jest.fn(),
+      applyGoogleMeetSync: jest.fn(),
+    };
+    const customerAssignmentPushService = {
+      executeNotifyOnLandAgentAssigned: jest.fn(),
+    };
     return {
       scheduleModel,
       findMock,
@@ -57,11 +63,14 @@ describe('VentorScheduleService', () => {
       customerFindById,
       customerEventsService,
       recordEventMock,
+      customerCallLogsService,
+      customerAssignmentPushService,
     };
   };
 
-  it('findAllOnLandByDay queries OnLand and date range only', async () => {
-    const deps = setup();
+  const compileService = async (
+    deps: ReturnType<typeof setup>,
+  ): Promise<VentorScheduleService> => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         VentorScheduleService,
@@ -74,38 +83,43 @@ describe('VentorScheduleService', () => {
           provide: CustomerEventsService,
           useValue: deps.customerEventsService,
         },
+        {
+          provide: CustomerCallLogsService,
+          useValue: deps.customerCallLogsService,
+        },
+        {
+          provide: CustomerAssignmentPushService,
+          useValue: deps.customerAssignmentPushService,
+        },
       ],
     }).compile();
-    const service = moduleRef.get(VentorScheduleService);
+    return moduleRef.get(VentorScheduleService);
+  };
+
+  it('findCoordinatorAgendaByDay queries on-land or owner events in date range', async () => {
+    const deps = setup();
+    const service = await compileService(deps);
     deps.findMock.mockReturnValue(createChain([]));
-    const list = await service.findAllOnLandByDay('2026-04-30');
+    const list = await service.findCoordinatorAgendaByDay(
+      mainLeadActorId,
+      '2026-04-30',
+    );
     expect(list).toEqual([]);
     expect(deps.findMock).toHaveBeenCalledWith({
-      eventType: VentorScheduleEventType.OnLand,
       scheduledAt: expect.objectContaining({
         $gte: expect.any(Date),
         $lt: expect.any(Date),
       }),
+      $or: [
+        { eventType: VentorScheduleEventType.OnLand },
+        { userId: mainLeadActorId },
+      ],
     });
   });
 
   it('updateStatusAsMainLead rejects non-on_land event', async () => {
     const deps = setup();
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        VentorScheduleService,
-        {
-          provide: getModelToken(VentorScheduleEvent.name),
-          useValue: deps.scheduleModel,
-        },
-        { provide: getModelToken(Customer.name), useValue: deps.customerModel },
-        {
-          provide: CustomerEventsService,
-          useValue: deps.customerEventsService,
-        },
-      ],
-    }).compile();
-    const service = moduleRef.get(VentorScheduleService);
+    const service = await compileService(deps);
     deps.findOneMock.mockReturnValue(
       createChain({
         _id: new Types.ObjectId(eventId),
@@ -127,21 +141,7 @@ describe('VentorScheduleService', () => {
 
   it('updateStatusAsMainLead updates on_land and records actor as main lead', async () => {
     const deps = setup();
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        VentorScheduleService,
-        {
-          provide: getModelToken(VentorScheduleEvent.name),
-          useValue: deps.scheduleModel,
-        },
-        { provide: getModelToken(Customer.name), useValue: deps.customerModel },
-        {
-          provide: CustomerEventsService,
-          useValue: deps.customerEventsService,
-        },
-      ],
-    }).compile();
-    const service = moduleRef.get(VentorScheduleService);
+    const service = await compileService(deps);
     const oid = new Types.ObjectId(eventId);
     const cid = new Types.ObjectId(customerId);
     deps.findOneMock.mockReturnValueOnce(
@@ -182,21 +182,7 @@ describe('VentorScheduleService', () => {
 
   it('updateStatusAsMainLead throws NotFound for invalid id', async () => {
     const deps = setup();
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        VentorScheduleService,
-        {
-          provide: getModelToken(VentorScheduleEvent.name),
-          useValue: deps.scheduleModel,
-        },
-        { provide: getModelToken(Customer.name), useValue: deps.customerModel },
-        {
-          provide: CustomerEventsService,
-          useValue: deps.customerEventsService,
-        },
-      ],
-    }).compile();
-    const service = moduleRef.get(VentorScheduleService);
+    const service = await compileService(deps);
     await expect(
       service.updateStatusAsMainLead(
         mainLeadActorId,
@@ -208,21 +194,7 @@ describe('VentorScheduleService', () => {
 
   it('updateStatus throws NotFound when event belongs to another user', async () => {
     const deps = setup();
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        VentorScheduleService,
-        {
-          provide: getModelToken(VentorScheduleEvent.name),
-          useValue: deps.scheduleModel,
-        },
-        { provide: getModelToken(Customer.name), useValue: deps.customerModel },
-        {
-          provide: CustomerEventsService,
-          useValue: deps.customerEventsService,
-        },
-      ],
-    }).compile();
-    const service = moduleRef.get(VentorScheduleService);
+    const service = await compileService(deps);
     deps.findOneMock.mockReturnValue(createChain(null));
     await expect(
       service.updateStatus(
