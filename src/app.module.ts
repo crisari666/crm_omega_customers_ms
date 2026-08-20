@@ -8,6 +8,7 @@ import { CoreModule } from './core/core.module';
 import { TokenJwtMiddleware } from './core/middleware/token-jwt.middleware';
 import { CustomerModule } from './customer/customer.module';
 import { CustomerConversationsModule } from './customer-conversations/customer-conversations.module';
+import { CustomerMetadataModule } from './customer-metadata/customer-metadata.module';
 import { CustomerStepsModule } from './customer-steps/customer-steps.module';
 import { CustomerPaymentModule } from './customer-payment/customer-payment.module';
 import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
@@ -29,6 +30,7 @@ import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing
     }),
     CustomerModule,
     CustomerConversationsModule,
+    CustomerMetadataModule,
     CustomerStepsModule,
     CustomerPaymentModule,
     VentorScheduleModule,
