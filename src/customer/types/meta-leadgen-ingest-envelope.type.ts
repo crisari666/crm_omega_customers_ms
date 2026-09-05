@@ -15,6 +15,7 @@ export type MetaLeadgenGraphPayload = {
   readonly formId?: string;
   readonly createdTime?: string;
   readonly platform?: string;
+  readonly campaignName?: string;
   readonly form?: MetaLeadgenFormMeta;
 };
 
