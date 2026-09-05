@@ -11,6 +11,8 @@ const CUSTOMER_PREFIX = '/customer';
 const VENTOR_SCHEDULE_PREFIX = '/ventor-schedule';
 const ADMIN_CUSTOMER_PREFIX = '/admin/customer';
 const ADMIN_WHATSAPP_MARKETING_PREFIX = '/admin/whatsapp-marketing';
+const WEBINAR_EVENTS_PREFIX = '/webinar-events';
+const WEBINAR_LEADS_PREFIX = '/webinar-leads';
 const BEARER_PREFIX_REGEX = /^Bearer\s+/i;
 
 function normalizeApiPathname(originalUrl: string): string {
@@ -39,8 +41,9 @@ function extractRawJwt(value: string): string {
 }
 
 /**
- * Requires a valid JWT in the `TOKEN` header for `/customer/*`, `/admin/customer/*`, and `/ventor-schedule/*`
- * (after optional global prefix `/customers-rest`), except `GET /customer/test`.
+ * Requires a valid JWT in the `TOKEN` header for `/customer/*`, `/admin/customer/*`,
+ * `/ventor-schedule/*`, `/admin/whatsapp-marketing/*`, `/webinar-events/*`, and `/webinar-leads/*`
+ * (after optional global prefix `/customers-rest`), except smoke `GET .../test` routes.
  */
 @Injectable()
 export class TokenJwtMiddleware implements NestMiddleware {
@@ -82,14 +85,28 @@ export class TokenJwtMiddleware implements NestMiddleware {
     const isVentorSchedule = pathname.startsWith(VENTOR_SCHEDULE_PREFIX);
     const isAdminCustomer = pathname.startsWith(ADMIN_CUSTOMER_PREFIX);
     const isAdminWhatsappMarketing = pathname.startsWith(ADMIN_WHATSAPP_MARKETING_PREFIX);
-    if (!isCustomer && !isVentorSchedule && !isAdminCustomer && !isAdminWhatsappMarketing) {
+    const isWebinarEvents = pathname.startsWith(WEBINAR_EVENTS_PREFIX);
+    const isWebinarLeads = pathname.startsWith(WEBINAR_LEADS_PREFIX);
+    if (
+      !isCustomer &&
+      !isVentorSchedule &&
+      !isAdminCustomer &&
+      !isAdminWhatsappMarketing &&
+      !isWebinarEvents &&
+      !isWebinarLeads
+    ) {
       return true;
     }
     const normalized =
       pathname.length > 1 && pathname.endsWith('/')
         ? pathname.slice(0, -1)
         : pathname;
-    if (req.method === 'GET' && normalized === `${CUSTOMER_PREFIX}/test`) {
+    if (
+      req.method === 'GET' &&
+      (normalized === `${CUSTOMER_PREFIX}/test` ||
+        normalized === `${WEBINAR_EVENTS_PREFIX}/test` ||
+        normalized === `${WEBINAR_LEADS_PREFIX}/test`)
+    ) {
       return true;
     }
     return false;

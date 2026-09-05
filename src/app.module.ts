@@ -13,6 +13,7 @@ import { CustomerStepsModule } from './customer-steps/customer-steps.module';
 import { CustomerPaymentModule } from './customer-payment/customer-payment.module';
 import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing.module';
+import { WebinarModule } from './webinar/webinar.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing
     CustomerPaymentModule,
     VentorScheduleModule,
     WhatsappMarketingModule,
+    WebinarModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],
