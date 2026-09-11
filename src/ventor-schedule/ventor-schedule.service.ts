@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -12,7 +13,15 @@ import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto
 import { CustomerAssignmentPushService } from '../customer/customer-assignment-push.service';
 import { CustomerEventsService } from '../customer/customer-events.service';
 import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
+import { GoogleMeetArtifactsService } from '../customer/google-meet-artifacts.service';
 import type { CustomerCallLogAdminItemDto } from '../customer/types/customer-call-logs.type';
+import {
+  MEET_AUDIT_SUBJECT_EMAIL,
+  MEET_AUDIT_SUBSCRIPTION_TTL_MS,
+  MeetSubscriptionStatus,
+} from './google-meet-audit.constants';
+import { VentorMeetGoogleCalendarService } from './ventor-meet-google-calendar.service';
+import { VentorMeetWorkspaceEventsService } from './ventor-meet-workspace-events.service';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
@@ -46,6 +55,8 @@ function utcDayRange(dateYmd: string): { start: Date; end: Date } {
 
 @Injectable()
 export class VentorScheduleService {
+  private readonly logger = new Logger(VentorScheduleService.name);
+
   constructor(
     @InjectModel(VentorScheduleEvent.name)
     private readonly scheduleModel: Model<VentorScheduleEventDocument>,
@@ -54,6 +65,9 @@ export class VentorScheduleService {
     private readonly customerEventsService: CustomerEventsService,
     private readonly customerCallLogsService: CustomerCallLogsService,
     private readonly customerAssignmentPushService: CustomerAssignmentPushService,
+    private readonly ventorMeetGoogleCalendarService: VentorMeetGoogleCalendarService,
+    private readonly ventorMeetWorkspaceEventsService: VentorMeetWorkspaceEventsService,
+    private readonly googleMeetArtifactsService: GoogleMeetArtifactsService,
   ) {}
 
   private async assertCustomerAccessible(
@@ -128,14 +142,15 @@ export class VentorScheduleService {
   ): Promise<VentorScheduleEventDocument> {
     await this.assertCustomerAccessible(userId, dto.customerId);
     const scheduledAt = parseUtcDateTime(dto.date, dto.time);
+    if (dto.eventType === VentorScheduleEventType.Virtual) {
+      return this.createVirtualMeetSchedule(userId, dto, scheduledAt);
+    }
     const doc = new this.scheduleModel({
       userId,
       customerId: new Types.ObjectId(dto.customerId),
       scheduledAt,
       eventType: dto.eventType,
       note: dto.note,
-      googleMeetUrl: dto.googleMeetUrl,
-      googleCalendarEventId: dto.googleCalendarEventId,
       status: VentorScheduleEventStatus.Pending,
     });
     const saved = await doc.save();
@@ -147,22 +162,279 @@ export class VentorScheduleService {
         saved.scheduledAt,
       );
     }
-    const meetUrl = dto.googleMeetUrl?.trim();
-    if (
-      dto.eventType === VentorScheduleEventType.Virtual &&
-      meetUrl
-    ) {
-      await this.customerCallLogsService.createGoogleMeetScheduleLog({
-        scheduleEventId: String(saved._id),
-        customerId: dto.customerId,
-        agentUserId: userId,
-        scheduledAt: saved.scheduledAt,
-        googleMeetUrl: meetUrl,
-        googleCalendarEventId: dto.googleCalendarEventId,
-        organizerEmail: dto.organizerEmail,
-      });
-    }
     return saved;
+  }
+
+  private async createVirtualMeetSchedule(
+    userId: string,
+    dto: CreateVentorScheduleEventDto,
+    scheduledAt: Date,
+  ): Promise<VentorScheduleEventDocument> {
+    const customer = await this.customerModel.findById(dto.customerId).exec();
+    const customerEmail =
+      dto.customerEmail?.trim().toLowerCase() ||
+      customer?.email?.trim().toLowerCase() ||
+      '';
+    const ventorEmail = dto.ventorEmail?.trim().toLowerCase() || '';
+    if (!customerEmail) {
+      throw new BadRequestException(
+        'customerEmail is required for virtual visits (provide it or set Customer.email)',
+      );
+    }
+    if (!ventorEmail) {
+      throw new BadRequestException(
+        'ventorEmail is required for virtual visits',
+      );
+    }
+    const placeholder = new this.scheduleModel({
+      userId,
+      customerId: new Types.ObjectId(dto.customerId),
+      scheduledAt,
+      eventType: VentorScheduleEventType.Virtual,
+      note: dto.note,
+      customerEmail,
+      ventorEmail,
+      organizerEmail: ventorEmail,
+      meetSubscriptionStatus: MeetSubscriptionStatus.Pending,
+      status: VentorScheduleEventStatus.Pending,
+    });
+    const saved = await placeholder.save();
+    const scheduleEventId = String(saved._id);
+    const customerName = customer
+      ? [customer.name, customer.lastName].filter(Boolean).join(' ').trim()
+      : '';
+    const meet = await this.ventorMeetGoogleCalendarService.executeCreateVentorAuditMeet(
+      {
+        scheduleEventId,
+        summary: customerName
+          ? `Visita virtual: ${customerName}`
+          : 'Visita virtual CRM',
+        description: dto.note?.trim() || undefined,
+        startAt: scheduledAt,
+        ventorEmail,
+        customerEmail,
+      },
+    );
+    saved.googleMeetUrl = meet.meetUrl;
+    saved.googleCalendarEventId = meet.eventId;
+    saved.meetSpaceId = meet.meetSpaceId;
+    saved.organizerEmail = meet.organizerEmail;
+    await this.maybeSubscribeMeetSpace(saved);
+    await saved.save();
+    await this.customerCallLogsService.createGoogleMeetScheduleLog({
+      scheduleEventId,
+      customerId: dto.customerId,
+      agentUserId: userId,
+      scheduledAt: saved.scheduledAt,
+      googleMeetUrl: meet.meetUrl,
+      googleCalendarEventId: meet.eventId,
+      organizerEmail: meet.organizerEmail,
+      meetSpaceId: meet.meetSpaceId,
+      customerEmail,
+      ventorEmail,
+    });
+    return saved;
+  }
+
+  /**
+   * Subscribe now if the visit is within the next 24h; otherwise leave pending for cron.
+   */
+  async maybeSubscribeMeetSpace(
+    doc: VentorScheduleEventDocument,
+  ): Promise<void> {
+    const spaceId = doc.meetSpaceId?.trim();
+    if (!spaceId) {
+      return;
+    }
+    const horizon = Date.now() + MEET_AUDIT_SUBSCRIPTION_TTL_MS;
+    if (doc.scheduledAt.getTime() > horizon) {
+      doc.meetSubscriptionStatus = MeetSubscriptionStatus.Pending;
+      return;
+    }
+    try {
+      const organizer =
+        doc.organizerEmail?.trim() ||
+        doc.ventorEmail?.trim() ||
+        MEET_AUDIT_SUBJECT_EMAIL;
+      const sub =
+        await this.ventorMeetWorkspaceEventsService.executeCreateMeetSpaceSubscription(
+          spaceId,
+          organizer,
+        );
+      doc.meetSpaceId = sub.meetSpaceId;
+      doc.meetSubscriptionStatus = MeetSubscriptionStatus.Active;
+      doc.meetSubscriptionName = sub.subscriptionName;
+      doc.meetSubscriptionExpireAt = sub.expireTime;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Meet subscription failed scheduleId=${String(doc._id)}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      doc.meetSubscriptionStatus = MeetSubscriptionStatus.Failed;
+    }
+  }
+
+  /**
+   * Hourly: subscribe pending/expired/failed virtual Meets within the next 24h.
+   */
+  async executeSubscribePendingMeetSpaces(): Promise<number> {
+    const now = new Date();
+    const horizon = new Date(Date.now() + MEET_AUDIT_SUBSCRIPTION_TTL_MS);
+    const rows = await this.scheduleModel
+      .find({
+        eventType: VentorScheduleEventType.Virtual,
+        meetSpaceId: { $exists: true, $nin: [null, ''] },
+        scheduledAt: { $gte: now, $lte: horizon },
+        meetSubscriptionStatus: {
+          $in: [
+            MeetSubscriptionStatus.Pending,
+            MeetSubscriptionStatus.Expired,
+            MeetSubscriptionStatus.Failed,
+            MeetSubscriptionStatus.None,
+          ],
+        },
+      })
+      .exec();
+    let subscribed = 0;
+    for (const row of rows) {
+      await this.maybeSubscribeMeetSpace(row);
+      await row.save();
+      if (row.meetSubscriptionStatus === MeetSubscriptionStatus.Active) {
+        subscribed += 1;
+      }
+    }
+    const expiredActive = await this.scheduleModel
+      .updateMany(
+        {
+          eventType: VentorScheduleEventType.Virtual,
+          meetSubscriptionStatus: MeetSubscriptionStatus.Active,
+          meetSubscriptionExpireAt: { $lte: now },
+        },
+        { $set: { meetSubscriptionStatus: MeetSubscriptionStatus.Expired } },
+      )
+      .exec();
+    if (expiredActive.modifiedCount > 0) {
+      this.logger.log(
+        `Marked ${expiredActive.modifiedCount} Meet subscriptions expired`,
+      );
+    }
+    return subscribed;
+  }
+
+  /**
+   * Manual / webhook: fetch Meet recordings + transcript as auditoria and persist.
+   */
+  async refreshMeetArtifactsForOwner(
+    userId: string,
+    scheduleEventId: string,
+  ): Promise<{
+    readonly schedule: VentorScheduleEventDocument;
+    readonly callLog: CustomerCallLogAdminItemDto;
+  }> {
+    if (!Types.ObjectId.isValid(scheduleEventId)) {
+      throw new NotFoundException('Schedule event not found');
+    }
+    const doc = await this.scheduleModel.findById(scheduleEventId).exec();
+    if (!doc) {
+      throw new NotFoundException('Schedule event not found');
+    }
+    if (doc.userId !== userId) {
+      throw new ForbiddenException('Schedule event is not in your scope');
+    }
+    if (doc.eventType !== VentorScheduleEventType.Virtual) {
+      throw new BadRequestException('Meet artifacts are only for virtual events');
+    }
+    const meetUrl = doc.googleMeetUrl?.trim();
+    if (!meetUrl) {
+      throw new BadRequestException('Schedule event has no Google Meet URL');
+    }
+    const artifacts =
+      await this.googleMeetArtifactsService.fetchArtifactsByMeetUrl({
+        googleMeetUrl: meetUrl,
+        organizerEmail: doc.organizerEmail?.trim() || MEET_AUDIT_SUBJECT_EMAIL,
+      });
+    if (artifacts.recordingDriveFileId) {
+      doc.recordingDriveFileId = artifacts.recordingDriveFileId;
+    }
+    if (artifacts.transcriptDriveDocId) {
+      doc.transcriptDriveDocId = artifacts.transcriptDriveDocId;
+    }
+    await doc.save();
+    const callLog = await this.customerCallLogsService.applyGoogleMeetSync({
+      scheduleEventId: String(doc._id),
+      agentUserId: userId,
+      body: {
+        attendance: artifacts.attendance,
+        conferenceRecordName: artifacts.conferenceRecordName,
+        durationSeconds: artifacts.durationSeconds,
+        transcript: artifacts.transcript,
+        text: artifacts.text,
+        utterances: artifacts.utterances,
+        endedAt: artifacts.endedAt,
+        recordingDriveFileId: artifacts.recordingDriveFileId,
+        transcriptDriveDocId: artifacts.transcriptDriveDocId,
+      },
+    });
+    await doc.populate({
+      path: 'customerId',
+      select: 'name lastName interestedProjects',
+    });
+    return { schedule: doc, callLog };
+  }
+
+  /**
+   * Webhook path: resolve by Meet space id and refresh artifacts.
+   */
+  async refreshMeetArtifactsBySpaceId(
+    meetSpaceId: string,
+  ): Promise<void> {
+    const spaceId = meetSpaceId.replace(/^spaces\//, '').trim();
+    if (!spaceId) {
+      return;
+    }
+    const doc = await this.scheduleModel
+      .findOne({
+        eventType: VentorScheduleEventType.Virtual,
+        meetSpaceId: spaceId,
+      })
+      .sort({ scheduledAt: -1 })
+      .exec();
+    if (!doc) {
+      this.logger.warn(`No schedule for Meet space=${spaceId}`);
+      return;
+    }
+    const meetUrl = doc.googleMeetUrl?.trim();
+    if (!meetUrl) {
+      return;
+    }
+    const artifacts =
+      await this.googleMeetArtifactsService.fetchArtifactsByMeetUrl({
+        googleMeetUrl: meetUrl,
+        organizerEmail: doc.organizerEmail?.trim() || MEET_AUDIT_SUBJECT_EMAIL,
+      });
+    if (artifacts.recordingDriveFileId) {
+      doc.recordingDriveFileId = artifacts.recordingDriveFileId;
+    }
+    if (artifacts.transcriptDriveDocId) {
+      doc.transcriptDriveDocId = artifacts.transcriptDriveDocId;
+    }
+    await doc.save();
+    await this.customerCallLogsService.applyGoogleMeetSync({
+      scheduleEventId: String(doc._id),
+      agentUserId: doc.userId,
+      body: {
+        attendance: artifacts.attendance,
+        conferenceRecordName: artifacts.conferenceRecordName,
+        durationSeconds: artifacts.durationSeconds,
+        transcript: artifacts.transcript,
+        text: artifacts.text,
+        utterances: artifacts.utterances,
+        endedAt: artifacts.endedAt,
+        recordingDriveFileId: artifacts.recordingDriveFileId,
+        transcriptDriveDocId: artifacts.transcriptDriveDocId,
+      },
+    });
   }
 
   /**

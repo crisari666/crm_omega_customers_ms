@@ -56,6 +56,13 @@ function serializeEvent(doc: VentorScheduleEventDocument) {
     note: o.note,
     googleMeetUrl: o.googleMeetUrl,
     googleCalendarEventId: o.googleCalendarEventId,
+    customerEmail: o.customerEmail,
+    ventorEmail: o.ventorEmail,
+    meetSpaceId: o.meetSpaceId,
+    organizerEmail: o.organizerEmail,
+    meetSubscriptionStatus: o.meetSubscriptionStatus,
+    recordingDriveFileId: o.recordingDriveFileId,
+    transcriptDriveDocId: o.transcriptDriveDocId,
     status: o.status,
     createdAt:
       (o as { createdAt?: Date }).createdAt?.toISOString?.() ??
@@ -129,6 +136,20 @@ export class VentorScheduleController {
   ) {
     const userId = resolveOfficeUserId(jwtUser);
     return this.ventorScheduleService.syncMeetCall(userId, id, body);
+  }
+
+  @Post(':id/meet-artifacts/refresh')
+  async refreshMeetArtifacts(
+    @Param('id', ParseHexObjectIdPipe) id: string,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const userId = resolveOfficeUserId(jwtUser);
+    const result =
+      await this.ventorScheduleService.refreshMeetArtifactsForOwner(userId, id);
+    return {
+      schedule: serializeEvent(result.schedule),
+      callLog: result.callLog,
+    };
   }
 
   @Patch(':id/on-land-agent')

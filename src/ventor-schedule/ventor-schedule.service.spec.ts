@@ -6,11 +6,14 @@ import { Customer } from '../customer/schemas/customer.schema';
 import { CustomerAssignmentPushService } from '../customer/customer-assignment-push.service';
 import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
 import { CustomerEventsService } from '../customer/customer-events.service';
+import { GoogleMeetArtifactsService } from '../customer/google-meet-artifacts.service';
 import {
   VentorScheduleEvent,
   VentorScheduleEventStatus,
   VentorScheduleEventType,
 } from './schemas/ventor-schedule-event.schema';
+import { VentorMeetGoogleCalendarService } from './ventor-meet-google-calendar.service';
+import { VentorMeetWorkspaceEventsService } from './ventor-meet-workspace-events.service';
 import { VentorScheduleService } from './ventor-schedule.service';
 
 describe('VentorScheduleService', () => {
@@ -54,6 +57,15 @@ describe('VentorScheduleService', () => {
     const customerAssignmentPushService = {
       executeNotifyOnLandAgentAssigned: jest.fn(),
     };
+    const ventorMeetGoogleCalendarService = {
+      executeCreateVentorAuditMeet: jest.fn(),
+    };
+    const ventorMeetWorkspaceEventsService = {
+      executeCreateMeetSpaceSubscription: jest.fn(),
+    };
+    const googleMeetArtifactsService = {
+      fetchArtifactsByMeetUrl: jest.fn(),
+    };
     return {
       scheduleModel,
       findMock,
@@ -65,6 +77,9 @@ describe('VentorScheduleService', () => {
       recordEventMock,
       customerCallLogsService,
       customerAssignmentPushService,
+      ventorMeetGoogleCalendarService,
+      ventorMeetWorkspaceEventsService,
+      googleMeetArtifactsService,
     };
   };
 
@@ -90,6 +105,18 @@ describe('VentorScheduleService', () => {
         {
           provide: CustomerAssignmentPushService,
           useValue: deps.customerAssignmentPushService,
+        },
+        {
+          provide: VentorMeetGoogleCalendarService,
+          useValue: deps.ventorMeetGoogleCalendarService,
+        },
+        {
+          provide: VentorMeetWorkspaceEventsService,
+          useValue: deps.ventorMeetWorkspaceEventsService,
+        },
+        {
+          provide: GoogleMeetArtifactsService,
+          useValue: deps.googleMeetArtifactsService,
         },
       ],
     }).compile();
