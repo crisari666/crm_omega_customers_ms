@@ -168,6 +168,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerCallLogsService,
     MetaConversionsApiService,
     CustomerAssignmentPushService,
+    GoogleMeetArtifactsService,
   ],
 })
 export class CustomerModule implements OnModuleInit {

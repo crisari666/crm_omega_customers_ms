@@ -68,4 +68,14 @@ export class SyncVentorMeetCallDto {
   @IsOptional()
   @IsISO8601()
   endedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  recordingDriveFileId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  transcriptDriveDocId?: string;
 }

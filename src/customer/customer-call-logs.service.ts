@@ -104,6 +104,9 @@ export class CustomerCallLogsService {
     readonly googleMeetUrl: string;
     readonly googleCalendarEventId?: string;
     readonly organizerEmail?: string;
+    readonly meetSpaceId?: string;
+    readonly customerEmail?: string;
+    readonly ventorEmail?: string;
   }): Promise<{ callSid: string }> {
     const callSid = buildGoogleMeetCallSid({
       googleCalendarEventId: args.googleCalendarEventId,
@@ -124,6 +127,15 @@ export class CustomerCallLogsService {
     }
     if (args.organizerEmail?.trim()) {
       metadata.organizerEmail = args.organizerEmail.trim().toLowerCase();
+    }
+    if (args.meetSpaceId?.trim()) {
+      metadata.meetSpaceId = args.meetSpaceId.trim();
+    }
+    if (args.customerEmail?.trim()) {
+      metadata.customerEmail = args.customerEmail.trim().toLowerCase();
+    }
+    if (args.ventorEmail?.trim()) {
+      metadata.ventorEmail = args.ventorEmail.trim().toLowerCase();
     }
     const customerOid = Types.ObjectId.isValid(args.customerId)
       ? new Types.ObjectId(args.customerId)
@@ -207,6 +219,12 @@ export class CustomerCallLogsService {
         ...(args.body.conferenceRecordName
           ? { conferenceRecordName: args.body.conferenceRecordName }
           : {}),
+        ...(args.body.recordingDriveFileId?.trim()
+          ? { recordingDriveFileId: args.body.recordingDriveFileId.trim() }
+          : {}),
+        ...(args.body.transcriptDriveDocId?.trim()
+          ? { transcriptDriveDocId: args.body.transcriptDriveDocId.trim() }
+          : {}),
         meetSyncedAt: new Date().toISOString(),
         meetAttendance: 'attended',
       };
@@ -226,6 +244,12 @@ export class CustomerCallLogsService {
       doc.status = 'no-answer';
       doc.metadata = {
         ...(doc.metadata ?? {}),
+        ...(args.body.recordingDriveFileId?.trim()
+          ? { recordingDriveFileId: args.body.recordingDriveFileId.trim() }
+          : {}),
+        ...(args.body.transcriptDriveDocId?.trim()
+          ? { transcriptDriveDocId: args.body.transcriptDriveDocId.trim() }
+          : {}),
         meetSyncedAt: new Date().toISOString(),
         meetAttendance: 'no_answer',
       };
@@ -271,15 +295,9 @@ export class CustomerCallLogsService {
       typeof doc.metadata?.organizerEmail === 'string'
         ? doc.metadata.organizerEmail.trim()
         : '';
-    const fallbackSubject =
-      process.env.GOOGLE_MEET_IMPERSONATE_SUBJECT?.trim() || '';
-    const organizerEmail = organizerFromMeta || fallbackSubject;
-    if (!organizerEmail) {
-      throw new BadRequestException(
-        'Missing Meet organizer email on call log and GOOGLE_MEET_IMPERSONATE_SUBJECT',
-      );
-    }
-    const sync = await this.googleMeetArtifactsService.fetchTranscriptByMeetUrl({
+    const organizerEmail =
+      organizerFromMeta || 'auditoria@laceiba.group';
+    const sync = await this.googleMeetArtifactsService.fetchArtifactsByMeetUrl({
       googleMeetUrl: meetUrl,
       organizerEmail,
     });
@@ -299,10 +317,22 @@ export class CustomerCallLogsService {
           text: sync.text,
           utterances: sync.utterances,
           endedAt: sync.endedAt,
+          recordingDriveFileId: sync.recordingDriveFileId,
+          transcriptDriveDocId: sync.transcriptDriveDocId,
         },
       });
     }
-    return this.applyMeetSyncToDocument(doc, sync);
+    return this.applyMeetSyncToDocument(doc, {
+      attendance: sync.attendance,
+      conferenceRecordName: sync.conferenceRecordName,
+      durationSeconds: sync.durationSeconds,
+      transcript: sync.transcript,
+      text: sync.text,
+      utterances: sync.utterances,
+      endedAt: sync.endedAt,
+      recordingDriveFileId: sync.recordingDriveFileId,
+      transcriptDriveDocId: sync.transcriptDriveDocId,
+    });
   }
 
   private async applyMeetSyncToDocument(
@@ -336,6 +366,12 @@ export class CustomerCallLogsService {
         ...(body.conferenceRecordName
           ? { conferenceRecordName: body.conferenceRecordName }
           : {}),
+        ...(body.recordingDriveFileId?.trim()
+          ? { recordingDriveFileId: body.recordingDriveFileId.trim() }
+          : {}),
+        ...(body.transcriptDriveDocId?.trim()
+          ? { transcriptDriveDocId: body.transcriptDriveDocId.trim() }
+          : {}),
         meetSyncedAt: new Date().toISOString(),
         meetAttendance: 'attended',
       };
@@ -355,6 +391,12 @@ export class CustomerCallLogsService {
       doc.status = 'no-answer';
       doc.metadata = {
         ...(doc.metadata ?? {}),
+        ...(body.recordingDriveFileId?.trim()
+          ? { recordingDriveFileId: body.recordingDriveFileId.trim() }
+          : {}),
+        ...(body.transcriptDriveDocId?.trim()
+          ? { transcriptDriveDocId: body.transcriptDriveDocId.trim() }
+          : {}),
         meetSyncedAt: new Date().toISOString(),
         meetAttendance: 'no_answer',
       };
@@ -506,12 +548,24 @@ export class CustomerCallLogsService {
       typeof meetUrlRaw === 'string' && meetUrlRaw.trim()
         ? meetUrlRaw.trim()
         : undefined;
+    const recordingDriveRaw = doc.metadata?.recordingDriveFileId;
+    const recordingDriveFileId =
+      typeof recordingDriveRaw === 'string' && recordingDriveRaw.trim()
+        ? recordingDriveRaw.trim()
+        : undefined;
+    const transcriptDocRaw = doc.metadata?.transcriptDriveDocId;
+    const transcriptDriveDocId =
+      typeof transcriptDocRaw === 'string' && transcriptDocRaw.trim()
+        ? transcriptDocRaw.trim()
+        : undefined;
     return {
       id: String(doc._id),
       callSid: doc.callSid,
       provider: doc.provider,
       channel: isMeet ? 'meet' : 'voip',
       googleMeetUrl,
+      recordingDriveFileId,
+      transcriptDriveDocId,
       from: doc.from,
       to: doc.to,
       utterances: doc.utterances,

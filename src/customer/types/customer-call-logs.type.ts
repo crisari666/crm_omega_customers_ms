@@ -19,6 +19,8 @@ export type CustomerCallLogAdminItemDto = {
   /** Derived channel for UI: Meet vs Twilio VoIP. */
   channel: 'voip' | 'meet';
   googleMeetUrl?: string;
+  recordingDriveFileId?: string;
+  transcriptDriveDocId?: string;
   from?: string;
   to?: string;
   direction?: string;

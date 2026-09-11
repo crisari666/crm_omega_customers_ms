@@ -6,7 +6,13 @@ import {
 } from '@nestjs/common';
 import { google } from 'googleapis';
 import * as fs from 'fs';
+import * as path from 'path';
 import { extractGoogleMeetingCode } from './utils/google-meet-call-log.util';
+import {
+  MEET_AUDIT_MEETINGS_READONLY_SCOPE,
+  MEET_AUDIT_SA_RELATIVE_PATH,
+  MEET_AUDIT_SUBJECT_EMAIL,
+} from '../ventor-schedule/google-meet-audit.constants';
 
 export type GoogleMeetTranscriptFetchResult = {
   attendance: 'attended' | 'no_answer';
@@ -21,6 +27,8 @@ export type GoogleMeetTranscriptFetchResult = {
     start?: number;
     end?: number;
   }>;
+  recordingDriveFileId?: string;
+  transcriptDriveDocId?: string;
 };
 
 type ServiceAccountCredentials = {
@@ -28,26 +36,36 @@ type ServiceAccountCredentials = {
   privateKey: string;
 };
 
-const MEET_READONLY_SCOPE =
-  'https://www.googleapis.com/auth/meetings.space.readonly' as const;
-
 @Injectable()
 export class GoogleMeetArtifactsService {
   private readonly logger = new Logger(GoogleMeetArtifactsService.name);
 
   private getServiceAccountCredentials(): ServiceAccountCredentials {
+    const keyPath = path.join(process.cwd(), MEET_AUDIT_SA_RELATIVE_PATH);
+    if (fs.existsSync(keyPath)) {
+      const parsed = JSON.parse(fs.readFileSync(keyPath, 'utf8')) as {
+        client_email?: string;
+        private_key?: string;
+      };
+      if (parsed.client_email && parsed.private_key) {
+        return {
+          clientEmail: parsed.client_email,
+          privateKey: parsed.private_key,
+        };
+      }
+    }
     const envClientEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
     const envPrivateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
     if (envClientEmail && envPrivateKey) {
       return { clientEmail: envClientEmail, privateKey: envPrivateKey };
     }
-    const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-    if (!keyPath || !fs.existsSync(keyPath)) {
+    const envPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+    if (!envPath || !fs.existsSync(envPath)) {
       throw new InternalServerErrorException(
-        'Google Meet SA credentials missing. Set GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY or GOOGLE_APPLICATION_CREDENTIALS.',
+        `Google Meet SA credentials missing. Place ${MEET_AUDIT_SA_RELATIVE_PATH} at repo root.`,
       );
     }
-    const parsed = JSON.parse(fs.readFileSync(keyPath, 'utf8')) as {
+    const parsed = JSON.parse(fs.readFileSync(envPath, 'utf8')) as {
       client_email?: string;
       private_key?: string;
     };
@@ -67,7 +85,7 @@ export class GoogleMeetArtifactsService {
     const auth = new google.auth.JWT({
       email: credentials.clientEmail,
       key: credentials.privateKey,
-      scopes: [MEET_READONLY_SCOPE],
+      scopes: [MEET_AUDIT_MEETINGS_READONLY_SCOPE],
       subject: subjectEmail,
     });
     const tokenResponse = await auth.getAccessToken();
@@ -106,11 +124,24 @@ export class GoogleMeetArtifactsService {
     readonly googleMeetUrl: string;
     readonly organizerEmail: string;
   }): Promise<GoogleMeetTranscriptFetchResult> {
+    return this.fetchArtifactsByMeetUrl(args);
+  }
+
+  /**
+   * Fetches conference record, transcript entries, and Drive destinations for
+   * recording / transcript document (for quality comparison).
+   */
+  async fetchArtifactsByMeetUrl(args: {
+    readonly googleMeetUrl: string;
+    readonly organizerEmail: string;
+  }): Promise<GoogleMeetTranscriptFetchResult> {
     const meetingCode = extractGoogleMeetingCode(args.googleMeetUrl);
     if (!meetingCode) {
       throw new BadRequestException('Could not parse Google Meet meeting code');
     }
-    const accessToken = await this.getAccessToken(args.organizerEmail.trim());
+    const subject =
+      args.organizerEmail.trim() || MEET_AUDIT_SUBJECT_EMAIL;
+    const accessToken = await this.getAccessToken(subject);
     const filter = encodeURIComponent(`space.meeting_code="${meetingCode}"`);
     const listUrl = `https://meet.googleapis.com/v2/conferenceRecords?filter=${filter}`;
     const list = await this.meetGet<{
@@ -134,17 +165,69 @@ export class GoogleMeetArtifactsService {
       durationSeconds,
       endedAt: conference.endTime,
     };
+    const recordingDriveFileId = await this.fetchRecordingDriveFileId(
+      conference.name,
+      accessToken,
+    );
+    const transcriptMeta = await this.fetchTranscriptArtifacts(
+      conference.name,
+      accessToken,
+    );
+    return {
+      ...base,
+      ...(recordingDriveFileId ? { recordingDriveFileId } : {}),
+      ...transcriptMeta,
+    };
+  }
+
+  private async fetchRecordingDriveFileId(
+    conferenceRecordName: string,
+    accessToken: string,
+  ): Promise<string | undefined> {
     try {
-      const transcriptsUrl = `https://meet.googleapis.com/v2/${conference.name}/transcripts`;
+      const url = `https://meet.googleapis.com/v2/${conferenceRecordName}/recordings`;
+      const res = await this.meetGet<{
+        recordings?: Array<{
+          state?: string;
+          driveDestination?: { file?: string; exportUri?: string };
+        }>;
+      }>(url, accessToken);
+      const ready =
+        res.recordings?.find((r) => r.state === 'FILE_GENERATED') ??
+        res.recordings?.[0];
+      const fileId = ready?.driveDestination?.file?.trim();
+      return fileId || undefined;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Meet recordings unavailable: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return undefined;
+    }
+  }
+
+  private async fetchTranscriptArtifacts(
+    conferenceRecordName: string,
+    accessToken: string,
+  ): Promise<Partial<GoogleMeetTranscriptFetchResult>> {
+    try {
+      const transcriptsUrl = `https://meet.googleapis.com/v2/${conferenceRecordName}/transcripts`;
       const transcripts = await this.meetGet<{
-        transcripts?: Array<{ name?: string; state?: string }>;
+        transcripts?: Array<{
+          name?: string;
+          state?: string;
+          docsDestination?: { document?: string; exportUri?: string };
+        }>;
       }>(transcriptsUrl, accessToken);
       const generated =
         transcripts.transcripts?.find((t) => t.state === 'FILE_GENERATED') ??
         transcripts.transcripts?.[0];
       if (!generated?.name) {
-        return base;
+        return {};
       }
+      const transcriptDriveDocId =
+        generated.docsDestination?.document?.trim() || undefined;
       const entriesUrl = `https://meet.googleapis.com/v2/${generated.name}/entries`;
       const entriesRes = await this.meetGet<{
         transcriptEntries?: Array<{
@@ -167,20 +250,18 @@ export class GoogleMeetArtifactsService {
             end: e.endTime ? Date.parse(e.endTime) : undefined,
           };
         })
-        .filter(
-          (u): u is NonNullable<typeof u> => u != null,
-        );
+        .filter((u): u is NonNullable<typeof u> => u != null);
       if (utterances.length === 0) {
-        return base;
+        return transcriptDriveDocId ? { transcriptDriveDocId } : {};
       }
       const transcript = utterances
         .map((u) => (u.speaker ? `${u.speaker}: ${u.text}` : u.text))
         .join('\n');
       return {
-        ...base,
         transcript,
         text: transcript,
         utterances,
+        ...(transcriptDriveDocId ? { transcriptDriveDocId } : {}),
       };
     } catch (err: unknown) {
       this.logger.warn(
@@ -188,7 +269,7 @@ export class GoogleMeetArtifactsService {
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      return base;
+      return {};
     }
   }
 
