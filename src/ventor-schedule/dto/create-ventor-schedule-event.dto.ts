@@ -1,10 +1,11 @@
 import {
+  IsEmail,
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { VentorScheduleEventType } from '../schemas/ventor-schedule-event.schema';
 
@@ -16,12 +17,14 @@ export class CreateVentorScheduleEventDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'date must be YYYY-MM-DD',
   })
+  @IsString()
   date: string;
 
   /** HH:mm 24h */
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'time must be HH:mm',
   })
+  @IsString()
   time: string;
 
   @IsEnum(VentorScheduleEventType)
@@ -32,19 +35,18 @@ export class CreateVentorScheduleEventDto {
   @MaxLength(2000)
   note?: string;
 
+  /**
+   * Optional Meet invite for the customer. When omitted on virtual visits,
+   * the service falls back to `Customer.email`.
+   */
   @IsOptional()
-  @IsUrl({ require_tld: false })
-  @MaxLength(2000)
-  googleMeetUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(256)
-  googleCalendarEventId?: string;
-
-  /** Google account email that owns the Meet (for admin SA transcript refresh). */
-  @IsOptional()
-  @IsString()
+  @IsEmail()
   @MaxLength(320)
-  organizerEmail?: string;
+  customerEmail?: string;
+
+  /** Required when eventType is virtual — Meet invite for the ventor. */
+  @ValidateIf((o: CreateVentorScheduleEventDto) => o.eventType === VentorScheduleEventType.Virtual)
+  @IsEmail()
+  @MaxLength(320)
+  ventorEmail?: string;
 }
