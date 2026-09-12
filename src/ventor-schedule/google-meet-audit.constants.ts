@@ -25,9 +25,22 @@ export const MEET_AUDIT_SUBSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000;
 /**
  * Cloud Pub/Sub topic for Workspace Events (project matches SA JSON).
  * Ops must create this topic + push subscription to customers-ms webhook.
+ * Resolved at call time so Nest `ConfigModule` / `.env` `IS_PROD` is available.
+ * Local / non-prod (`IS_PROD` not `true`) uses the `-dev` suffix.
  */
-export const MEET_AUDIT_PUBSUB_TOPIC =
+const MEET_AUDIT_PUBSUB_TOPIC_BASE =
   'projects/la-ceiba-34945/topics/omega-meet-artifacts' as const;
+
+/**
+ * Returns the Workspace Events Pub/Sub topic for the current process env.
+ */
+export function resolveMeetAuditPubsubTopic(): string {
+  const isMeetAuditProd: boolean =
+    (process.env.IS_PROD ?? '').trim().toLowerCase() === 'true';
+  return isMeetAuditProd
+    ? MEET_AUDIT_PUBSUB_TOPIC_BASE
+    : `${MEET_AUDIT_PUBSUB_TOPIC_BASE}-dev`;
+}
 
 export const MEET_AUDIT_EVENT_TYPES = [
   'google.workspace.meet.transcript.v2.fileGenerated',

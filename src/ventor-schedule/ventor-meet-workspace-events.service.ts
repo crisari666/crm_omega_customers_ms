@@ -4,9 +4,9 @@ import {
   MEET_AUDIT_EVENT_TYPES,
   MEET_AUDIT_MEETINGS_READONLY_SCOPE,
   MEET_AUDIT_MEETINGS_SPACE_CREATED_SCOPE,
-  MEET_AUDIT_PUBSUB_TOPIC,
   MEET_AUDIT_SUBJECT_EMAIL,
   MEET_AUDIT_SUBSCRIPTION_TTL_MS,
+  resolveMeetAuditPubsubTopic,
 } from './google-meet-audit.constants';
 import { loadMeetAuditServiceAccountCredentials } from './load-meet-audit-credentials.util';
 import { resolveMeetSpaceResourceName } from './resolve-meet-space-name.util';
@@ -59,7 +59,7 @@ export class VentorMeetWorkspaceEventsService {
       targetResource: `//meet.googleapis.com/${resolved.resourceName}`,
       eventTypes: [...MEET_AUDIT_EVENT_TYPES],
       notificationEndpoint: {
-        pubsubTopic: MEET_AUDIT_PUBSUB_TOPIC,
+        pubsubTopic: resolveMeetAuditPubsubTopic(),
       },
       ttl: `${Math.floor(MEET_AUDIT_SUBSCRIPTION_TTL_MS / 1000)}s`,
     };
