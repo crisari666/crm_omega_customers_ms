@@ -37,7 +37,8 @@ export type CreateVentorAuditMeetResult = {
  */
 @Injectable()
 export class VentorMeetGoogleCalendarService {
-  private static readonly AUDIT_INVITE_RETRY_MS = 1500;
+  private static readonly AUDIT_INVITE_RETRY_MS = 2000;
+  private static readonly AUDIT_INVITE_MAX_ATTEMPTS = 4;
   private readonly logger = new Logger(VentorMeetGoogleCalendarService.name);
 
   async executeCreateVentorAuditMeet(
@@ -95,7 +96,9 @@ export class VentorMeetGoogleCalendarService {
         'Google Calendar did not return an event id for the virtual visit.',
       );
     }
-    await this.executeAcceptAuditInvite(eventId);
+    
+    const iCalUID = response.data.iCalUID?.trim() || '';
+    await this.executeAcceptAuditInvite({ eventId, iCalUID });
     let meetUrl = this.extractMeetUrl(response.data);
     let meetSpaceId = this.extractMeetSpaceId(response.data);
     if (!meetUrl || !meetSpaceId) {
@@ -134,34 +137,47 @@ export class VentorMeetGoogleCalendarService {
 
   /**
    * Accepts the audit mailbox invite so Meet/Drive grant recording and transcript access.
+   * Runs after events.insert. Finds records@ copy via iCalUID (organizer eventId often 404s).
    * Failures are logged only — Meet create still succeeds.
    */
-  private async executeAcceptAuditInvite(eventId: string): Promise<void> {
-    try {
-      await this.patchAuditInviteAccepted(eventId);
-    } catch (firstErr: unknown) {
-      if (!this.isCalendarNotFoundError(firstErr)) {
-        this.logger.warn(
-          `Auto-accept audit invite failed eventId=${eventId}: ${this.formatErrorMessage(firstErr)}`,
-        );
-        return;
-      }
-      await this.delayMs(VentorMeetGoogleCalendarService.AUDIT_INVITE_RETRY_MS);
+  private async executeAcceptAuditInvite(input: {
+    readonly eventId: string;
+    readonly iCalUID: string;
+  }): Promise<void> {
+    const maxAttempts = VentorMeetGoogleCalendarService.AUDIT_INVITE_MAX_ATTEMPTS;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        await this.patchAuditInviteAccepted(eventId);
-      } catch (retryErr: unknown) {
+        await this.patchAuditInviteAccepted(input);
+        return;
+      } catch (err: unknown) {
+        const isLast = attempt >= maxAttempts;
+        const canRetry = this.isCalendarNotFoundError(err) && !isLast;
+        if (!canRetry) {
+          this.logger.warn(
+            `Auto-accept audit invite failed eventId=${input.eventId} iCalUID=${input.iCalUID} attempt=${attempt}: ${this.formatErrorMessage(err)}`,
+          );
+          return;
+        }
         this.logger.warn(
-          `Auto-accept audit invite failed after retry eventId=${eventId}: ${this.formatErrorMessage(retryErr)}`,
+          `Audit invite not yet on ${MEET_AUDIT_SUBJECT_EMAIL} calendar eventId=${input.eventId} attempt=${attempt}; retrying`,
         );
+        await this.delayMs(VentorMeetGoogleCalendarService.AUDIT_INVITE_RETRY_MS);
       }
     }
   }
 
-  private async patchAuditInviteAccepted(eventId: string): Promise<void> {
+  private async patchAuditInviteAccepted(input: {
+    readonly eventId: string;
+    readonly iCalUID: string;
+  }): Promise<void> {
     const calendar = this.getCalendarApi(MEET_AUDIT_SUBJECT_EMAIL);
+    const attendeeEventId = await this.resolveAuditCalendarEventId(
+      calendar,
+      input,
+    );
     const existing = await calendar.events.get({
       calendarId: 'primary',
-      eventId,
+      eventId: attendeeEventId,
     });
     const auditEmail = MEET_AUDIT_SUBJECT_EMAIL.toLowerCase();
     const currentAttendees = existing.data.attendees ?? [];
@@ -183,7 +199,7 @@ export class VentorMeetGoogleCalendarService {
     }
     const patched = await calendar.events.patch({
       calendarId: 'primary',
-      eventId,
+      eventId: attendeeEventId,
       sendUpdates: 'none',
       requestBody: { attendees },
     });
@@ -192,16 +208,68 @@ export class VentorMeetGoogleCalendarService {
         (attendee) => attendee.email?.trim().toLowerCase() === auditEmail,
       )?.responseStatus ?? 'accepted';
     this.logger.log(
-      `Meet invite auto-agree success email=${MEET_AUDIT_SUBJECT_EMAIL} eventId=${eventId} responseStatus=${agreedStatus}`,
+      `Meet invite auto-agree success email=${MEET_AUDIT_SUBJECT_EMAIL} organizerEventId=${input.eventId} auditEventId=${attendeeEventId} responseStatus=${agreedStatus}`,
     );
+  }
+
+  /**
+   * Invitee calendar copies are found by iCalUID; direct get(organizerEventId) often 404s.
+   */
+  private async resolveAuditCalendarEventId(
+    calendar: ReturnType<typeof google.calendar>,
+    input: { readonly eventId: string; readonly iCalUID: string },
+  ): Promise<string> {
+    if (input.iCalUID) {
+      const listed = await calendar.events.list({
+        calendarId: 'primary',
+        iCalUID: input.iCalUID,
+        maxResults: 5,
+        singleEvents: true,
+        showDeleted: false,
+      });
+      const match = listed.data.items?.find((item) => item.id?.trim());
+      const listedId = match?.id?.trim();
+      if (listedId) {
+        return listedId;
+      }
+    }
+    try {
+      const direct = await calendar.events.get({
+        calendarId: 'primary',
+        eventId: input.eventId,
+        fields: 'id',
+      });
+      const directId = direct.data.id?.trim();
+      if (directId) {
+        return directId;
+      }
+    } catch (err: unknown) {
+      if (!this.isCalendarNotFoundError(err)) {
+        throw err;
+      }
+    }
+    const notFound = new Error(
+      `Not Found: invite not on ${MEET_AUDIT_SUBJECT_EMAIL} calendar yet`,
+    ) as Error & { code: number };
+    notFound.code = 404;
+    throw notFound;
   }
 
   private isCalendarNotFoundError(err: unknown): boolean {
     if (!err || typeof err !== 'object') {
       return false;
     }
-    const withCode = err as { code?: number; response?: { status?: number } };
-    return withCode.code === 404 || withCode.response?.status === 404;
+    const withCode = err as {
+      code?: number | string;
+      response?: { status?: number };
+      message?: string;
+    };
+    if (withCode.code === 404 || withCode.response?.status === 404) {
+      return true;
+    }
+    return (
+      typeof withCode.code === 'string' && withCode.code === '404'
+    ) || (withCode.message?.includes('Not Found') ?? false);
   }
 
   private formatErrorMessage(err: unknown): string {
