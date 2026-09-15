@@ -37,6 +37,7 @@ export type CreateVentorAuditMeetResult = {
  */
 @Injectable()
 export class VentorMeetGoogleCalendarService {
+  private static readonly AUDIT_INVITE_RETRY_MS = 1500;
   private readonly logger = new Logger(VentorMeetGoogleCalendarService.name);
 
   async executeCreateVentorAuditMeet(
@@ -94,6 +95,7 @@ export class VentorMeetGoogleCalendarService {
         'Google Calendar did not return an event id for the virtual visit.',
       );
     }
+    await this.executeAcceptAuditInvite(eventId);
     let meetUrl = this.extractMeetUrl(response.data);
     let meetSpaceId = this.extractMeetSpaceId(response.data);
     if (!meetUrl || !meetSpaceId) {
@@ -128,6 +130,87 @@ export class VentorMeetGoogleCalendarService {
       meetSpaceId: canonicalSpaceId,
       organizerEmail,
     };
+  }
+
+  /**
+   * Accepts the audit mailbox invite so Meet/Drive grant recording and transcript access.
+   * Failures are logged only — Meet create still succeeds.
+   */
+  private async executeAcceptAuditInvite(eventId: string): Promise<void> {
+    try {
+      await this.patchAuditInviteAccepted(eventId);
+    } catch (firstErr: unknown) {
+      if (!this.isCalendarNotFoundError(firstErr)) {
+        this.logger.warn(
+          `Auto-accept audit invite failed eventId=${eventId}: ${this.formatErrorMessage(firstErr)}`,
+        );
+        return;
+      }
+      await this.delayMs(VentorMeetGoogleCalendarService.AUDIT_INVITE_RETRY_MS);
+      try {
+        await this.patchAuditInviteAccepted(eventId);
+      } catch (retryErr: unknown) {
+        this.logger.warn(
+          `Auto-accept audit invite failed after retry eventId=${eventId}: ${this.formatErrorMessage(retryErr)}`,
+        );
+      }
+    }
+  }
+
+  private async patchAuditInviteAccepted(eventId: string): Promise<void> {
+    const calendar = this.getCalendarApi(MEET_AUDIT_SUBJECT_EMAIL);
+    const existing = await calendar.events.get({
+      calendarId: 'primary',
+      eventId,
+    });
+    const auditEmail = MEET_AUDIT_SUBJECT_EMAIL.toLowerCase();
+    const currentAttendees = existing.data.attendees ?? [];
+    const attendees = currentAttendees.map((attendee) => {
+      const email = attendee.email?.trim().toLowerCase() ?? '';
+      if (email === auditEmail) {
+        return { ...attendee, responseStatus: 'accepted' as const };
+      }
+      return attendee;
+    });
+    const hasAudit = attendees.some(
+      (attendee) => attendee.email?.trim().toLowerCase() === auditEmail,
+    );
+    if (!hasAudit) {
+      attendees.push({
+        email: MEET_AUDIT_SUBJECT_EMAIL,
+        responseStatus: 'accepted',
+      });
+    }
+    await calendar.events.patch({
+      calendarId: 'primary',
+      eventId,
+      sendUpdates: 'none',
+      requestBody: { attendees },
+    });
+    this.logger.log(
+      `Accepted audit invite for ${MEET_AUDIT_SUBJECT_EMAIL} eventId=${eventId}`,
+    );
+  }
+
+  private isCalendarNotFoundError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') {
+      return false;
+    }
+    const withCode = err as { code?: number; response?: { status?: number } };
+    return withCode.code === 404 || withCode.response?.status === 404;
+  }
+
+  private formatErrorMessage(err: unknown): string {
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
+  }
+
+  private delayMs(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   /**
