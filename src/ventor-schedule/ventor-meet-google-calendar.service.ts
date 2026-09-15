@@ -90,6 +90,7 @@ export class VentorMeetGoogleCalendarService {
         },
       },
     });
+    console.log(JSON.stringify(response, null, 2));
     const eventId = response.data.id?.trim();
     if (!eventId) {
       throw new InternalServerErrorException(
@@ -98,7 +99,6 @@ export class VentorMeetGoogleCalendarService {
     }
     
     const iCalUID = response.data.iCalUID?.trim() || '';
-    await this.executeAcceptAuditInvite({ eventId, iCalUID });
     let meetUrl = this.extractMeetUrl(response.data);
     let meetSpaceId = this.extractMeetSpaceId(response.data);
     if (!meetUrl || !meetSpaceId) {
@@ -127,6 +127,7 @@ export class VentorMeetGoogleCalendarService {
     this.logger.log(
       `Created ventor Meet eventId=${eventId} organizer=${organizerEmail} scheduleEventId=${input.scheduleEventId} spaceId=${canonicalSpaceId}`,
     );
+    await this.executeAcceptAuditInvite({ eventId, iCalUID });
     return {
       eventId,
       meetUrl,
