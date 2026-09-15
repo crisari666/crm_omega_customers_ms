@@ -146,6 +146,7 @@ export class VentorMeetGoogleCalendarService {
     readonly iCalUID: string;
   }): Promise<void> {
     const maxAttempts = VentorMeetGoogleCalendarService.AUDIT_INVITE_MAX_ATTEMPTS;
+    await new Promise(resolve => setTimeout(resolve, 4000));
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         await this.patchAuditInviteAccepted(input);
