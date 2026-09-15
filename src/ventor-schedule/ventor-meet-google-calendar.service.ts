@@ -181,14 +181,18 @@ export class VentorMeetGoogleCalendarService {
         responseStatus: 'accepted',
       });
     }
-    await calendar.events.patch({
+    const patched = await calendar.events.patch({
       calendarId: 'primary',
       eventId,
       sendUpdates: 'none',
       requestBody: { attendees },
     });
+    const agreedStatus =
+      patched.data.attendees?.find(
+        (attendee) => attendee.email?.trim().toLowerCase() === auditEmail,
+      )?.responseStatus ?? 'accepted';
     this.logger.log(
-      `Accepted audit invite for ${MEET_AUDIT_SUBJECT_EMAIL} eventId=${eventId}`,
+      `Meet invite auto-agree success email=${MEET_AUDIT_SUBJECT_EMAIL} eventId=${eventId} responseStatus=${agreedStatus}`,
     );
   }
 
