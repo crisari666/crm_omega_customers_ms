@@ -4,37 +4,26 @@ For HTTP paths and query params, see [`call-audit-api.md`](call-audit-api.md).
 
 ## Purpose and scope
 
-- **Goal:** Quality audit of **answered** voice calls — sales rubric (checklist) + customer **interest score** (1–5) — for coaches/directors and CRM admins.
-- **System of record:** `crm-omega-customers-ms` — MongoDB collection `customer_call_audits`, module `src/customer/call-audit/`.
-- **Call logs:** `customer_call_logs` (transcript from `voice.call.transcription` RMQ event).
-- **Not in scope:** `omega_office_back` (JWT identity only); `referrals-boost` (no call-audit UI).
-- **Admin UI:** `crm_lots_agents` — `/dashboard/customers-v2/call-audit` (human queue + supervisor resume), `/dashboard/customers-v2/call-audit-ai` (admin AI review).
+- **Goal:** Quality audit of **answered** VOIP + Google Meet customer calls — weighted sales rubric (0–100) + customer **interest score** (1–5).
+- **System of record:** `crm-omega-customers-ms` — MongoDB `customer_call_audits`, module `src/customer/call-audit/`.
+- **Call logs:** `customer_call_logs` (VOIP transcript from `voice.call.transcription`; Meet from Workspace Events / refresh).
+- **Not in scope:** onboarding voice audit in `omega_office_back`; `referrals-boost`.
+- **Admin UI:** `crm_lots_agents` — `/dashboard/customers-v2/call-audit`, `/dashboard/customers-v2/call-audit-ai`.
 
 ## Data model (`CustomerCallAudit`)
 
-Schema: `src/customer/call-audit/schemas/customer-call-audit.schema.ts`
-
 | Field | Role |
 |-------|------|
-| `callLogId`, `callSid` | Link to `customer_call_logs` |
-| `agentExternalRef` | Ventor/agent id on the call |
-| `source` | `human` \| `ai` — **one document per call per source** |
-| `configVersion` | Rubric version from LLM JSON config |
-| `indicators[]` | `{ key, label, passed, rationale?, evidence? }` |
-| `interestScore` | Integer 1–5 (+ optional `interestScoreRationale`) |
-| `speakerTurns[]` | AI diarization: `{ role: agent\|customer, text }` |
-| `auditorUserId`, `reviewerNotes` | Human only; first saver owns `auditorUserId` (403 if another user) |
-| `status` | `pending` → `completed` \| `failed` (AI lifecycle) |
-| `llmModel`, `llmError`, `analyzedAt` | AI metadata |
+| `indicators[]` | `{ key, label, passed, maxPoints, pointsEarned, rationale?, evidence? }` |
+| `totalScore`, `maxScore` | Sum of earned / max points (typically max 100) |
+| `interestScore` | Integer 1–5 (+ optional rationale) |
+| `speakerTurns[]` | `{ role, text, startMs?, endMs?, speakerLabel? }` |
 
-**Indexes:** `{ callLogId, source }` unique (`callLogId_source_unique`); `{ agentExternalRef, source, createdAt }` (`agent_source_created`).
+## Rubric (config `2026-09-v3`)
 
-## Rubric and LLM
+`saludo` 10, `descubrimiento` 20, `argumentacion` 15, `manejo_objeciones` 15, `cierre` 15, `rapport` 10, `escucha_activa` 10, `registro_crm` 5 (= **100**). Pass/fail per indicator; server computes points.
 
-- Config: `config/call-audit-llm.config.json` — `version`, model `deepseek-chat`, indicators (`apertura`, `storytelling`, `escucha_activa`, `cierre`), interest labels 1–5, Spanish prompts.
-- Types/defaults when file absent: `src/customer/call-audit/config/call-audit-llm.config.ts`
-- Analysis: `call-audit-deepseek.service.ts` (OpenAI-compatible client)
-- Response parse: `utils/parse-call-audit-llm-response.util.ts`
+Meet: timed utterances → LLM transcript; Drive Doc fallback when API entries empty; auto-analyze after Meet sync.
 
 ## End-to-end flow
 
