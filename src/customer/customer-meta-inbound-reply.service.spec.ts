@@ -1,5 +1,4 @@
 import { CustomerMetaInboundReplyService } from './customer-meta-inbound-reply.service';
-import { VENTOR_ASSIGNMENT_CUSTOMER_MESSAGE_TEMPLATE } from './constants/ventor-assignment-message.constant';
 import type { CustomerDocument } from './schemas/customer.schema';
 import type { VentorAssignmentCandidate } from './types/ventor-assignment-candidate.type';
 
@@ -93,14 +92,11 @@ describe('CustomerMetaInboundReplyService', () => {
     expect(potentialCustomersOutbound.executeEmitPotentialCustomersEvent).not.toHaveBeenCalled();
   });
 
-  it('emits ventor contact text and persists outbound conversation when ventor is found', async () => {
+  it('emits ventor contacts card and persists outbound conversation when ventor is found', async () => {
     const { service, ventorAssignment, potentialCustomersOutbound, conversationsService } =
       createService();
     ventorAssignment.executeFindVentorById.mockResolvedValue(ventor);
-    const expectedBody = VENTOR_ASSIGNMENT_CUSTOMER_MESSAGE_TEMPLATE.replace(
-      '[user_name]',
-      'Ana López',
-    ).replace('[user_phone]', '3001234567');
+    const expectedSummary = 'Contacto: Ana López (Asesor La Ceiba) — 3001234567';
     const sent = await service.executeTrySendAssignedVentorContactReply({
       customer: baseCustomer,
       normalizedWaId: '573001234567',
@@ -113,11 +109,16 @@ describe('CustomerMetaInboundReplyService', () => {
     expect(potentialCustomersOutbound.executeEmitPotentialCustomersEvent).toHaveBeenCalledWith({
       type: 'potential_customers',
       payload: {
-        action: 'send.potential_customer_text',
+        action: 'send.potential_customer_contacts',
         waId: '573001234567',
         phoneNumberId: 'phone-1',
         customerId: '507f1f77bcf86cd799439011',
-        body: expectedBody,
+        contact: {
+          firstName: 'Ana',
+          lastName: 'López',
+          phone: '3001234567',
+          waId: '3001234567',
+        },
       },
     });
     expect(conversationsService.executeUpsertFromMetaIngress).toHaveBeenCalledWith(
@@ -125,7 +126,7 @@ describe('CustomerMetaInboundReplyService', () => {
         sessionId: 'cloud:phone-1:573001234567',
         message: expect.objectContaining({
           fromMe: true,
-          body: expectedBody,
+          body: expectedSummary,
           messageId: 'crm-inbound-reply:wamid.inbound-1',
         }),
       }),

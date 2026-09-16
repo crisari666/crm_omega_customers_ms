@@ -5,8 +5,10 @@ import { CustomerDocument } from './schemas/customer.schema';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { MetaWebhookMessagesValue } from './types/meta-webhook-messages-value.type';
-import { formatVentorAssignmentMessageForCustomer } from './utils/format-ventor-assignment-message.util';
-import { resolveVentorDisplayForCustomer } from './utils/resolve-ventor-display-for-customer.util';
+import {
+  buildVentorAssignmentContactPayload,
+  buildVentorAssignmentContactSummary,
+} from './utils/build-ventor-assignment-contact.util';
 
 type MetaInboundMessage = NonNullable<MetaWebhookMessagesValue['messages']>[number];
 
@@ -69,20 +71,23 @@ export class CustomerMetaInboundReplyService {
       );
       return false;
     }
-    const ventorDisplay = resolveVentorDisplayForCustomer(ventor);
-    const body: string = formatVentorAssignmentMessageForCustomer({
-      userName: ventorDisplay.userName,
-      userPhone: ventorDisplay.userPhone,
-    });
+    const contact = buildVentorAssignmentContactPayload(ventor);
+    if (contact == null) {
+      this.logger.warn(
+        `inbound reply skip: ventor has no phone assignedTo=${assignedTo} customerId=${String(input.customer._id)}`,
+      );
+      return false;
+    }
+    const summary: string = buildVentorAssignmentContactSummary(contact);
     const customerId: string = String(input.customer._id);
     await this.potentialCustomersOutbound.executeEmitPotentialCustomersEvent({
       type: 'potential_customers',
       payload: {
-        action: 'send.potential_customer_text',
+        action: 'send.potential_customer_contacts',
         waId: input.normalizedWaId,
         phoneNumberId: input.phoneNumberId,
         customerId,
-        body,
+        contact,
       },
     });
     await this.executePersistOutboundConversation({
@@ -90,7 +95,7 @@ export class CustomerMetaInboundReplyService {
       normalizedWaId: input.normalizedWaId,
       phoneNumberId: input.phoneNumberId,
       contactName: input.contactName,
-      body,
+      body: summary,
       inboundMessageId: input.msg.id,
     });
     this.logger.log(

@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Customer, CustomerDocument, DocumentType } from './schemas/customer.schema';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
-import { formatVentorAssignmentMessageForCustomer } from './utils/format-ventor-assignment-message.util';
+import { buildVentorAssignmentContactPayload } from './utils/build-ventor-assignment-contact.util';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { VentorAssignmentCandidate } from './types/ventor-assignment-candidate.type';
@@ -75,21 +75,21 @@ export class CustomerWhatsappFlowCompletedService {
     ventor: VentorAssignmentCandidate,
     waId: string,
   ): Promise<void> {
-    const displayName: string = `${ventor.name} ${ventor.lastName}`.trim();
-    const phone: string =
-      ventor.phone.trim().length > 0 ? ventor.phone.trim() : ventor.phoneJob.trim();
-    const body: string = formatVentorAssignmentMessageForCustomer({
-      userName: displayName.length > 0 ? displayName : 'tu asesor',
-      userPhone: phone.length > 0 ? phone : '-',
-    });
+    const contact = buildVentorAssignmentContactPayload(ventor);
+    if (contact == null) {
+      this.logger.warn(
+        `Flow completed: skip contacts emit — ventor has no phone ventorId=${ventor.id}`,
+      );
+      return;
+    }
     await this.potentialCustomersOutbound.executeEmitPotentialCustomersEvent({
       type: 'potential_customers',
       payload: {
-        action: 'send.potential_customer_text',
+        action: 'send.potential_customer_contacts',
         waId,
         phoneNumberId: payload.phoneNumberId,
         customerId: String(customer._id),
-        body,
+        contact,
       },
     });
   }

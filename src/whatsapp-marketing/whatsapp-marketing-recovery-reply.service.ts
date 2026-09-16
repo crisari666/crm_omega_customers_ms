@@ -11,6 +11,7 @@ import {
   buildMarketingRecoveryAutoReplyBody,
   resolveMarketingRecoveryAutoReplyKind,
 } from '../customer/utils/build-marketing-recovery-auto-reply-body.util';
+import { buildVentorAssignmentContactPayload } from '../customer/utils/build-ventor-assignment-contact.util';
 import { normalizeCustomerPhone } from '../customer/utils/normalize-customer-phone.util';
 import { resolveVentorDisplayForCustomer } from '../customer/utils/resolve-ventor-display-for-customer.util';
 import {
@@ -293,6 +294,29 @@ export class WhatsappMarketingRecoveryReplyService {
       return;
     }
     const ventorDisplay = resolveVentorDisplayForCustomer(ventor);
+    if (kind === 'assign') {
+      const contact = buildVentorAssignmentContactPayload(ventor);
+      if (contact == null) {
+        this.logger.warn(
+          `marketing reply: auto-reply skipped — ventor has no phone kind=assign customerId=${input.customerId}`,
+        );
+        return;
+      }
+      this.logger.log(
+        `marketing reply: auto-reply emit kind=assign contacts customerId=${input.customerId} waId=${input.waId} ventorId=${ventor.id} ventorName=${ventorDisplay.userName} ventorPhone=${ventorDisplay.userPhone}`,
+      );
+      await this.potentialCustomersOutbound.executeEmitPotentialCustomersEvent({
+        type: 'potential_customers',
+        payload: {
+          action: 'send.potential_customer_contacts',
+          waId: input.waId.trim(),
+          phoneNumberId: input.phoneNumberId,
+          customerId: input.customerId,
+          contact,
+        },
+      });
+      return;
+    }
     const body = buildMarketingRecoveryAutoReplyBody({
       kind,
       ventorDisplay,
