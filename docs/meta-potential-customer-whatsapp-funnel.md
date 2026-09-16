@@ -37,11 +37,11 @@ sequenceDiagram
   Meta->>Gateway: inbound text (post-flow)
   Gateway->>Customers: ingress
   Note over Customers: ready_for_llm + assignedTo, no template
-  Customers->>WsMs: RMQ potential_customers.ms_ws (ventor contact text)
-  WsMs->>Meta: text message
+  Customers->>WsMs: RMQ potential_customers.ms_ws (ventor contacts card)
+  WsMs->>Meta: contacts message
 ```
 
-**Inbound auto-reply (phase 1):** After flow, each inbound text/button that does **not** trigger `potential_customer` template → `CustomerMetaInboundReplyService` sends assigned ventor contact (`send.potential_customer_text`). **Phase 2:** DeepSeek La Ceiba replies (whatsapp_cloud_ms), not via local webhook.
+**Inbound auto-reply (phase 1):** After flow, each inbound text/button that does **not** trigger `potential_customer` template → `CustomerMetaInboundReplyService` sends assigned ventor contact card (`send.potential_customer_contacts`). **Phase 2:** DeepSeek La Ceiba replies (whatsapp_cloud_ms), not via local webhook.
 
 ---
 
@@ -125,8 +125,7 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 
 ### Copy / utils
 
-- `constants/ventor-assignment-message.constant.ts`
-- `utils/format-ventor-assignment-message.util.ts`
+- `utils/build-ventor-assignment-contact.util.ts` — contact fields for `send.potential_customer_contacts`
 
 ### Env (customers-ms)
 
@@ -151,7 +150,8 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 **Actions:**
 
 - `send.potential_customer_template` → `WhatsappCloudService.sendTemplatePotentialCustomer` (`potential_customer`, `es`)
-- `send.potential_customer_text` → `sendCustomersTextMessage` (customers line; ventor assignment / marketing auto-reply)
+- `send.potential_customer_text` → `sendCustomersTextMessage` (customers line; marketing recovery preserve auto-reply)
+- `send.potential_customer_contacts` → `sendCustomersContactsMessage` (customers line; ventor assignment vCard)
 
 **Module:** `src/potential-customers/potential-customers.module.ts` (imported in `app.module.ts`).
 
@@ -167,7 +167,7 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 
 ### Constants
 
-- `src/constants/app-constants.ts` — `VENTOR_ASSIGNMENT_CUSTOMER_MESSAGE_TEMPLATE` (placeholders `[user_name]`, `[user_phone]`)
+- Ventor assignment uses Meta `contacts` payload built in `whatsapp_cloud_ms` (`buildWhatsappContactsMessagePayload`); customers-ms emits contact fields via `buildVentorAssignmentContactPayload`.
 
 ---
 
