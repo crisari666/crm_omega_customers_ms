@@ -151,7 +151,7 @@ Stable IDs: `sessionId = cloud:{phoneNumberId}:{waId}`, `chatId = normalizedWaId
 
 - `send.potential_customer_template` → `WhatsappCloudService.sendTemplatePotentialCustomer` (`potential_customer`, `es`)
 - `send.potential_customer_text` → `sendCustomersTextMessage` (customers line; marketing recovery preserve auto-reply)
-- `send.potential_customer_contacts` → `sendCustomersContactsMessage` (customers line; ventor assignment vCard)
+- `send.potential_customer_contacts` → optional intro `body` text then `sendCustomersContactsMessage` (ventor assignment vCard)
 
 **Module:** `src/potential-customers/potential-customers.module.ts` (imported in `app.module.ts`).
 
