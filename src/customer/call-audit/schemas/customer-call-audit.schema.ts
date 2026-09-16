@@ -20,6 +20,12 @@ export class CallAuditIndicatorEmbedded {
   @Prop({ required: true })
   passed: boolean;
 
+  @Prop({ required: true, default: 0 })
+  maxPoints: number;
+
+  @Prop({ required: true, default: 0 })
+  pointsEarned: number;
+
   @Prop({ required: false })
   rationale?: string;
 
@@ -34,6 +40,15 @@ export class CallAuditSpeakerTurnEmbedded {
 
   @Prop({ required: true })
   text: string;
+
+  @Prop({ required: false })
+  startMs?: number;
+
+  @Prop({ required: false })
+  endMs?: number;
+
+  @Prop({ required: false })
+  speakerLabel?: string;
 }
 
 @Schema({ collection: 'customer_call_audits', timestamps: true })
@@ -55,6 +70,12 @@ export class CustomerCallAudit {
 
   @Prop({ type: [CallAuditIndicatorEmbedded], required: true, default: [] })
   indicators: CallAuditIndicatorEmbedded[];
+
+  @Prop({ required: true, default: 0 })
+  totalScore: number;
+
+  @Prop({ required: true, default: 100 })
+  maxScore: number;
 
   @Prop({ required: true })
   interestScore: number;

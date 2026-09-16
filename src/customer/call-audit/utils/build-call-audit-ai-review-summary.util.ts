@@ -16,6 +16,8 @@ export function buildCallAuditAiReviewSummary(
   let aiNone = 0;
   let interestSum = 0;
   let interestCount = 0;
+  let totalScoreSum = 0;
+  let totalScoreCount = 0;
   const failedCounts = new Map<string, number>();
   for (const item of items) {
     switch (item.aiStatus) {
@@ -24,6 +26,8 @@ export function buildCallAuditAiReviewSummary(
         if (item.ai !== null && item.ai.status === 'completed') {
           interestSum += item.ai.interestScore;
           interestCount += 1;
+          totalScoreSum += item.ai.totalScore;
+          totalScoreCount += 1;
           const summary = buildCallAuditIndicatorsSummary(item.ai.indicators);
           for (const label of summary.failedLabels) {
             failedCounts.set(label, (failedCounts.get(label) ?? 0) + 1);
@@ -54,6 +58,10 @@ export function buildCallAuditAiReviewSummary(
     aiNone,
     avgInterestScore:
       interestCount > 0 ? Math.round((interestSum / interestCount) * 10) / 10 : null,
+    avgTotalScore:
+      totalScoreCount > 0
+        ? Math.round((totalScoreSum / totalScoreCount) * 10) / 10
+        : null,
     topFailedIndicators,
   };
 }

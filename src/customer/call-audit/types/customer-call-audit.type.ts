@@ -9,6 +9,8 @@ export type CallAuditIndicatorResult = {
   key: string;
   label: string;
   passed: boolean;
+  maxPoints: number;
+  pointsEarned: number;
   rationale?: string;
   evidence?: string;
 };
@@ -16,10 +18,13 @@ export type CallAuditIndicatorResult = {
 export type CallAuditSpeakerTurn = {
   role: CallAuditSpeakerRole;
   text: string;
+  startMs?: number;
+  endMs?: number;
+  speakerLabel?: string;
 };
 
 export type CallAuditLlmAnalysisResult = {
-  speakerTurns: CallAuditSpeakerTurn[];
+  speakerTurns?: CallAuditSpeakerTurn[];
   indicators: Array<{
     key: string;
     passed: boolean;
@@ -38,6 +43,8 @@ export type CallAuditRecordDto = {
   source: CallAuditSource;
   configVersion: string;
   indicators: CallAuditIndicatorResult[];
+  totalScore: number;
+  maxScore: number;
   interestScore: number;
   interestScoreRationale?: string;
   speakerTurns?: CallAuditSpeakerTurn[];
@@ -69,6 +76,12 @@ export type CallAuditsByCallResponseDto = {
   transcript?: string;
   resolvedOutcome?: string;
   durationSeconds?: number;
+  utterances?: Array<{
+    speaker?: string;
+    text?: string;
+    start?: number;
+    end?: number;
+  }>;
   human: CallAuditRecordDto | null;
   ai: CallAuditRecordDto | null;
 };
@@ -77,6 +90,9 @@ export type CallAuditIndicatorsSummaryDto = {
   passed: number;
   total: number;
   failedLabels: string[];
+  earnedPoints: number;
+  maxPoints: number;
+  scorePercent: number;
 };
 
 export type CallAuditResultItemDto = {
@@ -87,6 +103,8 @@ export type CallAuditResultItemDto = {
   auditorUserId: string;
   reviewerNotes?: string;
   interestScore: number;
+  totalScore: number;
+  maxScore: number;
   indicatorsSummary: CallAuditIndicatorsSummaryDto;
   analyzedAt?: string;
 };
@@ -126,6 +144,7 @@ export type CallAuditAiReviewSummaryDto = {
   aiFailed: number;
   aiNone: number;
   avgInterestScore: number | null;
+  avgTotalScore: number | null;
   topFailedIndicators: Array<{ label: string; count: number }>;
 };
 

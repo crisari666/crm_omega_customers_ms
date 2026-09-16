@@ -25,11 +25,12 @@ describe('buildCallAuditAiReviewSummary', () => {
       aiFailed: 0,
       aiNone: 0,
       avgInterestScore: null,
+      avgTotalScore: null,
       topFailedIndicators: [],
     });
   });
 
-  it('counts statuses and averages interest', () => {
+  it('counts statuses and averages interest and total score', () => {
     const items: CallAuditAiReviewItemDto[] = [
       baseItem({
         aiStatus: 'completed',
@@ -41,9 +42,23 @@ describe('buildCallAuditAiReviewSummary', () => {
           source: 'ai',
           configVersion: 'v1',
           indicators: [
-            { key: 'a', label: 'Apertura', passed: false },
-            { key: 'b', label: 'Cierre', passed: true },
+            {
+              key: 'a',
+              label: 'Apertura',
+              passed: false,
+              maxPoints: 10,
+              pointsEarned: 0,
+            },
+            {
+              key: 'b',
+              label: 'Cierre',
+              passed: true,
+              maxPoints: 15,
+              pointsEarned: 15,
+            },
           ],
+          totalScore: 15,
+          maxScore: 25,
           interestScore: 4,
           status: 'completed',
           createdAt: '',
@@ -60,7 +75,17 @@ describe('buildCallAuditAiReviewSummary', () => {
           agentExternalRef: 'agent-1',
           source: 'ai',
           configVersion: 'v1',
-          indicators: [{ key: 'a', label: 'Apertura', passed: false }],
+          indicators: [
+            {
+              key: 'a',
+              label: 'Apertura',
+              passed: false,
+              maxPoints: 10,
+              pointsEarned: 0,
+            },
+          ],
+          totalScore: 45,
+          maxScore: 100,
           interestScore: 2,
           status: 'completed',
           createdAt: '',
@@ -74,6 +99,7 @@ describe('buildCallAuditAiReviewSummary', () => {
     expect(actual.aiCompleted).toBe(2);
     expect(actual.aiNone).toBe(1);
     expect(actual.avgInterestScore).toBe(3);
+    expect(actual.avgTotalScore).toBe(30);
     expect(actual.topFailedIndicators[0]).toEqual({ label: 'Apertura', count: 2 });
   });
 });

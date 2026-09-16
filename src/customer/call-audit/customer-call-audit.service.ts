@@ -49,10 +49,16 @@ import {
 import { buildCallAuditIndicatorsSummary } from './utils/build-call-audit-indicators-summary.util';
 import { buildCallAuditAiReviewSummary } from './utils/build-call-audit-ai-review-summary.util';
 import {
+  buildScoredIndicator,
+  computeCallAuditScoreTotals,
+} from './utils/compute-call-audit-score.util';
+import {
   isInstantInCallAuditMonth,
   resolveCallAuditCallDateIso,
   widenCallAuditPrefetchRange,
 } from './utils/resolve-call-audit-call-date.util';
+import { formatTimedTranscriptFromUtterances } from './utils/format-timed-transcript.util';
+import { mapUtterancesToSpeakerTurns } from './utils/map-utterances-to-speaker-turns.util';
 import type { CallAuditSpeakerRole } from './constants/call-audit.constant';
 
 type CallLogLean = {
@@ -67,6 +73,7 @@ type CallLogLean = {
   to?: string;
   status?: string;
   events?: CustomerCallLog['events'];
+  utterances?: CustomerCallLog['utterances'];
   createdAt?: Date;
 };
 
@@ -109,7 +116,12 @@ export class CustomerCallAuditService {
   /** Runs DeepSeek audit for a call log; upserts AI audit as pending, then completed or failed. */
   async analyzeCallByCallLogId(callLogId: string): Promise<CallAuditRecordDto> {
     const callLog = await this.findCallLogOrThrow(callLogId);
-    const transcript = this.resolveTranscript(callLog);
+    const plainTranscript = this.resolveTranscript(callLog);
+    const timedTranscript = formatTimedTranscriptFromUtterances(
+      callLog.utterances ?? [],
+    );
+    const transcript =
+      timedTranscript.trim() !== '' ? timedTranscript : plainTranscript;
     if (transcript === '') {
       throw new BadRequestException('Call has no transcript to analyze');
     }
@@ -132,12 +144,15 @@ export class CustomerCallAuditService {
         agentExternalRef,
         callMetadata: metadata,
       });
+      const utteranceTurns = mapUtterancesToSpeakerTurns(callLog.utterances ?? []);
+      const speakerTurns =
+        utteranceTurns.length > 0 ? utteranceTurns : analysis.speakerTurns;
       return await this.saveAiAuditCompleted({
         callLogId: callLogObjectId,
         callSid: callLog.callSid,
         agentExternalRef,
         configVersion: config.version,
-        analysis,
+        analysis: { ...analysis, speakerTurns },
         llmModel: model,
       });
     } catch (err) {
@@ -181,6 +196,7 @@ export class CustomerCallAuditService {
     }
     const config = this.callAuditLlmConfigService.getConfig();
     const indicators = this.mapHumanIndicators(body, config);
+    const { totalScore, maxScore } = computeCallAuditScoreTotals(indicators);
     const interestScore = this.clampScore(body.interestScore, config.interestScore);
     const speakerTurns = this.mapSpeakerTurns(body.speakerTurns);
     const setPayload: Record<string, unknown> = {
@@ -188,6 +204,8 @@ export class CustomerCallAuditService {
       agentExternalRef,
       configVersion: config.version,
       indicators,
+      totalScore,
+      maxScore,
       interestScore,
       interestScoreRationale: body.interestScoreRationale?.trim(),
       speakerTurns,
@@ -242,6 +260,12 @@ export class CustomerCallAuditService {
       transcript: this.resolveTranscript(callLog),
       resolvedOutcome: derived.outcome,
       durationSeconds: callLog.durationSeconds,
+      utterances: (callLog.utterances ?? []).map((u) => ({
+        speaker: u.speaker,
+        text: u.text,
+        start: u.start,
+        end: u.end,
+      })),
       human,
       ai: includeAi ? ai : null,
     };
@@ -278,6 +302,8 @@ export class CustomerCallAuditService {
         auditorUserId: 1,
         reviewerNotes: 1,
         interestScore: 1,
+        totalScore: 1,
+        maxScore: 1,
         indicators: 1,
         analyzedAt: 1,
       })
@@ -312,6 +338,14 @@ export class CustomerCallAuditService {
       }
       const callLogId = String(row.callLogId);
       const meta = callLogMetaById.get(callLogId);
+      const indicatorsSummary = buildCallAuditIndicatorsSummary(
+        (row.indicators ?? []).map((i) => ({
+          passed: i.passed === true,
+          label: String(i.label ?? i.key ?? ''),
+          pointsEarned: Number(i.pointsEarned ?? 0),
+          maxPoints: Number(i.maxPoints ?? 0),
+        })),
+      );
       items.push({
         callLogId,
         callSid: meta?.callSid ?? String(row.callSid ?? ''),
@@ -320,12 +354,9 @@ export class CustomerCallAuditService {
         auditorUserId,
         reviewerNotes: row.reviewerNotes?.trim(),
         interestScore: Number(row.interestScore ?? 1),
-        indicatorsSummary: buildCallAuditIndicatorsSummary(
-          (row.indicators ?? []).map((i) => ({
-            passed: i.passed === true,
-            label: String(i.label ?? i.key ?? ''),
-          })),
-        ),
+        totalScore: Number(row.totalScore ?? indicatorsSummary.earnedPoints),
+        maxScore: Number(row.maxScore ?? indicatorsSummary.maxPoints),
+        indicatorsSummary,
         analyzedAt:
           row.analyzedAt !== undefined
             ? new Date(row.analyzedAt).toISOString()
@@ -553,12 +584,11 @@ export class CustomerCallAuditService {
       if (submitted === undefined) {
         throw new BadRequestException(`Missing indicator: ${indicator.key}`);
       }
-      return {
-        key: indicator.key,
-        label: indicator.label,
+      return buildScoredIndicator({
+        configIndicator: indicator,
         passed: submitted.passed,
         rationale: submitted.rationale?.trim(),
-      };
+      });
     });
   }
 
@@ -617,6 +647,8 @@ export class CustomerCallAuditService {
             configVersion: input.configVersion,
             status: CALL_AUDIT_STATUS_PENDING,
             indicators: [],
+            totalScore: 0,
+            maxScore: 100,
             interestScore: 1,
           },
         },
@@ -635,6 +667,7 @@ export class CustomerCallAuditService {
   }): Promise<CallAuditRecordDto> {
     const config = this.callAuditLlmConfigService.getConfig();
     const indicators = this.mapAiIndicators(input.analysis, config);
+    const { totalScore, maxScore } = computeCallAuditScoreTotals(indicators);
     const doc = await this.callAuditModel
       .findOneAndUpdate(
         { callLogId: input.callLogId, source: CALL_AUDIT_SOURCE_AI },
@@ -644,6 +677,8 @@ export class CustomerCallAuditService {
             agentExternalRef: input.agentExternalRef,
             configVersion: input.configVersion,
             indicators,
+            totalScore,
+            maxScore,
             interestScore: input.analysis.interestScore,
             interestScoreRationale: input.analysis.interestScoreRationale,
             speakerTurns: input.analysis.speakerTurns,
@@ -691,13 +726,12 @@ export class CustomerCallAuditService {
     const byKey = new Map(analysis.indicators.map((i) => [i.key, i]));
     return config.indicators.map((indicator) => {
       const row = byKey.get(indicator.key);
-      return {
-        key: indicator.key,
-        label: indicator.label,
+      return buildScoredIndicator({
+        configIndicator: indicator,
         passed: row?.passed === true,
         rationale: row?.rationale,
         evidence: row?.evidence,
-      };
+      });
     });
   }
 
@@ -714,6 +748,16 @@ export class CustomerCallAuditService {
       withTimestamps.updatedAt !== undefined
         ? new Date(withTimestamps.updatedAt).toISOString()
         : createdAt;
+    const indicators: CallAuditIndicatorResult[] = doc.indicators.map((i) => ({
+      key: i.key,
+      label: i.label,
+      passed: i.passed,
+      maxPoints: Number(i.maxPoints ?? 0),
+      pointsEarned: Number(i.pointsEarned ?? 0),
+      rationale: i.rationale,
+      evidence: i.evidence,
+    }));
+    const totals = computeCallAuditScoreTotals(indicators);
     return {
       id: String(doc._id),
       callLogId: String(doc.callLogId),
@@ -721,18 +765,17 @@ export class CustomerCallAuditService {
       agentExternalRef: doc.agentExternalRef,
       source: doc.source,
       configVersion: doc.configVersion,
-      indicators: doc.indicators.map((i) => ({
-        key: i.key,
-        label: i.label,
-        passed: i.passed,
-        rationale: i.rationale,
-        evidence: i.evidence,
-      })),
+      indicators,
+      totalScore: Number(doc.totalScore ?? totals.totalScore),
+      maxScore: Number(doc.maxScore ?? totals.maxScore),
       interestScore: doc.interestScore,
       interestScoreRationale: doc.interestScoreRationale,
       speakerTurns: doc.speakerTurns?.map((t) => ({
         role: t.role,
         text: t.text,
+        startMs: t.startMs,
+        endMs: t.endMs,
+        speakerLabel: t.speakerLabel,
       })),
       auditorUserId: doc.auditorUserId,
       reviewerNotes: doc.reviewerNotes,
