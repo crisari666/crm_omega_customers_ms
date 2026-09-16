@@ -37,7 +37,7 @@ export type CreateVentorAuditMeetResult = {
  */
 @Injectable()
 export class VentorMeetGoogleCalendarService {
-  private static readonly AUDIT_INVITE_RETRY_MS = 2000;
+  private static readonly AUDIT_INVITE_RETRY_MS = 5000;
   private static readonly AUDIT_INVITE_MAX_ATTEMPTS = 4;
   private readonly logger = new Logger(VentorMeetGoogleCalendarService.name);
 
