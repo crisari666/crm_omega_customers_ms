@@ -265,6 +265,16 @@ export class CustomerCallLogsService {
       });
     }
     await doc.save();
+    const savedTranscript = (doc.transcript ?? doc.text ?? '').trim();
+    if (
+      args.body.attendance === 'attended' &&
+      savedTranscript !== '' &&
+      doc.callSid
+    ) {
+      this.customerCallAuditService.scheduleAnalyzeAfterTranscription(
+        doc.callSid,
+      );
+    }
     return this.toAdminItem(doc.toObject({ virtuals: true }));
   }
 
@@ -412,6 +422,16 @@ export class CustomerCallLogsService {
       });
     }
     await doc.save();
+    const savedTranscript = (doc.transcript ?? doc.text ?? '').trim();
+    if (
+      body.attendance === 'attended' &&
+      savedTranscript !== '' &&
+      doc.callSid
+    ) {
+      this.customerCallAuditService.scheduleAnalyzeAfterTranscription(
+        doc.callSid,
+      );
+    }
     return this.toAdminItem(doc.toObject({ virtuals: true }));
   }
 

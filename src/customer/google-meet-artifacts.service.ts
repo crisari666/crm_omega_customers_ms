@@ -13,6 +13,11 @@ import {
   MEET_AUDIT_SA_RELATIVE_PATH,
   MEET_AUDIT_SUBJECT_EMAIL,
 } from '../ventor-schedule/google-meet-audit.constants';
+import { formatTimedTranscriptFromUtterances } from './call-audit/utils/format-timed-transcript.util';
+import { parseMeetDriveTranscriptDocument } from './call-audit/utils/parse-meet-drive-transcript.util';
+
+const MEET_AUDIT_DRIVE_READONLY_SCOPE =
+  'https://www.googleapis.com/auth/drive.readonly' as const;
 
 export type GoogleMeetTranscriptFetchResult = {
   attendance: 'attended' | 'no_answer';
@@ -85,7 +90,7 @@ export class GoogleMeetArtifactsService {
     const auth = new google.auth.JWT({
       email: credentials.clientEmail,
       key: credentials.privateKey,
-      scopes: [MEET_AUDIT_MEETINGS_READONLY_SCOPE],
+      scopes: [MEET_AUDIT_MEETINGS_READONLY_SCOPE, MEET_AUDIT_DRIVE_READONLY_SCOPE],
       subject: subjectEmail,
     });
     const tokenResponse = await auth.getAccessToken();
@@ -251,12 +256,23 @@ export class GoogleMeetArtifactsService {
           };
         })
         .filter((u): u is NonNullable<typeof u> => u != null);
+      if (utterances.length === 0 && transcriptDriveDocId) {
+        const fromDoc = await this.fetchTranscriptFromDriveDoc(
+          transcriptDriveDocId,
+          accessToken,
+        );
+        if (fromDoc !== null) {
+          return {
+            ...fromDoc,
+            transcriptDriveDocId,
+          };
+        }
+        return { transcriptDriveDocId };
+      }
       if (utterances.length === 0) {
         return transcriptDriveDocId ? { transcriptDriveDocId } : {};
       }
-      const transcript = utterances
-        .map((u) => (u.speaker ? `${u.speaker}: ${u.text}` : u.text))
-        .join('\n');
+      const transcript = formatTimedTranscriptFromUtterances(utterances);
       return {
         transcript,
         text: transcript,
@@ -270,6 +286,49 @@ export class GoogleMeetArtifactsService {
         }`,
       );
       return {};
+    }
+  }
+
+  private async fetchTranscriptFromDriveDoc(
+    transcriptDriveDocId: string,
+    accessToken: string,
+  ): Promise<Partial<GoogleMeetTranscriptFetchResult> | null> {
+    try {
+      const fileId = transcriptDriveDocId
+        .replace(/^.*\//, '')
+        .trim();
+      if (fileId === '') {
+        return null;
+      }
+      const exportUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=text/plain`;
+      const response = await fetch(exportUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        this.logger.warn(
+          `Drive transcript export failed (${response.status}): ${detail}`,
+        );
+        return null;
+      }
+      const rawText = await response.text();
+      const utterances = parseMeetDriveTranscriptDocument(rawText);
+      if (utterances.length === 0) {
+        const trimmed = rawText.trim();
+        if (trimmed === '') {
+          return null;
+        }
+        return { transcript: trimmed, text: trimmed };
+      }
+      const transcript = formatTimedTranscriptFromUtterances(utterances);
+      return { transcript, text: transcript, utterances };
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Drive transcript parse failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
     }
   }
 
