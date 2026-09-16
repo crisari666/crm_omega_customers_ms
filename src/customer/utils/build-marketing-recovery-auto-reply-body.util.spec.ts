@@ -3,7 +3,6 @@ import {
   resolveMarketingRecoveryAutoReplyKind,
 } from './build-marketing-recovery-auto-reply-body.util';
 import { MARKETING_RECOVERY_PRESERVED_ASSIGNEE_MESSAGE_TEMPLATE } from '../constants/marketing-recovery-reply-message.constant';
-import { VENTOR_ASSIGNMENT_CUSTOMER_MESSAGE_TEMPLATE } from '../constants/ventor-assignment-message.constant';
 
 describe('resolveMarketingRecoveryAutoReplyKind', () => {
   it('returns preserve when didPreserveAssignee is true', () => {
@@ -59,16 +58,11 @@ describe('buildMarketingRecoveryAutoReplyBody', () => {
       ).replace('[user_phone]', '3001234567'),
     );
   });
-  it('builds ventor assignment message for assign kind', () => {
+  it('returns null for assign kind (contacts card is sent separately)', () => {
     const actual = buildMarketingRecoveryAutoReplyBody({
       kind: 'assign',
       ventorDisplay,
     });
-    expect(actual).toBe(
-      VENTOR_ASSIGNMENT_CUSTOMER_MESSAGE_TEMPLATE.replace('[user_name]', 'Ana López').replace(
-        '[user_phone]',
-        '3001234567',
-      ),
-    );
+    expect(actual).toBeNull();
   });
 });

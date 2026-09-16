@@ -1,4 +1,3 @@
-import { formatVentorAssignmentMessageForCustomer } from './format-ventor-assignment-message.util';
 import { formatPreservedAssigneeReplyMessageForCustomer } from './format-marketing-recovery-reply-message.util';
 
 export type MarketingRecoveryAutoReplyKind = 'preserve' | 'assign' | 'none';
@@ -21,11 +20,15 @@ export function resolveMarketingRecoveryAutoReplyKind(input: {
   return 'none';
 }
 
+/**
+ * Builds the text auto-reply body for marketing recovery.
+ * Only `preserve` uses text; `assign` sends a contacts card via a separate path.
+ */
 export function buildMarketingRecoveryAutoReplyBody(input: {
   readonly kind: MarketingRecoveryAutoReplyKind;
   readonly ventorDisplay: MarketingRecoveryAutoReplyVentorDisplay;
 }): string | null {
-  if (input.kind === 'none') {
+  if (input.kind !== 'preserve') {
     return null;
   }
   const userName =
@@ -36,8 +39,5 @@ export function buildMarketingRecoveryAutoReplyBody(input: {
     input.ventorDisplay.userPhone.trim().length > 0
       ? input.ventorDisplay.userPhone.trim()
       : '-';
-  if (input.kind === 'preserve') {
-    return formatPreservedAssigneeReplyMessageForCustomer({ userName, userPhone });
-  }
-  return formatVentorAssignmentMessageForCustomer({ userName, userPhone });
+  return formatPreservedAssigneeReplyMessageForCustomer({ userName, userPhone });
 }
