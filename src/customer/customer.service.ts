@@ -55,6 +55,10 @@ const DUPLICATE_EMAIL_MESSAGE =
   'Ya existe un cliente con este correo electrónico.';
 const DUPLICATE_DOCUMENT_MESSAGE =
   'Ya existe un cliente con este documento.';
+/** Default rolling window for `GET customer/mine` (assignedDate / createdAt). */
+const VENTOR_MINE_LIST_WINDOW_DAYS = 30;
+/** Extra days kept on the mine list when the customer's step is `isPotentialBuyer`. */
+const VENTOR_MINE_POTENTIAL_BUYER_EXTRA_DAYS = 15;
 
 function isMongoDuplicateKeyError(err: unknown): boolean {
   return (
@@ -234,16 +238,85 @@ export class CustomerService {
     return { total: customers.length, updated, unchanged, conflicts };
   }
 
+  /**
+   * Ventor mine list: customers this user created or is assigned to, limited to a
+   * rolling window on `assignedDate` (fallback `createdAt`). Default 30 days;
+   * 45 days when the customer's step has `isPotentialBuyer`.
+   */
   async findCustomersCreatedBy(
     createdBy: string,
     sort: 'createdAt' | 'lastUpdate' = 'createdAt',
   ): Promise<CustomerDocument[]> {
+    const now = new Date();
+    const cutoffDefault = new Date(now);
+    cutoffDefault.setDate(cutoffDefault.getDate() - VENTOR_MINE_LIST_WINDOW_DAYS);
+    const cutoffPotential = new Date(now);
+    cutoffPotential.setDate(
+      cutoffPotential.getDate() -
+        (VENTOR_MINE_LIST_WINDOW_DAYS + VENTOR_MINE_POTENTIAL_BUYER_EXTRA_DAYS),
+    );
+    const matched = await this.customerModel
+      .aggregate<{ _id: Types.ObjectId }>([
+        {
+          $match: {
+            $or: [{ createdBy }, { assignedTo: createdBy }],
+          },
+        },
+        {
+          $lookup: {
+            from: 'customer_steps',
+            localField: 'customerStepId',
+            foreignField: '_id',
+            as: '__step',
+          },
+        },
+        {
+          $addFields: {
+            __effectiveDate: {
+              $cond: {
+                if: {
+                  $gt: [{ $strLenCP: { $ifNull: ['$assignedDate', ''] } }, 0],
+                },
+                then: { $toDate: '$assignedDate' },
+                else: '$createdAt',
+              },
+            },
+            __isPotentialBuyer: {
+              $ifNull: [
+                { $arrayElemAt: ['$__step.isPotentialBuyer', 0] },
+                false,
+              ],
+            },
+          },
+        },
+        {
+          $match: {
+            $expr: {
+              $or: [
+                { $gte: ['$__effectiveDate', cutoffDefault] },
+                {
+                  $and: [
+                    { $eq: ['$__isPotentialBuyer', true] },
+                    { $gte: ['$__effectiveDate', cutoffPotential] },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        { $project: { _id: 1 } },
+      ])
+      .exec();
+    const ids = matched.map((row) => row._id);
+    if (ids.length === 0) {
+      return [];
+    }
     const sortSpec =
       sort === 'lastUpdate'
         ? { lastUpdate: -1 as const, createdAt: -1 as const }
         : { createdAt: -1 as const };
     return this.customerModel
-      .find({ $or: [{ createdBy }, { assignedTo: createdBy }] })
+      .find({ _id: { $in: ids } })
       .sort(sortSpec)
       .exec();
   }
