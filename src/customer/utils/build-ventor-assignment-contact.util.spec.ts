@@ -1,7 +1,10 @@
 import {
   buildVentorAssignmentContactPayload,
   buildVentorAssignmentContactSummary,
+  buildVentorAssignmentWhatsAppBundle,
+  formatVentorAssignmentContactGreeting,
 } from './build-ventor-assignment-contact.util';
+import { VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE } from '../constants/ventor-assignment-contact-greeting.constant';
 import type { VentorAssignmentCandidate } from '../types/ventor-assignment-candidate.type';
 
 describe('buildVentorAssignmentContactPayload', () => {
@@ -48,6 +51,37 @@ describe('buildVentorAssignmentContactPayload', () => {
       phoneJob: '',
     };
     expect(buildVentorAssignmentContactPayload(inputVentor)).toBeNull();
+  });
+});
+
+describe('formatVentorAssignmentContactGreeting', () => {
+  it('replaces the advisor name placeholder', () => {
+    const actual = formatVentorAssignmentContactGreeting({ userName: 'Ana López' });
+    expect(actual).toBe(
+      VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE.replace('[user_name]', 'Ana López'),
+    );
+  });
+});
+
+describe('buildVentorAssignmentWhatsAppBundle', () => {
+  it('returns greeting body plus contact fields', () => {
+    const inputVentor: VentorAssignmentCandidate = {
+      id: 'v1',
+      name: 'Ana',
+      lastName: 'López',
+      phone: '3001234567',
+      phoneJob: '',
+    };
+    const actual = buildVentorAssignmentWhatsAppBundle(inputVentor);
+    expect(actual).toEqual({
+      contact: {
+        firstName: 'Ana',
+        lastName: 'López',
+        phone: '3001234567',
+        waId: '3001234567',
+      },
+      body: VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE.replace('[user_name]', 'Ana López'),
+    });
   });
 });
 

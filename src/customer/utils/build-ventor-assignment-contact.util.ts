@@ -1,5 +1,22 @@
 import type { VentorAssignmentCandidate } from '../types/ventor-assignment-candidate.type';
 import type { PotentialCustomersContactPayload } from '../types/potential-customers-ms-event.type';
+import { VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE } from '../constants/ventor-assignment-contact-greeting.constant';
+
+export type VentorAssignmentWhatsAppBundle = {
+  readonly contact: PotentialCustomersContactPayload;
+  readonly body: string;
+};
+
+/**
+ * Builds the Spanish greeting that introduces the ventor contact card.
+ */
+export function formatVentorAssignmentContactGreeting(input: {
+  readonly userName: string;
+}): string {
+  const userName: string =
+    input.userName.trim().length > 0 ? input.userName.trim() : 'tu asesor';
+  return VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE.replace('[user_name]', userName);
+}
 
 /**
  * Maps a ventor assignment candidate to the WhatsApp contacts payload fields.
@@ -20,6 +37,25 @@ export function buildVentorAssignmentContactPayload(
     lastName,
     phone,
     waId: waId.length > 0 ? waId : undefined,
+  };
+}
+
+/**
+ * Greeting text + contact card fields for ventor assignment WhatsApp.
+ */
+export function buildVentorAssignmentWhatsAppBundle(
+  ventor: VentorAssignmentCandidate,
+): VentorAssignmentWhatsAppBundle | null {
+  const contact = buildVentorAssignmentContactPayload(ventor);
+  if (contact == null) {
+    return null;
+  }
+  const displayName: string = `${contact.firstName} ${contact.lastName}`.trim();
+  return {
+    contact,
+    body: formatVentorAssignmentContactGreeting({
+      userName: displayName.length > 0 ? displayName : 'tu asesor',
+    }),
   };
 }
 
