@@ -18,6 +18,8 @@ import {
   type CustomerEventItem,
   type ListCustomerEventsResult,
 } from './types/customer-events.type';
+import type { CustomerMineEventsSummaryResponse } from './types/customer-mine-events-summary.type';
+import type { CustomerEventType } from './schemas/customer-event.schema';
 import { CustomerAuditService } from './customer-audit.service';
 
 @Injectable()
@@ -63,6 +65,67 @@ export class CustomerEventsService {
     query: ListCustomerEventsQueryDto,
   ): Promise<ListCustomerEventsResult> {
     return this.listInternal(query);
+  }
+
+  /**
+   * Distinct customers per event type for the ventor's scoped customer ids.
+   * Multiple rows of the same type on one customer still count as 1.
+   */
+  async summarizeMineEventsByType(args: {
+    readonly actorUserId: string;
+    readonly customerIds: readonly string[];
+  }): Promise<CustomerMineEventsSummaryResponse> {
+    const uniqueIds = [
+      ...new Set(
+        args.customerIds
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0 && isValidObjectId(id)),
+      ),
+    ];
+    if (uniqueIds.length === 0) {
+      return { items: [] };
+    }
+    const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
+    const scopedDocs = await this.customerModel
+      .find({
+        _id: { $in: objectIds },
+        $or: [{ createdBy: args.actorUserId }, { assignedTo: args.actorUserId }],
+      })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    const scopedIds = scopedDocs.map((doc) => doc._id as Types.ObjectId);
+    if (scopedIds.length === 0) {
+      return { items: [] };
+    }
+    const rows = await this.customerEventModel
+      .aggregate<{ _id: CustomerEventType; count: number }>([
+        {
+          $match: {
+            customerId: { $in: scopedIds },
+            userId: args.actorUserId,
+          },
+        },
+        {
+          $group: {
+            _id: { eventType: '$eventType', customerId: '$customerId' },
+          },
+        },
+        {
+          $group: {
+            _id: '$_id.eventType',
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1, _id: 1 } },
+      ])
+      .exec();
+    return {
+      items: rows.map((row) => ({
+        eventType: row._id,
+        count: row.count,
+      })),
+    };
   }
 
   /**

@@ -18,6 +18,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateCustomerEventDto } from './dto/create-customer-event.dto';
 import { ListCustomerEventsQueryDto } from './dto/list-customer-events.query.dto';
 import { ListCustomerMineQueryDto } from './dto/list-customer-mine.query.dto';
+import { MineEventsSummaryBodyDto } from './dto/mine-events-summary.body.dto';
 import { CustomerEventsService } from './customer-events.service';
 import { CustomerMetaLeadgenService } from './customer-meta-leadgen.service';
 import { CustomerService } from './customer.service';
@@ -51,6 +52,20 @@ export class CustomerController {
     return this.customerService.getVendorMineDashboardStats(
       resolveOfficeUserId(jwtUser),
     );
+  }
+
+  /**
+   * Distinct customers per event type for the given ids (ventor scope + JWT actor).
+   */
+  @Post('mine/events-summary')
+  summarizeMyEvents(
+    @Body() body: MineEventsSummaryBodyDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    return this.customerEventsService.summarizeMineEventsByType({
+      actorUserId: resolveOfficeUserId(jwtUser),
+      customerIds: body.customerIds,
+    });
   }
 
   /**
