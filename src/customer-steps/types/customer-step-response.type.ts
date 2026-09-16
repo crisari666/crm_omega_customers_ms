@@ -5,6 +5,7 @@ export type CustomerStepResponse = {
   order: number;
   color?: string;
   isActive: boolean;
+  isPotentialBuyer: boolean;
   createdAt: string;
   updatedAt: string;
 };

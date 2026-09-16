@@ -38,6 +38,7 @@ export class CustomerStepsService {
       order: dto.order ?? 0,
       ...(dto.color !== undefined && { color: dto.color.trim() }),
       isActive: dto.isActive ?? true,
+      isPotentialBuyer: dto.isPotentialBuyer ?? false,
       createdBy: actorUserId,
       updatedBy: actorUserId,
     }).save();
@@ -71,6 +72,9 @@ export class CustomerStepsService {
     if (dto.isActive !== undefined) {
       step.isActive = dto.isActive;
     }
+    if (dto.isPotentialBuyer !== undefined) {
+      step.isPotentialBuyer = dto.isPotentialBuyer;
+    }
     step.updatedBy = actorUserId;
     const saved = await step.save();
     return this.mapToResponse(saved.toObject());
@@ -83,6 +87,7 @@ export class CustomerStepsService {
     order: number;
     color?: string;
     isActive: boolean;
+    isPotentialBuyer?: boolean;
     createdAt?: Date | string;
     updatedAt?: Date | string;
   }): CustomerStepResponse {
@@ -95,6 +100,7 @@ export class CustomerStepsService {
       order: doc.order,
       ...(doc.color !== undefined && { color: doc.color }),
       isActive: doc.isActive,
+      isPotentialBuyer: doc.isPotentialBuyer ?? false,
       createdAt:
         createdAt instanceof Date
           ? createdAt.toISOString()

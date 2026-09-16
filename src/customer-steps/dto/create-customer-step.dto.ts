@@ -22,4 +22,8 @@ export class CreateCustomerStepDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPotentialBuyer?: boolean;
 }

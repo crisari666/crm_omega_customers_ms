@@ -20,6 +20,10 @@ export class CustomerStep {
   @Prop({ type: Boolean, required: true, default: true, index: true })
   isActive: boolean;
 
+  /** When true, ventor mine list keeps customers on this step for 15 extra days past the default window. */
+  @Prop({ type: Boolean, required: true, default: false, index: true })
+  isPotentialBuyer: boolean;
+
   @Prop({ required: true, index: true })
   createdBy: string;
 
