@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Customer, CustomerDocument, DocumentType } from './schemas/customer.schema';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
-import { buildVentorAssignmentContactPayload } from './utils/build-ventor-assignment-contact.util';
+import { buildVentorAssignmentWhatsAppBundle } from './utils/build-ventor-assignment-contact.util';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { VentorAssignmentCandidate } from './types/ventor-assignment-candidate.type';
@@ -75,8 +75,8 @@ export class CustomerWhatsappFlowCompletedService {
     ventor: VentorAssignmentCandidate,
     waId: string,
   ): Promise<void> {
-    const contact = buildVentorAssignmentContactPayload(ventor);
-    if (contact == null) {
+    const bundle = buildVentorAssignmentWhatsAppBundle(ventor);
+    if (bundle == null) {
       this.logger.warn(
         `Flow completed: skip contacts emit — ventor has no phone ventorId=${ventor.id}`,
       );
@@ -89,7 +89,8 @@ export class CustomerWhatsappFlowCompletedService {
         waId,
         phoneNumberId: payload.phoneNumberId,
         customerId: String(customer._id),
-        contact,
+        body: bundle.body,
+        contact: bundle.contact,
       },
     });
   }

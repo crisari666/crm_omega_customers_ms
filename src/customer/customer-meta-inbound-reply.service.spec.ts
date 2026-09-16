@@ -1,4 +1,5 @@
 import { CustomerMetaInboundReplyService } from './customer-meta-inbound-reply.service';
+import { VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE } from './constants/ventor-assignment-contact-greeting.constant';
 import type { CustomerDocument } from './schemas/customer.schema';
 import type { VentorAssignmentCandidate } from './types/ventor-assignment-candidate.type';
 
@@ -92,11 +93,15 @@ describe('CustomerMetaInboundReplyService', () => {
     expect(potentialCustomersOutbound.executeEmitPotentialCustomersEvent).not.toHaveBeenCalled();
   });
 
-  it('emits ventor contacts card and persists outbound conversation when ventor is found', async () => {
+  it('emits greeting + ventor contacts card and persists outbound conversation when ventor is found', async () => {
     const { service, ventorAssignment, potentialCustomersOutbound, conversationsService } =
       createService();
     ventorAssignment.executeFindVentorById.mockResolvedValue(ventor);
-    const expectedSummary = 'Contacto: Ana López (Asesor La Ceiba) — 3001234567';
+    const expectedBody = VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE.replace(
+      '[user_name]',
+      'Ana López',
+    );
+    const expectedSummary = `${expectedBody}\n\nContacto: Ana López (Asesor La Ceiba) — 3001234567`;
     const sent = await service.executeTrySendAssignedVentorContactReply({
       customer: baseCustomer,
       normalizedWaId: '573001234567',
@@ -113,6 +118,7 @@ describe('CustomerMetaInboundReplyService', () => {
         waId: '573001234567',
         phoneNumberId: 'phone-1',
         customerId: '507f1f77bcf86cd799439011',
+        body: expectedBody,
         contact: {
           firstName: 'Ana',
           lastName: 'López',

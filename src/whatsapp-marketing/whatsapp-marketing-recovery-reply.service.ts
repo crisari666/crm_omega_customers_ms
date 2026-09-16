@@ -11,7 +11,7 @@ import {
   buildMarketingRecoveryAutoReplyBody,
   resolveMarketingRecoveryAutoReplyKind,
 } from '../customer/utils/build-marketing-recovery-auto-reply-body.util';
-import { buildVentorAssignmentContactPayload } from '../customer/utils/build-ventor-assignment-contact.util';
+import { buildVentorAssignmentWhatsAppBundle } from '../customer/utils/build-ventor-assignment-contact.util';
 import { normalizeCustomerPhone } from '../customer/utils/normalize-customer-phone.util';
 import { resolveVentorDisplayForCustomer } from '../customer/utils/resolve-ventor-display-for-customer.util';
 import {
@@ -295,8 +295,8 @@ export class WhatsappMarketingRecoveryReplyService {
     }
     const ventorDisplay = resolveVentorDisplayForCustomer(ventor);
     if (kind === 'assign') {
-      const contact = buildVentorAssignmentContactPayload(ventor);
-      if (contact == null) {
+      const bundle = buildVentorAssignmentWhatsAppBundle(ventor);
+      if (bundle == null) {
         this.logger.warn(
           `marketing reply: auto-reply skipped — ventor has no phone kind=assign customerId=${input.customerId}`,
         );
@@ -312,7 +312,8 @@ export class WhatsappMarketingRecoveryReplyService {
           waId: input.waId.trim(),
           phoneNumberId: input.phoneNumberId,
           customerId: input.customerId,
-          contact,
+          body: bundle.body,
+          contact: bundle.contact,
         },
       });
       return;

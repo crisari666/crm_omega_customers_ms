@@ -6,8 +6,8 @@ import { CustomerPotentialCustomersOutboundService } from './customer-potential-
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { MetaWebhookMessagesValue } from './types/meta-webhook-messages-value.type';
 import {
-  buildVentorAssignmentContactPayload,
   buildVentorAssignmentContactSummary,
+  buildVentorAssignmentWhatsAppBundle,
 } from './utils/build-ventor-assignment-contact.util';
 
 type MetaInboundMessage = NonNullable<MetaWebhookMessagesValue['messages']>[number];
@@ -71,14 +71,14 @@ export class CustomerMetaInboundReplyService {
       );
       return false;
     }
-    const contact = buildVentorAssignmentContactPayload(ventor);
-    if (contact == null) {
+    const bundle = buildVentorAssignmentWhatsAppBundle(ventor);
+    if (bundle == null) {
       this.logger.warn(
         `inbound reply skip: ventor has no phone assignedTo=${assignedTo} customerId=${String(input.customer._id)}`,
       );
       return false;
     }
-    const summary: string = buildVentorAssignmentContactSummary(contact);
+    const summary: string = `${bundle.body}\n\n${buildVentorAssignmentContactSummary(bundle.contact)}`;
     const customerId: string = String(input.customer._id);
     await this.potentialCustomersOutbound.executeEmitPotentialCustomersEvent({
       type: 'potential_customers',
@@ -87,7 +87,8 @@ export class CustomerMetaInboundReplyService {
         waId: input.normalizedWaId,
         phoneNumberId: input.phoneNumberId,
         customerId,
-        contact,
+        body: bundle.body,
+        contact: bundle.contact,
       },
     });
     await this.executePersistOutboundConversation({
