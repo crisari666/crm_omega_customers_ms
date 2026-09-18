@@ -241,7 +241,8 @@ export class CustomerService {
   /**
    * Ventor mine list: customers this user created or is assigned to, limited to a
    * rolling window on `assignedDate` (fallback `createdAt`). Default 30 days;
-   * 45 days when the customer's step has `isPotentialBuyer`.
+   * 45 days when the customer's step has `isPotentialBuyer`. Customers with
+   * `isProspect: true` are always included regardless of the date window.
    */
   async findCustomersCreatedBy(
     createdBy: string,
@@ -293,6 +294,7 @@ export class CustomerService {
           $match: {
             $expr: {
               $or: [
+                { $eq: ['$isProspect', true] },
                 { $gte: ['$__effectiveDate', cutoffDefault] },
                 {
                   $and: [
@@ -633,6 +635,7 @@ export class CustomerService {
       enabled: r.enabled !== false,
       isReferral: r.isReferral === true,
       isInternational: r.isInternational === true,
+      isProspect: r.isProspect === true,
       createdBy: String(r.createdBy ?? ''),
       createdAt:
         createdAtRaw instanceof Date
@@ -724,6 +727,9 @@ export class CustomerService {
     }
     if (dto.isInternational !== undefined) {
       customer.isInternational = dto.isInternational;
+    }
+    if (dto.isProspect !== undefined) {
+      customer.isProspect = dto.isProspect;
     }
     await this.assertNoDuplicateCustomerContacts({
       phone: customer.phone,
@@ -913,6 +919,9 @@ export class CustomerService {
     }
     if (dto.isInternational !== undefined) {
       customer.isInternational = dto.isInternational;
+    }
+    if (dto.isProspect !== undefined) {
+      customer.isProspect = dto.isProspect;
     }
     await this.assertNoDuplicateCustomerContacts({
       phone: customer.phone,

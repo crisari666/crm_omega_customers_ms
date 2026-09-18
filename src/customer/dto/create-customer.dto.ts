@@ -53,4 +53,8 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isInternational?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isProspect?: boolean;
 }

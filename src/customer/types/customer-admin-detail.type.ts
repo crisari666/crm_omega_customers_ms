@@ -30,6 +30,7 @@ export type CustomerAdminDetail = {
   readonly enabled: boolean;
   readonly isReferral: boolean;
   readonly isInternational: boolean;
+  readonly isProspect: boolean;
   readonly createdBy: string;
   readonly createdAt: string;
   readonly updatedAt?: string;

@@ -108,6 +108,10 @@ export class Customer {
   @Prop({ type: Boolean, default: false, index: true })
   isInternational?: boolean;
 
+  /** When true, always included in ventor mine list regardless of date window. */
+  @Prop({ type: Boolean, default: false, index: true })
+  isProspect?: boolean;
+
   @Prop({ required: true })
   createdBy: string;
 
