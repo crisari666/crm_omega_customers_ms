@@ -10,7 +10,7 @@ Inbound WhatsApp (Meta Cloud API) for a **dedicated CRM WABA** → persist **Cus
 
 **Isolation:** WhatsApp ingress does **not** fan out to `crm_back_queue` / **`LeadCandidate`**. Meta **Lead Ads** (`clientes*` forms) also stay in customers-ms only.
 
-**Second ingress — Meta Lead Ads campaigns:** Ceiba Page webhook → gateway Graph fetch → form name `clientes*` → `customers.meta.leadgen.ingest.v1` → `meta_lead_campaigns` + `Customer` upsert → **auto-assign ventor** (load balance by assignments in last **24h**, env `VENTOR_ASSIGNMENT_META_CAMPAIGN_WINDOW_HOURS`). No WhatsApp template on this path. Form name `referidos*` → `office.facebook.leadgen.ingest.v1` → existing `facebookleads` + ventor provisioning in office_back.
+**Second ingress — Meta Lead Ads campaigns:** Ceiba Page webhook → gateway Graph fetch → form name `datos_clientes*` → `customers.meta.leadgen.ingest.v1` → `meta_lead_campaigns` + `Customer` upsert → **auto-assign ventor** (load balance by assignments in last **24h**, env `VENTOR_ASSIGNMENT_META_CAMPAIGN_WINDOW_HOURS`). No WhatsApp template on that path. Form name `formulario_asado*` → same leadgen ingest + ventor assign/keep + WhatsApp `bbq_27_sept_notification` (`es`, `contact_name`); button reply → ventor contact card (see `md_folder/formulario-asado-bbq-leads.md`). Form name `formulario_masterclass*` → webinar ingest. Form name `datos_referidos*` → `office.facebook.leadgen.ingest.v1` → existing `facebookleads` + ventor provisioning in office_back.
 
 ---
 
@@ -52,7 +52,7 @@ sequenceDiagram
 | `POST /webhooks/meta` | Envelope → **`customers.meta.webhook.ingress.v1`** (WhatsApp `messages` only downstream). |
 | `POST /webhooks/customers` | Same as meta → ingress; assigns ventor on inbound message if unassigned. |
 | `GET /webhooks/customers` | Meta verify challenge. |
-| `GET/POST /webhooks/ceiba` | Page **Lead Ads** (`leadgen`): Graph fetch with `FB_BUSINESS_CEIBA_TOKEN` / `_PROD`, route by form name → `customers.meta.leadgen.ingest.v1` or `office.facebook.leadgen.ingest.v1`. Unknown form prefix: log + skip. |
+| `GET/POST /webhooks/ceiba` | Page **Lead Ads** (`leadgen`): Graph fetch with `FB_BUSINESS_CEIBA_TOKEN` / `_PROD`, route by form name → `customers.meta.leadgen.ingest.v1` (`datos_clientes*`, `formulario_asado*`), `customers.meta.webinar_lead.ingest.v1` (`formulario_masterclass*`), or `office.facebook.leadgen.ingest.v1` (`datos_referidos*`). Unknown form prefix: log + skip. |
 
 **Files:** `src/webhook/webhook.service.ts`, `meta-lead-ads.service.ts`, `meta-lead-ads-router.service.ts`.
 
