@@ -80,6 +80,16 @@ export class MetaLeadCampaign {
 
   @Prop({ type: String, required: false })
   gatewayReceivedAt?: string;
+
+  /** Set when BBQ / Formulario_Asado WhatsApp template was sent successfully. */
+  @Prop({ type: Date, required: false })
+  notificationSentAt?: Date;
+
+  @Prop({ type: String, required: false })
+  whatsappMessageId?: string;
+
+  @Prop({ type: String, required: false })
+  notificationError?: string;
 }
 
 export const MetaLeadCampaignSchema = SchemaFactory.createForClass(MetaLeadCampaign);

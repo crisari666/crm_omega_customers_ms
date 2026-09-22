@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CustomerService } from './customer.service';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
+import { CustomerMarketingTemplateOutboundService } from './customer-marketing-template-outbound.service';
 import {
   MetaLeadCampaign,
   MetaLeadCampaignDocument,
@@ -14,6 +15,14 @@ import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { findCustomerByPhoneCandidates } from './utils/find-customer-by-phone-candidates.util';
 import { buildMetaLeadMappedFieldItems } from './utils/format-meta-lead-field-label.util';
 import type { CustomerMetaLeadMappedFieldsResponse } from './types/customer-meta-lead-mapped-fields.type';
+import {
+  BBQ_ASADO_INGEST_ACTOR_ID,
+  BBQ_ASADO_TEMPLATE_LANGUAGE,
+  BBQ_ASADO_TEMPLATE_NAME,
+} from './constants/bbq-asado-notification.constants';
+import { buildBbqAsadoTemplateComponents } from './utils/build-bbq-asado-template-components.util';
+import { isBbqAsadoFormName } from './utils/is-bbq-asado-form-name.util';
+import type { MarketingCampaignMsEvent } from '../whatsapp-marketing/types/marketing-campaign-ms-event.type';
 
 const META_LEADGEN_ACTOR_ID = 'meta-leadgen-ingest';
 
@@ -31,6 +40,7 @@ export class CustomerMetaLeadgenService {
     private readonly customerModel: Model<CustomerDocument>,
     private readonly customerService: CustomerService,
     private readonly ventorAssignment: CustomerVentorAssignmentService,
+    private readonly marketingTemplateOutbound: CustomerMarketingTemplateOutboundService,
   ) {}
 
   /**
@@ -117,12 +127,28 @@ export class CustomerMetaLeadgenService {
     } else {
       this.logger.log(`Linked existing customer ${String(customer._id)} for leadgenId=${leadgenId}`);
     }
+    const isBbqAsado = isBbqAsadoFormName(envelope.graph.form?.name);
     const windowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
-    await this.ventorAssignment.executeAssignCustomerIfUnassigned({
-      customer,
-      windowHours,
-      actorUserId: META_LEADGEN_ACTOR_ID,
-    });
+    const actorUserId = isBbqAsado ? BBQ_ASADO_INGEST_ACTOR_ID : META_LEADGEN_ACTOR_ID;
+    if (isBbqAsado) {
+      await this.executeEnsureBbqAsadoVentorAssignment({
+        customer,
+        windowHours,
+        actorUserId,
+      });
+      customer = (await this.customerModel.findById(customer._id).exec()) ?? customer;
+      await this.customerModel.updateOne(
+        { _id: customer._id },
+        { $set: { whatsappPotentialCustomerStatus: 'ready_for_llm' } },
+      );
+      customer.whatsappPotentialCustomerStatus = 'ready_for_llm';
+    } else {
+      await this.ventorAssignment.executeAssignCustomerIfUnassigned({
+        customer,
+        windowHours,
+        actorUserId,
+      });
+    }
     await this.metaLeadCampaignModel.updateOne(
       { leadgenId },
       {
@@ -134,6 +160,104 @@ export class CustomerMetaLeadgenService {
       },
     );
     await this.executePersistMetaLeadAttribution(customer, leadgenId, envelope.mappedFields);
+    if (isBbqAsado) {
+      await this.executeSendBbqAsadoNotification({
+        leadgenId,
+        customer,
+        contactName: envelope.contact.name,
+        phone: canonicalPhone,
+      });
+    }
+  }
+
+  /**
+   * Assigns a ventor when missing; if already assigned, keeps the same ventor and refreshes assignedDate.
+   */
+  private async executeEnsureBbqAsadoVentorAssignment(input: {
+    readonly customer: CustomerDocument;
+    readonly windowHours: number;
+    readonly actorUserId: string;
+  }): Promise<void> {
+    const existingAssignee = (input.customer.assignedTo ?? '').trim();
+    if (existingAssignee.length === 0) {
+      await this.ventorAssignment.executeAssignCustomerIfUnassigned({
+        customer: input.customer,
+        windowHours: input.windowHours,
+        actorUserId: input.actorUserId,
+      });
+      return;
+    }
+    input.customer.assignedDate = new Date().toISOString();
+    input.customer.$locals['__auditActorUserId'] = input.actorUserId;
+    await input.customer.save();
+    this.logger.log(
+      `BBQ asado: kept ventor ${existingAssignee} for customer ${String(input.customer._id)}; refreshed assignedDate`,
+    );
+  }
+
+  /**
+   * Sends `bbq_27_sept_notification` once per leadgenId (idempotent).
+   */
+  private async executeSendBbqAsadoNotification(input: {
+    readonly leadgenId: string;
+    readonly customer: CustomerDocument;
+    readonly contactName: string;
+    readonly phone: string;
+  }): Promise<void> {
+    const campaign = await this.metaLeadCampaignModel.findOne({ leadgenId: input.leadgenId }).exec();
+    if (campaign == null) {
+      this.logger.warn(`BBQ asado template skip: campaign missing leadgenId=${input.leadgenId}`);
+      return;
+    }
+    if (campaign.notificationSentAt != null) {
+      this.logger.log(
+        `BBQ asado template skip already-sent leadgenId=${input.leadgenId} messageId=${campaign.whatsappMessageId ?? ''}`,
+      );
+      return;
+    }
+    const contactName =
+      input.contactName.trim().length > 0
+        ? input.contactName.trim()
+        : (input.customer.name ?? '').trim() || 'Cliente';
+    const components = buildBbqAsadoTemplateComponents(contactName);
+    const msEvent: MarketingCampaignMsEvent = {
+      type: 'marketing_campaign',
+      payload: {
+        action: 'send.marketing_template',
+        campaignRecipientId: String(campaign._id),
+        to: input.phone,
+        templateName: BBQ_ASADO_TEMPLATE_NAME,
+        languageCode: BBQ_ASADO_TEMPLATE_LANGUAGE,
+        components,
+      },
+    };
+    this.logger.log(
+      `BBQ asado template send start template=${BBQ_ASADO_TEMPLATE_NAME} lang=${BBQ_ASADO_TEMPLATE_LANGUAGE} to=${input.phone} leadgenId=${input.leadgenId} customerId=${String(input.customer._id)}`,
+    );
+    const response = await this.marketingTemplateOutbound.executeSendMarketingTemplate(msEvent);
+    if (!response.success || response.messageId == null || response.messageId.trim() === '') {
+      await this.metaLeadCampaignModel.updateOne(
+        { leadgenId: input.leadgenId },
+        { $set: { notificationError: response.message ?? 'send failed' } },
+      );
+      this.logger.warn(
+        `BBQ asado template send FAILED leadgenId=${input.leadgenId} to=${input.phone} error=${response.message ?? 'send failed'}`,
+      );
+      return;
+    }
+    await this.metaLeadCampaignModel.updateOne(
+      { leadgenId: input.leadgenId },
+      {
+        $set: {
+          notificationSentAt: new Date(),
+          whatsappMessageId: response.messageId,
+          notificationError: undefined,
+        },
+      },
+    );
+    this.logger.log(
+      `BBQ asado template send OK leadgenId=${input.leadgenId} to=${input.phone} messageId=${response.messageId}`,
+    );
   }
 
   /**
