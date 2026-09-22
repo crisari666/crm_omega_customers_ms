@@ -60,6 +60,7 @@ import {
   MetaLeadCampaignSchema,
 } from './schemas/meta-lead-campaign.schema';
 import { CustomerPotentialCustomersOutboundService } from './customer-potential-customers-outbound.service';
+import { CustomerMarketingTemplateOutboundService } from './customer-marketing-template-outbound.service';
 import { CustomerWhatsappFlowCompletedRmqController } from './customer-whatsapp-flow-completed-rmq.controller';
 import { CustomerVentorAssignmentService } from './customer-ventor-assignment.service';
 import { CustomerWhatsappFlowCompletedService } from './customer-whatsapp-flow-completed.service';
@@ -150,6 +151,7 @@ import { MetaConversionsApiService } from './meta-conversions/meta-conversions-a
     CustomerMetaLeadgenService,
     CustomerVentorAssignmentService,
     CustomerPotentialCustomersOutboundService,
+    CustomerMarketingTemplateOutboundService,
     CustomerWhatsappFlowCompletedService,
     CustomerAdminImportService,
     CustomerAssignmentAuditService,
