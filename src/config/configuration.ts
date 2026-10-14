@@ -86,6 +86,18 @@ export default (): {
     leadEventSource: string;
     enabled: boolean;
   };
+  leadConversation: {
+    redisUrl: string;
+    ragUrl: string;
+    ragPublicUrl: string;
+    openAiApiKey: string;
+    llmModel: string;
+    brand: string;
+    location: string;
+    reminderMs: number;
+    actorUserId: string;
+    callSlotLookaheadDays: number;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -235,6 +247,24 @@ export default (): {
           return false;
         }
         return true;
+      })(),
+    },
+    leadConversation: {
+      redisUrl: trimEnv(process.env.REDIS_URL) || 'redis://localhost:6379',
+      ragUrl: trimEnv(process.env.RAG_URL) || 'http://localhost:3000',
+      ragPublicUrl: trimEnv(process.env.RAG_PUBLIC_URL) || '',
+      openAiApiKey: trimEnv(process.env.OPENAI_API_KEY),
+      llmModel: trimEnv(process.env.LEAD_CONVERSATION_LLM_MODEL) || 'gpt-4o-mini',
+      brand: trimEnv(process.env.LEAD_CONVERSATION_BRAND) || 'La Ceiba',
+      location: trimEnv(process.env.LEAD_CONVERSATION_LOCATION) || 'Carmen de Apicalá',
+      reminderMs: (() => {
+        const raw = Number.parseInt(trimEnv(process.env.LEAD_CONVERSATION_REMINDER_MS) || '3600000', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 3600000;
+      })(),
+      actorUserId: trimEnv(process.env.LEAD_CONVERSATION_ACTOR_ID) || 'lead-conversation-bot',
+      callSlotLookaheadDays: (() => {
+        const raw = Number.parseInt(trimEnv(process.env.LEAD_CALL_SLOT_LOOKAHEAD_DAYS) || '7', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 7;
       })(),
     },
   };

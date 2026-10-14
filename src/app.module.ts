@@ -15,6 +15,7 @@ import { CustomerPaymentModule } from './customer-payment/customer-payment.modul
 import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing.module';
 import { WebinarModule } from './webinar/webinar.module';
+import { LeadConversationModule } from './lead-conversation/lead-conversation.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { WebinarModule } from './webinar/webinar.module';
     VentorScheduleModule,
     WhatsappMarketingModule,
     WebinarModule,
+    LeadConversationModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],

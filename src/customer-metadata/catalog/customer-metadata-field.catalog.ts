@@ -78,6 +78,22 @@ export const CUSTOMER_METADATA_FIELD_CATALOG: readonly CustomerMetadataFieldDefi
       required: true,
       optionCodes: ['self', 'spouse', 'family', 'other'],
     },
+    {
+      key: 'lotRange',
+      type: 'text',
+      required: false,
+    },
+    {
+      key: 'preferredCallTime',
+      type: 'select',
+      required: false,
+      optionCodes: ['morning', 'afternoon', 'night', 'noon', 'evening'],
+    },
+    {
+      key: 'scheduledCallAt',
+      type: 'text',
+      required: false,
+    },
   ] as const;
 
 export const CUSTOMER_METADATA_FIELD_KEYS: readonly string[] =
