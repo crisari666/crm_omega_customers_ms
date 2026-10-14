@@ -12,6 +12,11 @@ export enum VentorScheduleEventType {
   Call = 'call',
 }
 
+export enum VentorScheduleEventSource {
+  Manual = 'manual',
+  LeadConversation = 'lead_conversation',
+}
+
 export enum VentorScheduleEventStatus {
   Pending = 'pending',
   Done = 'done',
@@ -91,6 +96,13 @@ export class VentorScheduleEvent {
     default: VentorScheduleEventStatus.Pending,
   })
   status: VentorScheduleEventStatus;
+
+  /** Who created the event: an office user (`manual`) or the AI lead qualifier bot. */
+  @Prop({ type: String, enum: VentorScheduleEventSource, default: VentorScheduleEventSource.Manual, index: true })
+  source?: VentorScheduleEventSource;
+
+  @Prop({ type: Types.ObjectId, ref: 'LeadConversationSession', required: false })
+  leadConversationSessionId?: Types.ObjectId;
 }
 
 export const VentorScheduleEventSchema = SchemaFactory.createForClass(
@@ -100,6 +112,15 @@ export const VentorScheduleEventSchema = SchemaFactory.createForClass(
 VentorScheduleEventSchema.index({ userId: 1, scheduledAt: 1 });
 VentorScheduleEventSchema.index({ eventType: 1, scheduledAt: 1 });
 VentorScheduleEventSchema.index({ onLandAgentUserId: 1, scheduledAt: 1 });
+/** One pending call per user and start time (30-min lead call slots). */
+VentorScheduleEventSchema.index(
+  { userId: 1, scheduledAt: 1, eventType: 1 },
+  {
+    unique: true,
+    name: 'uniq_pending_call_slot',
+    partialFilterExpression: { eventType: VentorScheduleEventType.Call, status: VentorScheduleEventStatus.Pending },
+  },
+);
 VentorScheduleEventSchema.index({
   meetSubscriptionStatus: 1,
   scheduledAt: 1,

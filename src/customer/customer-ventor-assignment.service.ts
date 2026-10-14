@@ -187,7 +187,16 @@ export class CustomerVentorAssignmentService {
     return { startIso: windowStart.toISOString(), endIso: windowEnd.toISOString() };
   }
 
+  /** Office users flagged `assignAdvanceLeads` ("Asignar Leads Calificados") — pool for AI-qualified lead calls. */
+  async executeFetchAdvanceLeadVentors(): Promise<VentorAssignmentCandidate[]> {
+    return this.executeFetchInternalVentors('advance-leads-candidates');
+  }
+
   private async executeFetchPhysicalVentors(): Promise<VentorAssignmentCandidate[]> {
+    return this.executeFetchInternalVentors('physical-assignment-candidates');
+  }
+
+  private async executeFetchInternalVentors(pathSegment: string): Promise<VentorAssignmentCandidate[]> {
     const baseUrl = (this.configService.get<string>('officeBackInternal.baseUrl', '') ?? '').trim();
     const apiKey = (this.configService.get<string>('officeBackInternal.apiKey', '') ?? '').trim();
     if (baseUrl === '' || apiKey === '') {
@@ -195,7 +204,7 @@ export class CustomerVentorAssignmentService {
       return [];
     }
     const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    const url = `${normalizedBase}internal/ventors/physical-assignment-candidates`;
+    const url = `${normalizedBase}internal/ventors/${pathSegment}`;
     try {
       const response = await fetch(url, {
         method: 'GET',
