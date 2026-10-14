@@ -20,6 +20,8 @@ import { AskScheduleHandler } from './handlers/ask-schedule.handler';
 import { InitialHandler } from './handlers/initial.handler';
 import { ReminderReplyHandler } from './handlers/reminder-reply.handler';
 import { TerminalHandler } from './handlers/terminal.handler';
+import { LeadCallScheduleAdminController } from './lead-call-schedule-admin.controller';
+import { LeadCallScheduleAdminService } from './lead-call-schedule-admin.service';
 import { LeadCallSlotService } from './lead-call-slot.service';
 import { LeadConversationAdminController } from './lead-conversation-admin.controller';
 import { LeadConversationAdminService } from './lead-conversation-admin.service';
@@ -106,11 +108,13 @@ const STEP_HANDLERS = [
   controllers: [
     LeadConversationController,
     LeadConversationAdminController,
+    LeadCallScheduleAdminController,
     LeadConversationInboundRmqController,
   ],
   providers: [
     ParseHexObjectIdPipe,
     LeadConversationAdminService,
+    LeadCallScheduleAdminService,
     ...STEP_HANDLERS,
     {
       provide: LEAD_STEP_HANDLERS,
