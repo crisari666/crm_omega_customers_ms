@@ -25,6 +25,7 @@ import type { LeadCallPeriod } from './types/lead-call-period.type';
 import type { LeadCallSlot } from './types/lead-call-slot.type';
 import { buildPeriodSlotStarts } from './utils/build-period-slot-starts.util';
 import { findCallPeriod } from './utils/find-call-period.util';
+import { isCallSlotDayOpen } from './utils/is-call-slot-day-open.util';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -108,7 +109,7 @@ export class LeadCallSlotService {
   private isBookableStart(slotStart: Date, now: Date): boolean {
     const isFarEnough = slotStart.getTime() >= now.getTime() + MIN_SLOT_LEAD_MINUTES * MINUTE_MS;
     const isWithinLookahead = slotStart.getTime() <= now.getTime() + this.getLookaheadDays() * DAY_MS;
-    return isFarEnough && isWithinLookahead && findCallPeriod(slotStart) !== undefined;
+    return isFarEnough && isWithinLookahead && findCallPeriod(slotStart) !== undefined && isCallSlotDayOpen(slotStart, now);
   }
 
   private async findBusyEvents(userIds: readonly string[], from: Date, to: Date): Promise<BusyEvent[]> {

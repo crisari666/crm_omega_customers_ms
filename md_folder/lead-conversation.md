@@ -16,7 +16,7 @@ Invalid reply: retry up to `MAX_QUESTION_RETRIES=2`, then `abandoned`. Retries i
 
 ## Call slots (`lead-call-slot.service.ts`)
 - Periods (America/Bogota, fixed UTC-5): morning 9–12, afternoon 14–17, night 18–21. Reply ids `slot:morning|afternoon|night`.
-- Slot = 30 min, start ≥ now + 30 min, within `LEAD_CALL_SLOT_LOOKAHEAD_DAYS` (default 7). Up to 10 next free slots of the chosen period are sent as a list (row id `callslot:<ISO>`; text reply by row number also works).
+- Slot = 30 min, start ≥ now + 30 min, within `LEAD_CALL_SLOT_LOOKAHEAD_DAYS` (default 7). Up to 10 next free slots of the chosen period are sent as a list (row id `callslot:<ISO>`; text reply by row number also works). No Sundays. A closed window or Bogota time ≥ 21:00 rolls to the next open day.
 - Pool: office_back users with `assignAdvanceLeads=true` + `enable=true` (`GET {officeBackInternal.baseUrl}/internal/ventors/advance-leads-candidates`, header `X-Internal-Key`). A slot is free when ≥1 pool user has no overlapping pending event.
 - Booking: least-loaded free user that Bogota day → `ventor_schedule_events` `{eventType:'call', source:'lead_conversation', leadConversationSessionId}`, customer `assignedTo` = that user. Idempotent per session (re-booking cancels the previous pending call).
 - Race guard: unique partial index `uniq_pending_call_slot` `{userId, scheduledAt, eventType}` for pending calls; duplicate key → next free user; all taken → "slot taken" notice + fresh list. No slots in the period → back to `ask_schedule` with `noCallSlots`.

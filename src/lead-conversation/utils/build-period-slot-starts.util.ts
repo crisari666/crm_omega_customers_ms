@@ -5,6 +5,7 @@ import {
   MIN_SLOT_LEAD_MINUTES,
 } from '../constants/lead-call-slots.constants';
 import type { LeadCallPeriod } from '../types/lead-call-period.type';
+import { isCallSlotDayOpen } from './is-call-slot-day-open.util';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -25,7 +26,7 @@ export function buildPeriodSlotStarts({ period, now, lookaheadDays }: BuildPerio
     for (let minutes = startHour * 60; minutes < endHour * 60; minutes += CALL_SLOT_MINUTES) {
       const localMs = Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate() + day, 0, minutes);
       const start = new Date(localMs - BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
-      if (start.getTime() >= earliest) starts.push(start);
+      if (start.getTime() >= earliest && isCallSlotDayOpen(start, now)) starts.push(start);
     }
   }
   return starts;

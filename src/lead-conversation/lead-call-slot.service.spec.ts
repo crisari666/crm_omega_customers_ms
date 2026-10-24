@@ -79,6 +79,25 @@ describe('LeadCallSlotService', () => {
       expect(actualStarts).not.toContain('2026-10-15T14:30:00.000Z');
     });
 
+    it('skips Sunday and starts Monday when Saturday afternoon picks morning', async () => {
+      const saturdayAfternoon = new Date('2026-10-17T21:00:00.000Z');
+      const actualSlots = await service.findFreeSlots('morning', saturdayAfternoon);
+      expect(actualSlots[0].start.toISOString()).toBe('2026-10-19T14:00:00.000Z');
+      expect(actualSlots.map((slot) => slot.start.toISOString())).not.toContain('2026-10-18T14:00:00.000Z');
+    });
+
+    it('starts Monday when the customer asks on Sunday morning', async () => {
+      const sundayMorning = new Date('2026-10-18T15:00:00.000Z');
+      const actualSlots = await service.findFreeSlots('morning', sundayMorning);
+      expect(actualSlots[0].start.toISOString()).toBe('2026-10-19T14:00:00.000Z');
+    });
+
+    it('rolls night slots to the next day at 21:00 Bogota', async () => {
+      const ninePm = new Date('2026-10-15T02:00:00.000Z');
+      const actualSlots = await service.findFreeSlots('night', ninePm);
+      expect(actualSlots[0].start.toISOString()).toBe('2026-10-15T23:00:00.000Z');
+    });
+
     it('returns nothing when there are no advance-leads users', async () => {
       mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([]);
       expect(await service.findFreeSlots('morning', NOW)).toEqual([]);
@@ -105,6 +124,14 @@ describe('LeadCallSlotService', () => {
       const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
       expect(mockEventModel.create).toHaveBeenCalledTimes(2);
       expect(actual).toEqual({ booked: false });
+    });
+
+    it('rejects a Sunday start and a same-day morning start once the afternoon has started', async () => {
+      const sundayMorning = new Date('2026-10-18T14:00:00.000Z');
+      const todayMorning = new Date('2026-10-14T14:00:00.000Z');
+      expect(await service.bookSlot({ ...inputBase, slotStart: sundayMorning })).toEqual({ booked: false });
+      expect(await service.bookSlot({ ...inputBase, slotStart: todayMorning })).toEqual({ booked: false });
+      expect(mockEventModel.create).not.toHaveBeenCalled();
     });
 
     it('rejects starts outside the call windows', async () => {
