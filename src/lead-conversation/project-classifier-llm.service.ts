@@ -11,8 +11,8 @@ const CLASSIFIER_SYSTEM_PROMPT = [
 ].join(' ');
 
 /**
- * OpenAI fallback that maps a free-text message to one of the cached project ids.
- * Returns null when the key is not configured or the model is unsure.
+ * DeepSeek fallback that maps a free-text message to one of the cached project ids.
+ * Returns null when `DEEPSEEK_API_KEY` is missing or the model is unsure.
  */
 @Injectable()
 export class ProjectClassifierLlmService {
@@ -26,7 +26,7 @@ export class ProjectClassifierLlmService {
     if (client === null || projects.length === 0 || text.trim() === '') return null;
     try {
       const completion = await client.chat.completions.create({
-        model: this.configService.get<string>('leadConversation.llmModel', 'gpt-4o-mini'),
+        model: this.configService.get<string>('leadConversation.llmModel', 'deepseek-chat'),
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
@@ -58,9 +58,10 @@ export class ProjectClassifierLlmService {
 
   private getClient(): OpenAI | null {
     if (this.client !== null) return this.client;
-    const apiKey = this.configService.get<string>('leadConversation.openAiApiKey', '');
+    const apiKey = this.configService.get<string>('deepseek.apiKey', '').trim();
     if (apiKey === '') return null;
-    this.client = new OpenAI({ apiKey });
+    const baseURL = this.configService.get<string>('deepseek.baseUrl', 'https://api.deepseek.com').trim();
+    this.client = new OpenAI({ apiKey, baseURL });
     return this.client;
   }
 }

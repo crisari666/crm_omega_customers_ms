@@ -254,7 +254,7 @@ export default (): {
       ragUrl: trimEnv(process.env.RAG_URL) || 'http://localhost:3000',
       ragPublicUrl: trimEnv(process.env.RAG_PUBLIC_URL) || '',
       openAiApiKey: trimEnv(process.env.OPENAI_API_KEY),
-      llmModel: trimEnv(process.env.LEAD_CONVERSATION_LLM_MODEL) || 'gpt-4o-mini',
+      llmModel: trimEnv(process.env.LEAD_CONVERSATION_LLM_MODEL) || 'deepseek-chat',
       brand: trimEnv(process.env.LEAD_CONVERSATION_BRAND) || 'La Ceiba',
       location: trimEnv(process.env.LEAD_CONVERSATION_LOCATION) || 'Carmen de Apicalá',
       reminderMs: (() => {

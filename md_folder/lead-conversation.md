@@ -62,7 +62,7 @@ UI: crm_lots_agents `/dashboard/lead-call-schedule` (`src/features/lead-call-sch
 UI: referrals-boost `ClientDetail` meta tab shows `client-detail-lead-qualification-section.tsx` and `lead-conversation-chat-sheet.tsx`.
 
 ## Env
-customers-ms: `REDIS_URL`, `RAG_URL`, `RAG_PUBLIC_URL`, `OPENAI_API_KEY`, `LEAD_CONVERSATION_LLM_MODEL`, `LEAD_CONVERSATION_BRAND`, `LEAD_CONVERSATION_LOCATION`, `LEAD_CONVERSATION_REMINDER_MS`, `LEAD_CONVERSATION_ACTOR_ID`, `LEAD_CALL_SLOT_LOOKAHEAD_DAYS`, office_back internal base URL + API key (`officeBackInternal`).
+customers-ms: `REDIS_URL`, `RAG_URL`, `RAG_PUBLIC_URL`, `DEEPSEEK_API_KEY`, `LEAD_CONVERSATION_LLM_MODEL` (default `deepseek-chat`), `LEAD_CONVERSATION_BRAND`, `LEAD_CONVERSATION_LOCATION`, `LEAD_CONVERSATION_REMINDER_MS`, `LEAD_CONVERSATION_ACTOR_ID`, `LEAD_CALL_SLOT_LOOKAHEAD_DAYS`, office_back internal base URL + API key (`officeBackInternal`).
 office_back: user field `assignAdvanceLeads` ("Asignar Leads Calificados").
 whatsapp_cloud_ms: `WHATSAPP_CLOUD_LEADS_PHONE_NUMBER_ID`, `WHATSAPP_CLOUD_LEADS_ACCESS_TOKEN`.
 

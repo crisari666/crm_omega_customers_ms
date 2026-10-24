@@ -14,7 +14,7 @@ const isGreetingOnly = (text: string): boolean => {
   return normalized.length < MIN_CLASSIFIABLE_LENGTH || GREETING_ONLY_REGEX.test(normalized);
 };
 
-/** Hybrid project detection: deterministic fuzzy match first, OpenAI classifier as fallback. */
+/** Hybrid project detection: deterministic fuzzy match first, DeepSeek classifier as fallback. */
 @Injectable()
 export class ProjectMatcherService {
   constructor(
