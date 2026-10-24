@@ -37,7 +37,7 @@ export const LEAD_TEMPLATES = {
     '☀️ Tarde: 2:00 p. m. a 5:00 p. m.\n' +
     '🌙 Noche: 6:00 p. m. a 9:00 p. m.\n\n' +
     '¿En qué horario te queda mejor que te llamemos?',
-  slotMorningOption: 'Mañana 9-12',
+  slotMorningOption: 'En la Mañana 9-12',
   slotAfternoonOption: 'Tarde 2-5',
   slotNightOption: 'Noche 6-9',
   askCallSlot:
