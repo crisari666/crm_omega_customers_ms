@@ -1,4 +1,6 @@
-export type OutboundMessageKind = 'text' | 'image' | 'document' | 'buttons' | 'list';
+import type { OutboundContact } from './outbound-contact.type';
+
+export type OutboundMessageKind = 'text' | 'image' | 'document' | 'buttons' | 'list' | 'contacts';
 
 export type OutboundOption = {
   readonly id: string;
@@ -14,5 +16,6 @@ export type OutboundMessagePlan = {
   readonly fileName?: string;
   readonly options?: readonly OutboundOption[];
   readonly listButtonLabel?: string;
+  readonly contact?: OutboundContact;
   readonly delayMs?: number;
 };

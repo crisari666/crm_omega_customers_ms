@@ -41,8 +41,8 @@ describe('LeadCallSlotService', () => {
     mockEventModel.aggregate.mockImplementation(() => ({ exec: jest.fn().mockResolvedValue([]) }));
     mockEventModel.create.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new Types.ObjectId(), ...doc }));
     mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([
-      { id: 'u1', name: 'A', lastName: '', phone: '', phoneJob: '' },
-      { id: 'u2', name: 'B', lastName: '', phone: '', phoneJob: '' },
+      { id: 'u1', name: 'Ana', lastName: 'López', phone: '3001112233', phoneJob: '6015551212' },
+      { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '' },
     ]);
     service = new LeadCallSlotService(
       mockEventModel as never,
@@ -110,7 +110,11 @@ describe('LeadCallSlotService', () => {
     it('books a free user, tags the event as lead_conversation and assigns the customer', async () => {
       busyRows = [{ userId: 'u1', scheduledAt: TOMORROW_9AM }];
       const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
-      expect(actual).toMatchObject({ booked: true, userId: 'u2' });
+      expect(actual).toMatchObject({
+        booked: true,
+        userId: 'u2',
+        ventor: { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '' },
+      });
       expect(mockEventModel.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: VentorScheduleEventType.Call, source: VentorScheduleEventSource.LeadConversation }),
       );
@@ -146,7 +150,12 @@ describe('LeadCallSlotService', () => {
         buildChain({ _id: existingId, userId: 'u1', scheduledAt: TOMORROW_9AM }),
       );
       const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
-      expect(actual).toMatchObject({ booked: true, eventId: String(existingId), userId: 'u1' });
+      expect(actual).toMatchObject({
+        booked: true,
+        eventId: String(existingId),
+        userId: 'u1',
+        ventor: { id: 'u1', name: 'Ana', phone: '3001112233', phoneJob: '6015551212' },
+      });
       expect(mockEventModel.create).not.toHaveBeenCalled();
     });
   });

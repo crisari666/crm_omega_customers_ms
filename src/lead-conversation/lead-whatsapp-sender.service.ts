@@ -28,6 +28,7 @@ export class LeadWhatsappSenderService {
       fileName: plan.fileName,
       buttons: plan.options,
       listButtonLabel: plan.listButtonLabel,
+      contact: plan.contact,
     };
     return lastValueFrom(
       this.wsMsClient.send<LeadSendResult>(LEAD_CONVERSATION_SEND_PATTERN, command).pipe(timeout(LEAD_SEND_RPC_TIMEOUT_MS)),

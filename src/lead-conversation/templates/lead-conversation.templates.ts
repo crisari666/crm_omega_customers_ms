@@ -50,7 +50,12 @@ export const LEAD_TEMPLATES = {
   confirmation:
     '¡Listo{{name_suffix}}! 🎉✅\n\nTu llamada quedó agendada 📞\n🗓️ {{fecha_llamada}}\n' +
     '📱 Te llamamos a este mismo número\n⏱️ Dura solo 5 minutos\n\n' +
-    'Un asesor de {{brand}} te va a contar todo sobre tu\nfuturo lote 🏡💛\n\n¿Todo bien con este horario?',
+    '{{asesor}} de {{brand}} te va a contar todo sobre tu\nfuturo lote 🏡💛\n\n¿Todo bien con este horario?',
+  confirmationWithContact:
+    '¡Listo{{name_suffix}}! 🎉✅\n\nTu llamada quedó agendada 📞\n🗓️ {{fecha_llamada}}\n' +
+    '📱 Te llamamos a este mismo número\n⏱️ Dura solo 5 minutos\n\n' +
+    'Tu asesor {{asesor}} de {{brand}} te va a acompañar 🏡💛\n' +
+    'Te comparto su ficha de contacto para que lo guardes y le escribas cuando quieras 👇',
   reminder:
     'Hola! Queremos asesorarte de la forma más profesional 🏡\n\n¿Quieres agendar llamada con uno de nuestros asesores?',
   reminderYesOption: 'Sí',

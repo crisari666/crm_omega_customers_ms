@@ -16,6 +16,8 @@ export const LEAD_SEND_RPC_TIMEOUT_MS = 15000 as const;
 export const PROJECT_CATALOG_TTL_MS = 10 * 60 * 1000;
 export const PAUSE_BEFORE_PLAN_MS = 3000 as const;
 export const PAUSE_BEFORE_LOT_RANGES_MS = 4000 as const;
+/** Pause between booking confirmation text and the ventor contact card. */
+export const PAUSE_BEFORE_VENTOR_CONTACT_MS = 1200 as const;
 export const MAX_REPLY_BUTTONS = 3 as const;
 export const MAX_QUESTION_RETRIES = 2 as const;
 export const MAX_SCORE = 6 as const;

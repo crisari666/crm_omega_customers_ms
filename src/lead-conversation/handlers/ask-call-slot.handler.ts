@@ -43,7 +43,7 @@ export class AskCallSlotHandler implements LeadStepHandler {
       status: 'scheduled',
       answersPatch: { fechaLlamada: result.scheduledAt.toISOString() },
       scoreEvent: 'schedule',
-      outbound: this.composer.composeConfirmation(session.firstName, result.scheduledAt),
+      outbound: this.composer.composeConfirmation(session.firstName, result.scheduledAt, result.ventor),
       expectsReply: false,
       shouldQualify: true,
     };

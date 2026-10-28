@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CustomerVentorAssignmentService } from '../customer/customer-ventor-assignment.service';
+import type { VentorAssignmentCandidate } from '../customer/types/ventor-assignment-candidate.type';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
@@ -56,7 +57,8 @@ export class LeadCallSlotService {
 
   /** Up to 10 free slots of the period, soonest first, within the lookahead days. */
   async findFreeSlots(period: LeadCallPeriod, now: Date = new Date()): Promise<LeadCallSlot[]> {
-    const userIds = await this.findAdvanceUserIds();
+    const ventors = await this.findAdvanceVentors();
+    const userIds = ventors.map((ventor) => ventor.id);
     if (userIds.length === 0) return [];
     const starts = buildPeriodSlotStarts({ period, now, lookaheadDays: this.getLookaheadDays() });
     if (starts.length === 0) return [];
@@ -75,9 +77,14 @@ export class LeadCallSlotService {
     if (!this.isBookableStart(slotStart, now)) return { booked: false };
     const existing = await this.findPendingSessionCall(sessionId);
     if (existing && existing.scheduledAt.getTime() === slotStart.getTime()) {
-      return { booked: true, eventId: String(existing._id), userId: existing.userId, scheduledAt: existing.scheduledAt };
+      return this.buildBookedResult({
+        eventId: String(existing._id),
+        userId: existing.userId,
+        scheduledAt: existing.scheduledAt,
+      });
     }
-    const userIds = await this.findAdvanceUserIds();
+    const ventors = await this.findAdvanceVentors();
+    const userIds = ventors.map((ventor) => ventor.id);
     const busy = await this.findBusyEvents(userIds, slotStart, new Date(slotStart.getTime() + CALL_SLOT_MS));
     const candidates = await this.sortByDayLoad(findFreeUserIds(userIds, busy, slotStart), slotStart);
     for (const userId of candidates) {
@@ -86,24 +93,53 @@ export class LeadCallSlotService {
       if (existing) await this.cancelEvent(existing._id);
       await this.leadCustomer.assignToVentor(customerId, userId);
       this.logger.log(`Lead call booked session=${String(sessionId)} user=${userId} at=${slotStart.toISOString()}`);
-      return { booked: true, eventId: String(created._id), userId, scheduledAt: slotStart };
+      return this.buildBookedResult({
+        eventId: String(created._id),
+        userId,
+        scheduledAt: slotStart,
+        ventors,
+      });
     }
     return { booked: false };
   }
 
   /** Free advance-leads users at a slot start (excluding `excludeUserId`), least loaded that day first. */
   async findFreeUserIdsAt(slotStart: Date, excludeUserId?: string): Promise<string[]> {
-    const userIds = (await this.findAdvanceUserIds()).filter((id) => id !== excludeUserId);
+    const userIds = (await this.findAdvanceVentors())
+      .map((ventor) => ventor.id)
+      .filter((id) => id !== excludeUserId);
     const busy = await this.findBusyEvents(userIds, slotStart, new Date(slotStart.getTime() + CALL_SLOT_MS));
     return this.sortByDayLoad(findFreeUserIds(userIds, busy, slotStart), slotStart);
   }
 
-  async findAdvanceUserIds(): Promise<string[]> {
+  /** Full advance-leads pool from office_back (id + contact phones). */
+  async findAdvanceVentors(): Promise<VentorAssignmentCandidate[]> {
     const ventors = await this.ventorAssignment.executeFetchAdvanceLeadVentors();
     if (ventors.length === 0) {
       this.logger.warn('No assignAdvanceLeads users from office_back; no lead call slots available');
     }
-    return ventors.map((ventor) => ventor.id);
+    return ventors;
+  }
+
+  async findAdvanceUserIds(): Promise<string[]> {
+    return (await this.findAdvanceVentors()).map((ventor) => ventor.id);
+  }
+
+  private async buildBookedResult(input: {
+    readonly eventId: string;
+    readonly userId: string;
+    readonly scheduledAt: Date;
+    readonly ventors?: readonly VentorAssignmentCandidate[];
+  }): Promise<BookCallSlotResult> {
+    const pool = input.ventors ?? (await this.findAdvanceVentors());
+    const ventor = pool.find((candidate) => candidate.id === input.userId);
+    return {
+      booked: true,
+      eventId: input.eventId,
+      userId: input.userId,
+      scheduledAt: input.scheduledAt,
+      ...(ventor ? { ventor } : {}),
+    };
   }
 
   private isBookableStart(slotStart: Date, now: Date): boolean {

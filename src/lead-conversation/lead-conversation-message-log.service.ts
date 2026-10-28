@@ -7,6 +7,7 @@ import {
 } from './schemas/lead-conversation-message.schema';
 import type { InboundLeadMessage } from './types/inbound-lead-message.type';
 import type { OutboundMessagePlan } from './types/outbound-message-plan.type';
+import { buildLeadVentorContactSummary } from './utils/build-lead-ventor-contact-plan.util';
 
 const MONGO_DUPLICATE_KEY_CODE = 11000;
 
@@ -52,13 +53,17 @@ export class LeadConversationMessageLogService {
     readonly wamid?: string;
     readonly delivered: boolean;
   }): Promise<void> {
+    const body =
+      input.plan.kind === 'contacts' && input.plan.contact != null
+        ? buildLeadVentorContactSummary(input.plan.contact)
+        : (input.plan.body ?? '');
     await this.messageModel.create({
       sessionId: input.sessionId,
       customerId: input.customerId,
       ...(input.wamid ? { wamid: input.wamid } : {}),
       direction: 'outbound',
       kind: input.plan.kind,
-      body: input.plan.body ?? '',
+      body,
       options: (input.plan.options ?? []).map((option) => option.title),
       mediaUrl: input.plan.mediaUrl,
       delivered: input.delivered,
