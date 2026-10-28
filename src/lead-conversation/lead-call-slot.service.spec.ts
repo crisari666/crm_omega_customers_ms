@@ -41,8 +41,8 @@ describe('LeadCallSlotService', () => {
     mockEventModel.aggregate.mockImplementation(() => ({ exec: jest.fn().mockResolvedValue([]) }));
     mockEventModel.create.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new Types.ObjectId(), ...doc }));
     mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([
-      { id: 'u1', name: 'Ana', lastName: 'López', phone: '3001112233', phoneJob: '6015551212' },
-      { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '' },
+      { id: 'u1', name: 'Ana', lastName: 'López', phone: '3001112233', phoneJob: '6015551212', voipPhone: '' },
+      { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '', voipPhone: '' },
     ]);
     service = new LeadCallSlotService(
       mockEventModel as never,
@@ -113,7 +113,7 @@ describe('LeadCallSlotService', () => {
       expect(actual).toMatchObject({
         booked: true,
         userId: 'u2',
-        ventor: { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '' },
+        ventor: { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '', voipPhone: '' },
       });
       expect(mockEventModel.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: VentorScheduleEventType.Call, source: VentorScheduleEventSource.LeadConversation }),
@@ -154,7 +154,7 @@ describe('LeadCallSlotService', () => {
         booked: true,
         eventId: String(existingId),
         userId: 'u1',
-        ventor: { id: 'u1', name: 'Ana', phone: '3001112233', phoneJob: '6015551212' },
+        ventor: { id: 'u1', name: 'Ana', phone: '3001112233', phoneJob: '6015551212', voipPhone: '' },
       });
       expect(mockEventModel.create).not.toHaveBeenCalled();
     });

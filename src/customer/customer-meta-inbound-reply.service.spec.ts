@@ -10,6 +10,7 @@ describe('CustomerMetaInboundReplyService', () => {
     lastName: 'López',
     phone: '3001234567',
     phoneJob: '',
+      voipPhone: '',
   };
 
   const createService = () => {

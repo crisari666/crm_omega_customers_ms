@@ -32,11 +32,13 @@ export function buildVentorAssignmentContactPayload(
     return null;
   }
   const waId: string = phone.replace(/\D/g, '');
+  const voipPhone: string = ventor.voipPhone.trim();
   return {
     firstName: firstName.length > 0 ? firstName : 'Asesor',
     lastName,
     phone,
     waId: waId.length > 0 ? waId : undefined,
+    ...(voipPhone.length > 0 ? { voipPhone } : {}),
   };
 }
 
@@ -70,5 +72,9 @@ export function buildVentorAssignmentContactSummary(
     displayName.length > 0
       ? `${displayName} (Asesor La Ceiba)`
       : 'Asesor La Ceiba';
-  return `Contacto: ${formattedName} — ${contact.phone}`;
+  const voipPhone: string =
+    typeof contact.voipPhone === 'string' ? contact.voipPhone.trim() : '';
+  const phones: string =
+    voipPhone.length > 0 ? `${contact.phone}, ${voipPhone}` : contact.phone;
+  return `Contacto: ${formattedName} — ${phones}`;
 }

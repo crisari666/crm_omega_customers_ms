@@ -216,7 +216,16 @@ export class CustomerVentorAssignmentService {
       }
       const data = (await response.json()) as { ventors?: VentorAssignmentCandidate[] };
       const rows = Array.isArray(data.ventors) ? data.ventors : [];
-      return rows.filter((row) => typeof row.id === 'string' && row.id.length > 0);
+      return rows
+        .filter((row) => typeof row.id === 'string' && row.id.length > 0)
+        .map((row) => ({
+          id: row.id,
+          name: typeof row.name === 'string' ? row.name : '',
+          lastName: typeof row.lastName === 'string' ? row.lastName : '',
+          phone: typeof row.phone === 'string' ? row.phone : '',
+          phoneJob: typeof row.phoneJob === 'string' ? row.phoneJob : '',
+          voipPhone: typeof row.voipPhone === 'string' ? row.voipPhone : '',
+        }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Ventor fetch failed: ${message}`);

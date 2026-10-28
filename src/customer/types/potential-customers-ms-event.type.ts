@@ -3,6 +3,8 @@ export type PotentialCustomersContactPayload = {
   readonly lastName: string;
   readonly phone: string;
   readonly waId?: string;
+  /** Twilio VOIP caller ID shown as MAIN on the Meta contacts card. */
+  readonly voipPhone?: string;
 };
 
 export type PotentialCustomersMsEvent = {

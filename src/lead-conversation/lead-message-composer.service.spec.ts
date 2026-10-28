@@ -25,6 +25,7 @@ describe('LeadMessageComposerService.composeConfirmation', () => {
       lastName: 'López',
       phone: '',
       phoneJob: '',
+      voipPhone: '',
     });
     expect(actual).toHaveLength(1);
     expect(actual[0].kind).toBe('text');
@@ -39,6 +40,7 @@ describe('LeadMessageComposerService.composeConfirmation', () => {
       lastName: 'López',
       phone: '3001112233',
       phoneJob: '6015551212',
+      voipPhone: '',
     });
     expect(actual).toHaveLength(2);
     expect(actual[0].kind).toBe('text');

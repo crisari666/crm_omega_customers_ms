@@ -44,7 +44,7 @@ describe('LeadCallScheduleAdminService', () => {
     mockCustomerModel.find.mockImplementation(() => buildChain([{ _id: customerId, name: 'Ana', lastName: 'Ruiz', phone: '57300' }]));
     mockSessionModel.find.mockImplementation(() => buildChain([{ _id: sessionId, score: 6, priority: 3 }]));
     mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([
-      { id: 'u2', name: 'Laura', lastName: 'Gómez', phone: '', phoneJob: '' },
+      { id: 'u2', name: 'Laura', lastName: 'Gómez', phone: '', phoneJob: '', voipPhone: '' },
     ]);
     mockCallSlots.findFreeUserIdsAt.mockResolvedValue(['u2', 'u3']);
     service = new LeadCallScheduleAdminService(

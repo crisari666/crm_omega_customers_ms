@@ -15,6 +15,7 @@ describe('buildVentorAssignmentContactPayload', () => {
       lastName: 'López',
       phone: '+57 300 1234567',
       phoneJob: '3009999999',
+      voipPhone: '',
     };
     const actual = buildVentorAssignmentContactPayload(inputVentor);
     expect(actual).toEqual({
@@ -32,6 +33,7 @@ describe('buildVentorAssignmentContactPayload', () => {
       lastName: 'Perez',
       phone: '  ',
       phoneJob: '3009876543',
+      voipPhone: '',
     };
     const actual = buildVentorAssignmentContactPayload(inputVentor);
     expect(actual).toEqual({
@@ -42,6 +44,25 @@ describe('buildVentorAssignmentContactPayload', () => {
     });
   });
 
+  it('includes voipPhone when present', () => {
+    const inputVentor: VentorAssignmentCandidate = {
+      id: 'v1',
+      name: 'Ana',
+      lastName: 'López',
+      phone: '3001234567',
+      phoneJob: '',
+      voipPhone: '+573009998877',
+    };
+    const actual = buildVentorAssignmentContactPayload(inputVentor);
+    expect(actual).toEqual({
+      firstName: 'Ana',
+      lastName: 'López',
+      phone: '3001234567',
+      waId: '3001234567',
+      voipPhone: '+573009998877',
+    });
+  });
+
   it('returns null when both phones are empty', () => {
     const inputVentor: VentorAssignmentCandidate = {
       id: 'v1',
@@ -49,6 +70,7 @@ describe('buildVentorAssignmentContactPayload', () => {
       lastName: 'López',
       phone: '',
       phoneJob: '',
+      voipPhone: '+573001112233',
     };
     expect(buildVentorAssignmentContactPayload(inputVentor)).toBeNull();
   });
@@ -71,6 +93,7 @@ describe('buildVentorAssignmentWhatsAppBundle', () => {
       lastName: 'López',
       phone: '3001234567',
       phoneJob: '',
+      voipPhone: '+573009998877',
     };
     const actual = buildVentorAssignmentWhatsAppBundle(inputVentor);
     expect(actual).toEqual({
@@ -79,6 +102,7 @@ describe('buildVentorAssignmentWhatsAppBundle', () => {
         lastName: 'López',
         phone: '3001234567',
         waId: '3001234567',
+        voipPhone: '+573009998877',
       },
       body: VENTOR_ASSIGNMENT_CONTACT_GREETING_TEMPLATE.replace('[user_name]', 'Ana López'),
     });
@@ -93,5 +117,15 @@ describe('buildVentorAssignmentContactSummary', () => {
       phone: '3001234567',
     });
     expect(actual).toBe('Contacto: Ana López (Asesor La Ceiba) — 3001234567');
+  });
+
+  it('appends voipPhone in the summary when present', () => {
+    const actual = buildVentorAssignmentContactSummary({
+      firstName: 'Ana',
+      lastName: 'López',
+      phone: '3001234567',
+      voipPhone: '+573009998877',
+    });
+    expect(actual).toBe('Contacto: Ana López (Asesor La Ceiba) — 3001234567, +573009998877');
   });
 });

@@ -2,8 +2,9 @@ import type { VentorAssignmentCandidate } from '../../customer/types/ventor-assi
 import type { OutboundContact, OutboundContactPhone } from '../types/outbound-contact.type';
 
 /**
- * Maps an advance-leads ventor to Meta contacts phones: `phone` → CELL, `phoneJob` → WORK.
- * Returns null when neither phone is set.
+ * Maps an advance-leads ventor to Meta contacts phones:
+ * `phone` → CELL, `phoneJob` → WORK, `voipPhone` → MAIN.
+ * Returns null when neither WhatsApp/`phoneJob` phone is set (VOIP alone is not enough).
  */
 export function buildLeadVentorContact(ventor: VentorAssignmentCandidate): OutboundContact | null {
   const phones: OutboundContactPhone[] = [];
@@ -25,7 +26,16 @@ export function buildLeadVentorContact(ventor: VentorAssignmentCandidate): Outbo
       ...(waId.length > 0 ? { waId } : {}),
     });
   }
-  if (phones.length === 0) return null;
+  const voip = ventor.voipPhone.trim();
+  if (voip.length > 0) {
+    const waId = voip.replace(/\D/g, '');
+    phones.push({
+      phone: voip,
+      type: 'MAIN',
+      ...(waId.length > 0 ? { waId } : {}),
+    });
+  }
+  if (phones.length === 0 || (cell.length === 0 && work.length === 0)) return null;
   const firstName = ventor.name.trim();
   const lastName = ventor.lastName.trim();
   return {

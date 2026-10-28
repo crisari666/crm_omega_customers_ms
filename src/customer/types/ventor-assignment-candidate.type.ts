@@ -4,6 +4,8 @@ export type VentorAssignmentCandidate = {
   readonly lastName: string;
   readonly phone: string;
   readonly phoneJob: string;
+  /** Assigned Twilio User caller ID for VOIP; empty when none. */
+  readonly voipPhone: string;
 };
 
 export type VentorLoadBalancePickResult = {
