@@ -23,8 +23,17 @@ import {
 import { buildBbqAsadoTemplateComponents } from './utils/build-bbq-asado-template-components.util';
 import { isBbqAsadoFormName } from './utils/is-bbq-asado-form-name.util';
 import type { MarketingCampaignMsEvent } from '../whatsapp-marketing/types/marketing-campaign-ms-event.type';
+import { MetaLeadFormLookupService } from '../meta-lead-forms/meta-lead-form-lookup.service';
+import { MetaLeadFormQualificationScheduler } from '../meta-lead-forms/meta-lead-form-qualification.scheduler';
 
 const META_LEADGEN_ACTOR_ID = 'meta-leadgen-ingest';
+
+function isLegacyCustomersLeadFormName(formName: string | undefined): boolean {
+  const normalized = (formName ?? '').trim().toLowerCase();
+  return (
+    normalized.startsWith('datos_clientes') || isBbqAsadoFormName(formName)
+  );
+}
 
 /**
  * Ingests Meta Lead Ads campaign leads from omega_gateway (`customers.meta.leadgen.ingest.v1`).
@@ -41,6 +50,8 @@ export class CustomerMetaLeadgenService {
     private readonly customerService: CustomerService,
     private readonly ventorAssignment: CustomerVentorAssignmentService,
     private readonly marketingTemplateOutbound: CustomerMarketingTemplateOutboundService,
+    private readonly metaLeadFormLookup: MetaLeadFormLookupService,
+    private readonly qualificationScheduler: MetaLeadFormQualificationScheduler,
   ) {}
 
   /**
@@ -104,6 +115,29 @@ export class CustomerMetaLeadgenService {
       this.logger.warn(`leadgenId=${leadgenId}: no usable phone`);
       return;
     }
+    const formName = envelope.graph.form?.name;
+    const registryForm = await this.metaLeadFormLookup.executeFindEnabled({
+      formId: envelope.graph.formId ?? envelope.webhookValue?.form_id,
+      formName,
+    });
+    const hasRegistryFlow = registryForm != null;
+    const isLegacyForm = isLegacyCustomersLeadFormName(formName);
+    if (!hasRegistryFlow && !isLegacyForm) {
+      await this.metaLeadCampaignModel.updateOne(
+        { leadgenId },
+        {
+          $set: {
+            status: MetaLeadCampaignStatus.Processed,
+            lastError:
+              'No registry match and form name is not a legacy customers prefix; skipped customer upsert',
+          },
+        },
+      );
+      this.logger.warn(
+        `leadgenId=${leadgenId}: no registry match for form "${formName ?? ''}"; skipped customer upsert`,
+      );
+      return;
+    }
     let customer = await findCustomerByPhoneCandidates(
       this.customerModel,
       canonicalPhone,
@@ -127,45 +161,159 @@ export class CustomerMetaLeadgenService {
     } else {
       this.logger.log(`Linked existing customer ${String(customer._id)} for leadgenId=${leadgenId}`);
     }
-    const isBbqAsado = isBbqAsadoFormName(envelope.graph.form?.name);
-    const windowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
-    const actorUserId = isBbqAsado ? BBQ_ASADO_INGEST_ACTOR_ID : META_LEADGEN_ACTOR_ID;
-    if (isBbqAsado) {
-      await this.executeEnsureBbqAsadoVentorAssignment({
+    if (registryForm?.flowStrategy === 'lead_conversation') {
+      await this.executeLeadConversationFormPath({
+        leadgenId,
         customer,
-        windowHours,
-        actorUserId,
+        phone: canonicalPhone,
+        contactName: envelope.contact.name,
+        mappedFields: envelope.mappedFields,
       });
-      customer = (await this.customerModel.findById(customer._id).exec()) ?? customer;
-      await this.customerModel.updateOne(
-        { _id: customer._id },
-        { $set: { whatsappPotentialCustomerStatus: 'ready_for_llm' } },
-      );
-      customer.whatsappPotentialCustomerStatus = 'ready_for_llm';
-    } else {
-      await this.ventorAssignment.executeAssignCustomerIfUnassigned({
-        customer,
-        windowHours,
-        actorUserId,
-      });
+      return;
     }
+    if (registryForm?.flowStrategy === 'immediate_assign') {
+      await this.executeImmediateAssignFormPath({
+        leadgenId,
+        customer,
+        mappedFields: envelope.mappedFields,
+      });
+      return;
+    }
+    await this.executeHardcodedLegacyPath({
+      leadgenId,
+      customer,
+      canonicalPhone,
+      formName,
+      contactName: envelope.contact.name,
+      mappedFields: envelope.mappedFields,
+    });
+  }
+
+  /**
+   * Registry `lead_conversation`: persist customer without ventor assign; schedule delayed WA nudge.
+   */
+  private async executeLeadConversationFormPath(input: {
+    readonly leadgenId: string;
+    readonly customer: CustomerDocument;
+    readonly phone: string;
+    readonly contactName: string;
+    readonly mappedFields: Record<string, string>;
+  }): Promise<void> {
     await this.metaLeadCampaignModel.updateOne(
-      { leadgenId },
+      { leadgenId: input.leadgenId },
       {
         $set: {
-          customerId: customer._id as Types.ObjectId,
+          customerId: input.customer._id as Types.ObjectId,
           status: MetaLeadCampaignStatus.Processed,
           lastError: undefined,
         },
       },
     );
-    await this.executePersistMetaLeadAttribution(customer, leadgenId, envelope.mappedFields);
+    await this.executePersistMetaLeadAttribution(
+      input.customer,
+      input.leadgenId,
+      input.mappedFields,
+    );
+    await this.qualificationScheduler.executeSchedule({
+      leadgenId: input.leadgenId,
+      customerId: String(input.customer._id),
+      phone: input.phone,
+      contactName: input.contactName,
+    });
+    this.logger.log(
+      `Registry lead_conversation: saved customer ${String(input.customer._id)} leadgenId=${input.leadgenId}; delayed outbound scheduled`,
+    );
+  }
+
+  /**
+   * Registry `immediate_assign`: ventor assign without BBQ hardcode; no qualification job.
+   */
+  private async executeImmediateAssignFormPath(input: {
+    readonly leadgenId: string;
+    readonly customer: CustomerDocument;
+    readonly mappedFields: Record<string, string>;
+  }): Promise<void> {
+    const windowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
+    await this.ventorAssignment.executeAssignCustomerIfUnassigned({
+      customer: input.customer,
+      windowHours,
+      actorUserId: META_LEADGEN_ACTOR_ID,
+    });
+    await this.metaLeadCampaignModel.updateOne(
+      { leadgenId: input.leadgenId },
+      {
+        $set: {
+          customerId: input.customer._id as Types.ObjectId,
+          status: MetaLeadCampaignStatus.Processed,
+          lastError: undefined,
+        },
+      },
+    );
+    await this.executePersistMetaLeadAttribution(
+      input.customer,
+      input.leadgenId,
+      input.mappedFields,
+    );
+    this.logger.log(
+      `Registry immediate_assign: customer ${String(input.customer._id)} leadgenId=${input.leadgenId}`,
+    );
+  }
+
+  /**
+   * Safety net: existing name-prefix BBQ / assign behavior when no registry match.
+   */
+  private async executeHardcodedLegacyPath(input: {
+    readonly leadgenId: string;
+    customer: CustomerDocument;
+    readonly canonicalPhone: string;
+    readonly formName: string | undefined;
+    readonly contactName: string;
+    readonly mappedFields: Record<string, string>;
+  }): Promise<void> {
+    const isBbqAsado = isBbqAsadoFormName(input.formName);
+    const windowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
+    const actorUserId = isBbqAsado ? BBQ_ASADO_INGEST_ACTOR_ID : META_LEADGEN_ACTOR_ID;
+    if (isBbqAsado) {
+      await this.executeEnsureBbqAsadoVentorAssignment({
+        customer: input.customer,
+        windowHours,
+        actorUserId,
+      });
+      input.customer =
+        (await this.customerModel.findById(input.customer._id).exec()) ?? input.customer;
+      await this.customerModel.updateOne(
+        { _id: input.customer._id },
+        { $set: { whatsappPotentialCustomerStatus: 'ready_for_llm' } },
+      );
+      input.customer.whatsappPotentialCustomerStatus = 'ready_for_llm';
+    } else {
+      await this.ventorAssignment.executeAssignCustomerIfUnassigned({
+        customer: input.customer,
+        windowHours,
+        actorUserId,
+      });
+    }
+    await this.metaLeadCampaignModel.updateOne(
+      { leadgenId: input.leadgenId },
+      {
+        $set: {
+          customerId: input.customer._id as Types.ObjectId,
+          status: MetaLeadCampaignStatus.Processed,
+          lastError: undefined,
+        },
+      },
+    );
+    await this.executePersistMetaLeadAttribution(
+      input.customer,
+      input.leadgenId,
+      input.mappedFields,
+    );
     if (isBbqAsado) {
       await this.executeSendBbqAsadoNotification({
-        leadgenId,
-        customer,
-        contactName: envelope.contact.name,
-        phone: canonicalPhone,
+        leadgenId: input.leadgenId,
+        customer: input.customer,
+        contactName: input.contactName,
+        phone: input.canonicalPhone,
       });
     }
   }

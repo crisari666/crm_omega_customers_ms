@@ -98,6 +98,10 @@ export default (): {
     actorUserId: string;
     callSlotLookaheadDays: number;
   };
+  metaLeadForms: {
+    welcomeTemplateName: string;
+    welcomeTemplateLanguage: string;
+  };
 } => {
   const prefetchRaw: string = trimEnv(process.env.RABBITMQ_PREFETCH);
   const parsedPrefetch: number = Number.parseInt(prefetchRaw || '10', 10);
@@ -266,6 +270,13 @@ export default (): {
         const raw = Number.parseInt(trimEnv(process.env.LEAD_CALL_SLOT_LOOKAHEAD_DAYS) || '7', 10);
         return Number.isFinite(raw) && raw > 0 ? raw : 7;
       })(),
+    },
+    metaLeadForms: {
+      welcomeTemplateName:
+        trimEnv(process.env.META_LEAD_FORM_WELCOME_TEMPLATE_NAME) ||
+        'lead_conversation_welcome',
+      welcomeTemplateLanguage:
+        trimEnv(process.env.META_LEAD_FORM_WELCOME_TEMPLATE_LANGUAGE) || 'es',
     },
   };
 };

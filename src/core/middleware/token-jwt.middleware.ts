@@ -105,6 +105,7 @@ export class TokenJwtMiddleware implements NestMiddleware {
       req.method === 'GET' &&
       (normalized === `${CUSTOMER_PREFIX}/test` ||
         normalized === `${CUSTOMER_PREFIX}/lead-conversation/test` ||
+        normalized === `${ADMIN_CUSTOMER_PREFIX}/meta-lead-forms/test` ||
         normalized === `${WEBINAR_EVENTS_PREFIX}/test` ||
         normalized === `${WEBINAR_LEADS_PREFIX}/test`)
     ) {

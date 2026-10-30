@@ -76,10 +76,12 @@ import { CallAuditDeepSeekService } from './call-audit/call-audit-deepseek.servi
 import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketing.module';
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
+import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
 
 @Module({
   imports: [
     forwardRef(() => WhatsappMarketingModule),
+    forwardRef(() => MetaLeadFormsModule),
     CustomerConversationsModule,
     ClientsModule.registerAsync([
       {

@@ -90,6 +90,16 @@ export class MetaLeadCampaign {
 
   @Prop({ type: String, required: false })
   notificationError?: string;
+
+  /** Set when delayed lead-conversation welcome template was sent (form registry flow). */
+  @Prop({ type: Date, required: false })
+  qualificationOutboundSentAt?: Date;
+
+  @Prop({ type: String, required: false })
+  qualificationWhatsappMessageId?: string;
+
+  @Prop({ type: String, required: false })
+  qualificationOutboundError?: string;
 }
 
 export const MetaLeadCampaignSchema = SchemaFactory.createForClass(MetaLeadCampaign);

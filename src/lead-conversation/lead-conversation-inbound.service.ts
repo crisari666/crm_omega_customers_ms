@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetaLeadFormQualificationScheduler } from '../meta-lead-forms/meta-lead-form-qualification.scheduler';
 import { LeadConversationMessageLogService } from './lead-conversation-message-log.service';
 import { LeadConversationSessionService, type LeadSessionSnapshot } from './lead-conversation-session.service';
 import { LeadConversationStateMachineService } from './lead-conversation-state-machine.service';
@@ -32,6 +33,7 @@ export class LeadConversationInboundService {
     private readonly reminderScheduler: LeadReminderScheduler,
     private readonly qualification: LeadQualificationService,
     private readonly dispatcher: LeadMessageDispatcherService,
+    private readonly metaLeadFormQualificationScheduler: MetaLeadFormQualificationScheduler,
   ) {}
 
   async executeProcessIngress(payload: unknown): Promise<void> {
@@ -55,6 +57,7 @@ export class LeadConversationInboundService {
       return;
     }
     await this.reminderScheduler.executeCancel(String(session._id));
+    await this.metaLeadFormQualificationScheduler.executeCancelByWaId(message.waId);
     const applied = await this.executeApplyTransition(session, message);
     if (!applied) return;
     await this.executeSideEffects(applied, actorUserId);

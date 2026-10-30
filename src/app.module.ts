@@ -16,6 +16,7 @@ import { VentorScheduleModule } from './ventor-schedule/ventor-schedule.module';
 import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing.module';
 import { WebinarModule } from './webinar/webinar.module';
 import { LeadConversationModule } from './lead-conversation/lead-conversation.module';
+import { MetaLeadFormsModule } from './meta-lead-forms/meta-lead-forms.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { LeadConversationModule } from './lead-conversation/lead-conversation.mo
     WhatsappMarketingModule,
     WebinarModule,
     LeadConversationModule,
+    MetaLeadFormsModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],
