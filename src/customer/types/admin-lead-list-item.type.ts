@@ -9,6 +9,15 @@ export type AdminLeadSessionSummary = {
   readonly step?: string;
 };
 
+/** Next upcoming pending call for this customer (leads inbox / chat drawer). */
+export type AdminLeadScheduledCall = {
+  readonly eventId: string;
+  readonly scheduledAt: string;
+  readonly status: string;
+  readonly ventorName?: string;
+  readonly note?: string;
+};
+
 export type AdminLeadListItem = {
   readonly id: string;
   readonly name: string;
@@ -21,6 +30,7 @@ export type AdminLeadListItem = {
   readonly metaLeadgenId?: string;
   readonly createdAt: string;
   readonly leadSession?: AdminLeadSessionSummary;
+  readonly scheduledCall?: AdminLeadScheduledCall;
 };
 
 export type AdminLeadListPage = {

@@ -32,3 +32,5 @@ Assign may set `assignedTo` while lifecycle stays `lead` until convert.
 ## Admin UI
 
 `crm_lots_agents` → `/dashboard/leads` (menu Leads → Bandeja). Reuses `CustomerDetailDialogCP` + lead summary strip; convert CTA with optional ventor assign.
+
+**Conversación IA:** opens the shared lead-conversation chat drawer on the leads page (no bare redirect). List rows may include `scheduledCall` (next pending call); shown as a strip in the drawer header.

@@ -5,13 +5,23 @@ import {
   LeadConversationSession,
   LeadConversationSessionDocument,
 } from '../lead-conversation/schemas/lead-conversation-session.schema';
+import {
+  VentorScheduleEvent,
+  VentorScheduleEventDocument,
+  VentorScheduleEventStatus,
+  VentorScheduleEventType,
+} from '../ventor-schedule/schemas/ventor-schedule-event.schema';
 import { CustomerService } from './customer.service';
 import type { ConvertAdminLeadDto } from './dto/convert-admin-lead.dto';
 import type { ListAdminLeadsQueryDto } from './dto/list-admin-leads.query.dto';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import type { CustomerLeadSource } from './types/customer-lead-source.type';
 import type { CustomerLifecycleStatus } from './types/customer-lifecycle-status.type';
-import type { AdminLeadListItem, AdminLeadListPage } from './types/admin-lead-list-item.type';
+import type {
+  AdminLeadListItem,
+  AdminLeadListPage,
+  AdminLeadScheduledCall,
+} from './types/admin-lead-list-item.type';
 
 const DEFAULT_LIMIT = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -38,6 +48,15 @@ type SessionLean = {
   readonly lastInboundAt?: Date;
 };
 
+type ScheduleLean = {
+  readonly _id: Types.ObjectId;
+  readonly customerId: Types.ObjectId;
+  readonly scheduledAt: Date;
+  readonly status: string;
+  readonly userId?: string;
+  readonly note?: string;
+};
+
 type CustomerLeadLean = {
   readonly _id: Types.ObjectId;
   readonly name?: string;
@@ -62,6 +81,8 @@ export class CustomerLeadsAdminService {
     @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(LeadConversationSession.name)
     private readonly sessionModel: Model<LeadConversationSessionDocument>,
+    @InjectModel(VentorScheduleEvent.name)
+    private readonly scheduleModel: Model<VentorScheduleEventDocument>,
     private readonly customerService: CustomerService,
   ) {}
 
@@ -79,8 +100,14 @@ export class CustomerLeadsAdminService {
         .exec(),
       this.customerModel.countDocuments(filter).exec(),
     ]);
-    const sessions = await this.findLatestSessions(rows.map((row) => row._id));
-    const items = rows.map((row) => this.toItem(row, sessions.get(String(row._id))));
+    const customerIds = rows.map((row) => row._id);
+    const [sessions, schedules] = await Promise.all([
+      this.findLatestSessions(customerIds),
+      this.findNextScheduledCalls(customerIds),
+    ]);
+    const items = rows.map((row) =>
+      this.toItem(row, sessions.get(String(row._id)), schedules.get(String(row._id))),
+    );
     return { items, total, page, limit };
   }
 
@@ -121,8 +148,15 @@ export class CustomerLeadsAdminService {
     if (!refreshed) {
       throw new NotFoundException('Lead not found');
     }
-    const sessions = await this.findLatestSessions([refreshed._id]);
-    return this.toItem(refreshed, sessions.get(String(refreshed._id)));
+    const [sessions, schedules] = await Promise.all([
+      this.findLatestSessions([refreshed._id]),
+      this.findNextScheduledCalls([refreshed._id]),
+    ]);
+    return this.toItem(
+      refreshed,
+      sessions.get(String(refreshed._id)),
+      schedules.get(String(refreshed._id)),
+    );
   }
 
   private buildFilter(query: ListAdminLeadsQueryDto): QueryFilter<CustomerDocument> {
@@ -188,7 +222,49 @@ export class CustomerLeadsAdminService {
     return map;
   }
 
-  private toItem(row: CustomerLeadLean, session?: SessionLean): AdminLeadListItem {
+  /**
+   * Next upcoming pending call event per customer (earliest scheduledAt >= now).
+   */
+  private async findNextScheduledCalls(
+    customerIds: readonly Types.ObjectId[],
+  ): Promise<Map<string, AdminLeadScheduledCall>> {
+    if (customerIds.length === 0) {
+      return new Map();
+    }
+    const now = new Date();
+    const rows = await this.scheduleModel
+      .find({
+        customerId: { $in: customerIds },
+        eventType: VentorScheduleEventType.Call,
+        status: VentorScheduleEventStatus.Pending,
+        scheduledAt: { $gte: now },
+      })
+      .select({ customerId: 1, scheduledAt: 1, status: 1, userId: 1, note: 1 })
+      .sort({ scheduledAt: 1 })
+      .lean<ScheduleLean[]>()
+      .exec();
+    const map = new Map<string, AdminLeadScheduledCall>();
+    for (const row of rows) {
+      const key = String(row.customerId);
+      if (map.has(key)) {
+        continue;
+      }
+      map.set(key, {
+        eventId: String(row._id),
+        scheduledAt: toIso(row.scheduledAt),
+        status: row.status,
+        ...(row.userId?.trim() ? { ventorName: row.userId.trim() } : {}),
+        ...(row.note?.trim() ? { note: row.note.trim() } : {}),
+      });
+    }
+    return map;
+  }
+
+  private toItem(
+    row: CustomerLeadLean,
+    session?: SessionLean,
+    scheduledCall?: AdminLeadScheduledCall,
+  ): AdminLeadListItem {
     const lifecycle = resolveLifecycle(row);
     const sources = row.leadSources ?? [];
     return {
@@ -213,6 +289,7 @@ export class CustomerLeadsAdminService {
             },
           }
         : {}),
+      ...(scheduledCall ? { scheduledCall } : {}),
     };
   }
 }

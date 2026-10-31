@@ -20,6 +20,7 @@ describe('CustomerLeadsAdminService', () => {
     countDocuments: jest.fn(),
   };
   const mockSessionModel = { find: jest.fn() };
+  const mockScheduleModel = { find: jest.fn() };
   const mockCustomerService = { assignCustomerAssignee: jest.fn() };
   let service: CustomerLeadsAdminService;
 
@@ -28,9 +29,11 @@ describe('CustomerLeadsAdminService', () => {
     mockCustomerModel.find.mockReturnValue(buildChain([]));
     mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(0) });
     mockSessionModel.find.mockReturnValue(buildChain([]));
+    mockScheduleModel.find.mockReturnValue(buildChain([]));
     service = new CustomerLeadsAdminService(
       mockCustomerModel as never,
       mockSessionModel as never,
+      mockScheduleModel as never,
       mockCustomerService as unknown as CustomerService,
     );
   });
@@ -73,6 +76,42 @@ describe('CustomerLeadsAdminService', () => {
         ]),
       }),
     );
+  });
+
+  it('includes next pending scheduledCall on list items', async () => {
+    const eventId = new Types.ObjectId();
+    const scheduledAt = new Date('2030-01-15T15:00:00.000Z');
+    const row = {
+      _id: customerId,
+      name: 'Ana',
+      lastName: 'Ruiz',
+      phone: '573001112233',
+      lifecycleStatus: 'lead',
+      leadSources: ['whatsapp_lead_conversation'],
+      createdAt: new Date('2026-10-15T12:00:00.000Z'),
+    };
+    mockCustomerModel.find.mockReturnValue(buildChain([row]));
+    mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+    mockScheduleModel.find.mockReturnValue(
+      buildChain([
+        {
+          _id: eventId,
+          customerId,
+          scheduledAt,
+          status: 'pending',
+          userId: 'ventor-1',
+          note: 'Call back',
+        },
+      ]),
+    );
+    const actual = await service.listLeads({ page: 0, limit: 50 });
+    expect(actual.items[0].scheduledCall).toEqual({
+      eventId: String(eventId),
+      scheduledAt: scheduledAt.toISOString(),
+      status: 'pending',
+      ventorName: 'ventor-1',
+      note: 'Call back',
+    });
   });
 
   it('treats legacy non-prospect without lifecycleStatus as promoted customer', async () => {
