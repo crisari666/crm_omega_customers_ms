@@ -17,6 +17,7 @@ import {
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { CreateVentorScheduleEventDto } from './dto/create-ventor-schedule-event.dto';
 import { SyncVentorMeetCallDto } from '../customer/dto/sync-ventor-meet-call.dto';
+import { LinkVentorScheduleCustomerDto } from './dto/link-ventor-schedule-customer.dto';
 import { UpdateOnLandAgentDto } from './dto/update-on-land-agent.dto';
 import { UpdateVentorScheduleStatusDto } from './dto/update-ventor-schedule-status.dto';
 import { VentorScheduleByDayQueryDto } from './dto/ventor-schedule-by-day-query.dto';
@@ -164,6 +165,23 @@ export class VentorScheduleController {
       isCoordinator: isOfficeOnLandCoordinator(jwtUser),
       eventId: id,
       onLandAgentUserId: body.onLandAgentUserId,
+    });
+    return serializeEvent(doc);
+  }
+
+  /** Relate a lead call schedule event to an existing Customer (same `_id`). */
+  @Patch(':id/customer')
+  async patchCustomer(
+    @Param('id', ParseHexObjectIdPipe) id: string,
+    @Body() body: LinkVentorScheduleCustomerDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    const userId = resolveOfficeUserId(jwtUser);
+    const doc = await this.ventorScheduleService.linkCallEventToCustomer({
+      actorUserId: userId,
+      isCoordinator: isOfficeOnLandCoordinator(jwtUser),
+      eventId: id,
+      customerId: body.customerId,
     });
     return serializeEvent(doc);
   }

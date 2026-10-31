@@ -16,6 +16,10 @@ import { CustomerCallLogsService } from '../customer/customer-call-logs.service'
 import { GoogleMeetArtifactsService } from '../customer/google-meet-artifacts.service';
 import type { CustomerCallLogAdminItemDto } from '../customer/types/customer-call-logs.type';
 import {
+  LeadConversationSession,
+  LeadConversationSessionDocument,
+} from '../lead-conversation/schemas/lead-conversation-session.schema';
+import {
   MEET_AUDIT_SUBJECT_EMAIL,
   MEET_AUDIT_SUBSCRIPTION_TTL_MS,
   MeetSubscriptionStatus,
@@ -28,6 +32,8 @@ import {
   VentorScheduleEventStatus,
   VentorScheduleEventType,
 } from './schemas/ventor-schedule-event.schema';
+
+const LEAD_BOT_ACTOR_ID = 'lead-conversation-bot';
 
 const ON_LAND_SCHEDULE_METADATA_KEY = 'ventorScheduleEventId' as const;
 
@@ -53,6 +59,34 @@ function utcDayRange(dateYmd: string): { start: Date; end: Date } {
   return { start, end };
 }
 
+const BOGOTA_UTC_OFFSET_HOURS = -5;
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * America/Bogota calendar day as UTC instants (UTC−5, no DST).
+ * Lead `call` events store true UTC; late Bogota evening lands on the next UTC day.
+ */
+function bogotaDayRange(dateYmd: string): { start: Date; end: Date } {
+  const [y, mo, d] = dateYmd.split('-').map((n) => Number.parseInt(n, 10));
+  const localMidnightMs = Date.UTC(y, mo - 1, d, 0, 0, 0, 0);
+  const start = new Date(localMidnightMs - BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
+  const end = new Date(start.getTime() + 24 * HOUR_MS);
+  return { start, end };
+}
+
+/**
+ * Union of UTC calendar day (visit wall-as-Z) and Bogota day (lead call true UTC)
+ * so ventor day views include both encodings for the same label date.
+ */
+function scheduleDayRange(dateYmd: string): { start: Date; end: Date } {
+  const utc = utcDayRange(dateYmd);
+  const bogota = bogotaDayRange(dateYmd);
+  return {
+    start: new Date(Math.min(utc.start.getTime(), bogota.start.getTime())),
+    end: new Date(Math.max(utc.end.getTime(), bogota.end.getTime())),
+  };
+}
+
 @Injectable()
 export class VentorScheduleService {
   private readonly logger = new Logger(VentorScheduleService.name);
@@ -62,6 +96,8 @@ export class VentorScheduleService {
     private readonly scheduleModel: Model<VentorScheduleEventDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+    @InjectModel(LeadConversationSession.name)
+    private readonly leadSessionModel: Model<LeadConversationSessionDocument>,
     private readonly customerEventsService: CustomerEventsService,
     private readonly customerCallLogsService: CustomerCallLogsService,
     private readonly customerAssignmentPushService: CustomerAssignmentPushService,
@@ -69,6 +105,69 @@ export class VentorScheduleService {
     private readonly ventorMeetWorkspaceEventsService: VentorMeetWorkspaceEventsService,
     private readonly googleMeetArtifactsService: GoogleMeetArtifactsService,
   ) {}
+
+  /**
+   * Relates a lead `call` schedule event to an existing Customer (keep that `_id`).
+   * Updates the linked lead session when present and assigns the customer to the call owner.
+   */
+  async linkCallEventToCustomer(input: {
+    readonly actorUserId: string;
+    readonly isCoordinator: boolean;
+    readonly eventId: string;
+    readonly customerId: string;
+  }): Promise<VentorScheduleEventDocument> {
+    if (!Types.ObjectId.isValid(input.eventId) || !Types.ObjectId.isValid(input.customerId)) {
+      throw new NotFoundException('Event or customer not found');
+    }
+    const eventFilter = input.isCoordinator
+      ? { _id: new Types.ObjectId(input.eventId) }
+      : {
+          _id: new Types.ObjectId(input.eventId),
+          $or: [{ userId: input.actorUserId }, { onLandAgentUserId: input.actorUserId }],
+        };
+    const prior = await this.scheduleModel.findOne(eventFilter).exec();
+    if (!prior) {
+      throw new NotFoundException('Event not found');
+    }
+    if (prior.eventType !== VentorScheduleEventType.Call) {
+      throw new BadRequestException('Only lead call events can be related to a customer');
+    }
+    const customer = await this.customerModel.findById(input.customerId).exec();
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+    const customerObjectId = customer._id as Types.ObjectId;
+    const updated = await this.scheduleModel
+      .findOneAndUpdate(
+        { _id: prior._id },
+        { $set: { customerId: customerObjectId } },
+        { returnDocument: 'after' },
+      )
+      .populate<{ customerId: CustomerDocument }>({
+        path: 'customerId',
+        select: 'name lastName interestedProjects',
+      })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException('Event not found');
+    }
+    if (prior.leadConversationSessionId) {
+      await this.leadSessionModel
+        .updateOne(
+          { _id: prior.leadConversationSessionId },
+          { $set: { customerId: customerObjectId } },
+        )
+        .exec();
+    }
+    customer.assignedTo = prior.userId;
+    customer.assignedDate = new Date().toISOString();
+    customer.$locals['__auditActorUserId'] = input.actorUserId || LEAD_BOT_ACTOR_ID;
+    await customer.save();
+    this.logger.log(
+      `Linked call event=${input.eventId} to customer=${input.customerId} by=${input.actorUserId}`,
+    );
+    return updated as unknown as VentorScheduleEventDocument;
+  }
 
   private async assertCustomerAccessible(
     userId: string,
@@ -472,7 +571,7 @@ export class VentorScheduleService {
     userId: string,
     dateYmd: string,
   ): Promise<VentorScheduleEventDocument[]> {
-    const { start, end } = utcDayRange(dateYmd);
+    const { start, end } = scheduleDayRange(dateYmd);
     const rows = await this.scheduleModel
       .find({
         scheduledAt: { $gte: start, $lt: end },
@@ -495,7 +594,7 @@ export class VentorScheduleService {
     userId: string,
     dateYmd: string,
   ): Promise<VentorScheduleEventDocument[]> {
-    const { start, end } = utcDayRange(dateYmd);
+    const { start, end } = scheduleDayRange(dateYmd);
     const rows = await this.scheduleModel
       .find({
         scheduledAt: { $gte: start, $lt: end },

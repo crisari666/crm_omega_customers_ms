@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
@@ -7,6 +7,7 @@ import { CustomerAssignmentPushService } from '../customer/customer-assignment-p
 import { CustomerCallLogsService } from '../customer/customer-call-logs.service';
 import { CustomerEventsService } from '../customer/customer-events.service';
 import { GoogleMeetArtifactsService } from '../customer/google-meet-artifacts.service';
+import { LeadConversationSession } from '../lead-conversation/schemas/lead-conversation-session.schema';
 import {
   VentorScheduleEvent,
   VentorScheduleEventStatus,
@@ -46,6 +47,11 @@ describe('VentorScheduleService', () => {
     const customerModel = {
       findById: customerFindById,
     };
+    const leadSessionModel = {
+      updateOne: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      }),
+    };
     const recordEventMock = jest.fn().mockResolvedValue(undefined);
     const customerEventsService = {
       createEvent: recordEventMock,
@@ -73,6 +79,7 @@ describe('VentorScheduleService', () => {
       findOneAndUpdateMock,
       customerModel,
       customerFindById,
+      leadSessionModel,
       customerEventsService,
       recordEventMock,
       customerCallLogsService,
@@ -94,6 +101,10 @@ describe('VentorScheduleService', () => {
           useValue: deps.scheduleModel,
         },
         { provide: getModelToken(Customer.name), useValue: deps.customerModel },
+        {
+          provide: getModelToken(LeadConversationSession.name),
+          useValue: deps.leadSessionModel,
+        },
         {
           provide: CustomerEventsService,
           useValue: deps.customerEventsService,
@@ -142,6 +153,13 @@ describe('VentorScheduleService', () => {
         { userId: mainLeadActorId },
       ],
     });
+    const range = deps.findMock.mock.calls[0][0].scheduledAt as {
+      $gte: Date;
+      $lt: Date;
+    };
+    // Union of UTC day [00Z, next 00Z) and Bogota day [05Z, next 05Z) → [00Z, next 05Z).
+    expect(range.$gte.toISOString()).toBe('2026-04-30T00:00:00.000Z');
+    expect(range.$lt.toISOString()).toBe('2026-05-01T05:00:00.000Z');
   });
 
   it('updateStatusAsMainLead rejects non-on_land event', async () => {
@@ -230,5 +248,75 @@ describe('VentorScheduleService', () => {
         VentorScheduleEventStatus.Done,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('linkCallEventToCustomer rematches call event + session and assigns ventor', async () => {
+    const deps = setup();
+    const service = await compileService(deps);
+    const oid = new Types.ObjectId(eventId);
+    const sessionOid = new Types.ObjectId();
+    const targetCustomerId = '507f1f77bcf86cd799439099';
+    const targetOid = new Types.ObjectId(targetCustomerId);
+    const priorCustomerOid = new Types.ObjectId(customerId);
+    const customerSave = jest.fn().mockResolvedValue(undefined);
+    deps.findOneMock.mockReturnValue(
+      createChain({
+        _id: oid,
+        userId: otherUserId,
+        eventType: VentorScheduleEventType.Call,
+        customerId: priorCustomerOid,
+        leadConversationSessionId: sessionOid,
+      }),
+    );
+    deps.customerFindById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: targetOid,
+        $locals: {},
+        save: customerSave,
+      }),
+    });
+    const populatedDoc = {
+      _id: oid,
+      eventType: VentorScheduleEventType.Call,
+      customerId: { _id: targetOid, name: 'Meta', lastName: 'Lead' },
+    };
+    deps.findOneAndUpdateMock.mockReturnValue({
+      populate: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(populatedDoc),
+      }),
+    });
+    const out = await service.linkCallEventToCustomer({
+      actorUserId: otherUserId,
+      isCoordinator: false,
+      eventId,
+      customerId: targetCustomerId,
+    });
+    expect(out).toBe(populatedDoc);
+    expect(deps.leadSessionModel.updateOne).toHaveBeenCalledWith(
+      { _id: sessionOid },
+      { $set: { customerId: targetOid } },
+    );
+    expect(customerSave).toHaveBeenCalled();
+  });
+
+  it('linkCallEventToCustomer rejects non-call events', async () => {
+    const deps = setup();
+    const service = await compileService(deps);
+    deps.findOneMock.mockReturnValue(
+      createChain({
+        _id: new Types.ObjectId(eventId),
+        userId: otherUserId,
+        eventType: VentorScheduleEventType.Virtual,
+        customerId: new Types.ObjectId(customerId),
+      }),
+    );
+    await expect(
+      service.linkCallEventToCustomer({
+        actorUserId: otherUserId,
+        isCoordinator: false,
+        eventId,
+        customerId,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

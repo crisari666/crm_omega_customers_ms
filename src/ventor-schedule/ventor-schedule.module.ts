@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CustomerModule } from '../customer/customer.module';
 import { Customer, CustomerSchema } from '../customer/schemas/customer.schema';
 import {
+  LeadConversationSession,
+  LeadConversationSessionSchema,
+} from '../lead-conversation/schemas/lead-conversation-session.schema';
+import {
   VentorScheduleEvent,
   VentorScheduleEventSchema,
 } from './schemas/ventor-schedule-event.schema';
@@ -23,6 +27,7 @@ import { VentorMeetArtifactsWebhookController } from './ventor-meet-artifacts-we
     MongooseModule.forFeature([
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
       { name: Customer.name, schema: CustomerSchema },
+      { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
     ]),
   ],
   controllers: [
