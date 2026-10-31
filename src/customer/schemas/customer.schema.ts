@@ -1,5 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import {
+  CUSTOMER_LEAD_SOURCES,
+  type CustomerLeadSource,
+} from '../types/customer-lead-source.type';
+import {
+  CUSTOMER_LIFECYCLE_STATUSES,
+  type CustomerLifecycleStatus,
+} from '../types/customer-lifecycle-status.type';
 
 export type CustomerDocument = HydratedDocument<Customer>;
 
@@ -112,6 +120,25 @@ export class Customer {
   @Prop({ type: Boolean, default: false, index: true })
   isProspect?: boolean;
 
+  /**
+   * Lead vs promoted customer. Ingress creates `lead`; admin convert → `customer`.
+   * Missing on legacy docs until backfill (treat as customer when assigned).
+   */
+  @Prop({
+    type: String,
+    enum: CUSTOMER_LIFECYCLE_STATUSES,
+    default: 'lead',
+    index: true,
+  })
+  lifecycleStatus?: CustomerLifecycleStatus;
+
+  /** Append-only origin tags (Meta form, WA AI, inbound WA, manual, webinar). */
+  @Prop({
+    type: [{ type: String, enum: CUSTOMER_LEAD_SOURCES }],
+    default: [],
+  })
+  leadSources?: CustomerLeadSource[];
+
   @Prop({ required: true })
   createdBy: string;
 
@@ -125,5 +152,7 @@ export const CustomerSchema = SchemaFactory.createForClass(Customer);
 CustomerSchema.index({ createdAt: -1 });
 CustomerSchema.index({ createdAt: -1, assignedTo: 1 });
 CustomerSchema.index({ lastUpdate: -1, createdAt: -1 });
+CustomerSchema.index({ lifecycleStatus: 1, createdAt: -1 });
+CustomerSchema.index({ leadSources: 1 });
 
 /** Change history uses pre/post `save` hooks attached in {@link CustomerAuditService.attachCustomerSchemaHooks}. */

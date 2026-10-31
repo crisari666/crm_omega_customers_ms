@@ -9,6 +9,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DocumentType } from '../schemas/customer.schema';
+import { CUSTOMER_LEAD_SOURCES } from '../types/customer-lead-source.type';
+import { CUSTOMER_LIFECYCLE_STATUSES } from '../types/customer-lifecycle-status.type';
 import { InterestedProjectEntryDto } from './interested-project-entry.dto';
 
 export class CreateCustomerDto {
@@ -57,4 +59,13 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isProspect?: boolean;
+
+  @IsOptional()
+  @IsEnum(CUSTOMER_LIFECYCLE_STATUSES)
+  lifecycleStatus?: (typeof CUSTOMER_LIFECYCLE_STATUSES)[number];
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(CUSTOMER_LEAD_SOURCES, { each: true })
+  leadSources?: Array<(typeof CUSTOMER_LEAD_SOURCES)[number]>;
 }

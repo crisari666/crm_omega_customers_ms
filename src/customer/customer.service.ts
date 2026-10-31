@@ -48,6 +48,8 @@ import {
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { buildAdminListFilter } from './utils/build-admin-list-filter.util';
 import { DEFAULT_VENTOR_MINE_VISIBILITY_DAYS } from './utils/resolve-ventor-mine-visibility-days.util';
+import type { CustomerLeadSource } from './types/customer-lead-source.type';
+import type { CustomerLifecycleStatus } from './types/customer-lifecycle-status.type';
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 
 const DUPLICATE_PHONE_MESSAGE =
@@ -798,6 +800,8 @@ export class CustomerService {
       interestedProjects,
       assignedTo: dto.assignedTo,
       isReferral: dto.isReferral === true,
+      lifecycleStatus: dto.lifecycleStatus ?? 'lead',
+      leadSources: dto.leadSources ?? [],
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;
@@ -809,6 +813,42 @@ export class CustomerService {
       }
       throw err;
     }
+  }
+
+  /** Appends a lead source tag without duplicates (idempotent). */
+  async appendLeadSource(
+    customerId: Types.ObjectId | string,
+    source: CustomerLeadSource,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(String(customerId))) {
+      return;
+    }
+    await this.customerModel
+      .updateOne({ _id: new Types.ObjectId(String(customerId)) }, { $addToSet: { leadSources: source } })
+      .exec();
+  }
+
+  /**
+   * Tags ingress source and sets lifecycle to lead when not already converted.
+   * Does not demote `lifecycleStatus: customer`.
+   */
+  async tagLeadIngress(
+    customerId: Types.ObjectId | string,
+    source: CustomerLeadSource,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(String(customerId))) {
+      return;
+    }
+    const oid = new Types.ObjectId(String(customerId));
+    await this.customerModel
+      .updateOne({ _id: oid }, { $addToSet: { leadSources: source } })
+      .exec();
+    await this.customerModel
+      .updateOne(
+        { _id: oid, lifecycleStatus: { $nin: ['customer'] } },
+        { $set: { lifecycleStatus: 'lead' as CustomerLifecycleStatus } },
+      )
+      .exec();
   }
 
   /**
@@ -840,6 +880,8 @@ export class CustomerService {
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.user !== undefined && dto.user !== '' && { assignedTo: dto.user }),
       interestedProjects,
+      lifecycleStatus: 'lead',
+      leadSources: ['manual'],
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;
