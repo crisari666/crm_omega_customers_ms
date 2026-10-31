@@ -135,6 +135,24 @@ export class LeadConversationSessionService {
     await this.sessionModel.updateOne({ _id: sessionId }, { $set: { assignedVentorId: ventorId } }).exec();
   }
 
+  /** Syncs booked call answers after an admin reschedule. */
+  async patchScheduledCallAnswers(
+    sessionId: Types.ObjectId,
+    input: { readonly fechaLlamada: string; readonly horarioLlamada: string },
+  ): Promise<void> {
+    await this.sessionModel
+      .updateOne(
+        { _id: sessionId },
+        {
+          $set: {
+            'answers.fechaLlamada': input.fechaLlamada,
+            'answers.horarioLlamada': input.horarioLlamada,
+          },
+        },
+      )
+      .exec();
+  }
+
   private isReminderDue(session: LeadSessionSnapshot, questionAt: Date): boolean {
     return (
       session.status === 'active' &&

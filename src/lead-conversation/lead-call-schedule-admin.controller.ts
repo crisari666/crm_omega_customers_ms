@@ -5,6 +5,7 @@ import type { OfficeJwtPayload } from '../core/types/office-jwt-payload.type';
 import { resolveOfficeUserId } from '../core/utils/resolve-office-user-id';
 import { ListLeadCallsQueryDto } from './dto/list-lead-calls-query.dto';
 import { ReassignLeadCallDto } from './dto/reassign-lead-call.dto';
+import { RescheduleLeadCallDto } from './dto/reschedule-lead-call.dto';
 import { UpdateLeadCallStatusDto } from './dto/update-lead-call-status.dto';
 import { LeadCallScheduleAdminService } from './lead-call-schedule-admin.service';
 import type { LeadCallAdminItem } from './types/lead-call-admin-item.type';
@@ -36,6 +37,22 @@ export class LeadCallScheduleAdminController {
     @JwtUser() jwtUser: OfficeJwtPayload | undefined,
   ): Promise<LeadCallAdminItem> {
     return this.adminService.reassignCall({ eventId, userId: body.userId, actorUserId: resolveOfficeUserId(jwtUser) });
+  }
+
+  /** Change Bogota date/time (and optionally ventor) for a pending lead call. */
+  @Patch(':eventId/reschedule')
+  rescheduleCall(
+    @Param('eventId', ParseHexObjectIdPipe) eventId: string,
+    @Body() body: RescheduleLeadCallDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ): Promise<LeadCallAdminItem> {
+    return this.adminService.rescheduleCall({
+      eventId,
+      date: body.date,
+      time: body.time,
+      userId: body.userId,
+      actorUserId: resolveOfficeUserId(jwtUser),
+    });
   }
 
   @Patch(':eventId/status')

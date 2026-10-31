@@ -10,7 +10,12 @@ import {
   VentorScheduleEventStatus,
   VentorScheduleEventType,
 } from '../ventor-schedule/schemas/ventor-schedule-event.schema';
-import { BOGOTA_UTC_OFFSET_HOURS, DAY_MS, MONGO_DUPLICATE_KEY_CODE } from './constants/lead-call-slots.constants';
+import {
+  BOGOTA_UTC_OFFSET_HOURS,
+  CALL_SLOT_MINUTES,
+  DAY_MS,
+  MONGO_DUPLICATE_KEY_CODE,
+} from './constants/lead-call-slots.constants';
 import { MAX_SCORE } from './constants/lead-conversation.constants';
 import type { ListLeadCallsQueryDto } from './dto/list-lead-calls-query.dto';
 import { LeadCallSlotService } from './lead-call-slot.service';
@@ -22,9 +27,11 @@ import {
 } from './schemas/lead-conversation-session.schema';
 import type { LeadCallAdminItem } from './types/lead-call-admin-item.type';
 import type { LeadCallVentor } from './types/lead-call-ventor.type';
+import { findCallPeriod } from './utils/find-call-period.util';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 31;
+const SUNDAY = 0;
 
 type CallEventRow = {
   readonly _id: Types.ObjectId;
@@ -43,6 +50,14 @@ type SessionScore = Pick<LeadConversationSession, 'score' | 'priority' | 'projec
 };
 
 type ReassignInput = { readonly eventId: string; readonly userId?: string; readonly actorUserId: string };
+
+type RescheduleInput = {
+  readonly eventId: string;
+  readonly date: string;
+  readonly time: string;
+  readonly userId?: string;
+  readonly actorUserId: string;
+};
 
 /** Admin agenda of `call` schedule events (lead calls): list, reassign ventor, mark done / cancel. */
 @Injectable()
@@ -111,6 +126,105 @@ export class LeadCallScheduleAdminService {
       .exec();
     if (updated.matchedCount === 0) throw new NotFoundException('Llamada no encontrada');
     return this.findItem(new Types.ObjectId(eventId));
+  }
+
+  /**
+   * Moves a pending call to a new Bogota wall date/time (true UTC storage).
+   * Keeps the current ventor when free at the new slot; optional `userId` or least-loaded fallback.
+   */
+  async rescheduleCall(input: RescheduleInput): Promise<LeadCallAdminItem> {
+    const event = await this.findPendingCall(input.eventId);
+    const scheduledAt = parseBogotaWallToUtc(input.date, input.time);
+    const period = findCallPeriod(scheduledAt);
+    if (!period || isBogotaSunday(scheduledAt)) {
+      throw new BadRequestException(
+        'El horario debe ser un slot de 30 min en mañana (9–12), tarde (14–17) o noche (18–21), sin domingos',
+      );
+    }
+    const freeUserIds = await this.callSlots.findFreeUserIdsAt(scheduledAt);
+    const freeWithoutSelf = freeUserIds.filter((id) => id !== event.userId);
+    const sameSlot = event.scheduledAt.getTime() === scheduledAt.getTime();
+    const currentStillOk =
+      sameSlot ||
+      freeUserIds.includes(event.userId) ||
+      (await this.isUserFreeAtSlot(event.userId, scheduledAt, event._id));
+    let targetUserId: string;
+    if (input.userId) {
+      if (input.userId === event.userId) {
+        if (!currentStillOk) {
+          throw new ConflictException('El asesor actual no está libre en el nuevo horario');
+        }
+        targetUserId = event.userId;
+      } else if (!freeWithoutSelf.includes(input.userId) && !freeUserIds.includes(input.userId)) {
+        throw new ConflictException(
+          'El asesor no está habilitado para leads calificados o no está libre en ese horario',
+        );
+      } else {
+        targetUserId = input.userId;
+      }
+    } else if (currentStillOk) {
+      targetUserId = event.userId;
+    } else {
+      targetUserId = freeWithoutSelf[0] ?? freeUserIds.find((id) => id !== event.userId) ?? '';
+      if (!targetUserId) {
+        throw new ConflictException('No hay asesores libres en ese horario');
+      }
+    }
+    await this.executeRescheduleEvent(event._id, scheduledAt, targetUserId);
+    if (targetUserId !== event.userId) {
+      await this.leadCustomer.assignToVentor(event.customerId, targetUserId, input.actorUserId);
+      if (event.leadConversationSessionId) {
+        await this.sessionService.setAssignedVentor(event.leadConversationSessionId, targetUserId);
+      }
+    }
+    if (event.leadConversationSessionId) {
+      await this.sessionService.patchScheduledCallAnswers(event.leadConversationSessionId, {
+        fechaLlamada: scheduledAt.toISOString(),
+        horarioLlamada: period,
+      });
+    }
+    this.logger.log(
+      `Lead call ${input.eventId} rescheduled → ${scheduledAt.toISOString()} user=${targetUserId} by ${input.actorUserId}`,
+    );
+    return this.findItem(event._id);
+  }
+
+  private async isUserFreeAtSlot(
+    userId: string,
+    slotStart: Date,
+    excludeEventId: Types.ObjectId,
+  ): Promise<boolean> {
+    const slotEnd = new Date(slotStart.getTime() + CALL_SLOT_MINUTES * 60 * 1000);
+    const conflict = await this.eventModel
+      .findOne({
+        _id: { $ne: excludeEventId },
+        userId,
+        eventType: VentorScheduleEventType.Call,
+        status: VentorScheduleEventStatus.Pending,
+        scheduledAt: {
+          $gt: new Date(slotStart.getTime() - CALL_SLOT_MINUTES * 60 * 1000),
+          $lt: slotEnd,
+        },
+      })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    return conflict == null;
+  }
+
+  private async executeRescheduleEvent(
+    eventId: Types.ObjectId,
+    scheduledAt: Date,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.eventModel.updateOne({ _id: eventId }, { $set: { scheduledAt, userId } }).exec();
+    } catch (err: unknown) {
+      if ((err as { code?: number }).code === MONGO_DUPLICATE_KEY_CODE) {
+        throw new ConflictException('El asesor ya tiene una llamada en ese horario');
+      }
+      throw err;
+    }
   }
 
   private async findPendingCall(eventId: string): Promise<CallEventRow> {
@@ -208,4 +322,20 @@ function buildRange(from: string, to: string): { readonly start: Date; readonly 
     throw new BadRequestException(`El rango debe estar entre 1 y ${MAX_RANGE_DAYS} días`);
   }
   return { start, end };
+}
+
+/** Bogota wall `YYYY-MM-DD` + `HH:mm` → true UTC instant (UTC−5, no DST). */
+function parseBogotaWallToUtc(dateYmd: string, timeHm: string): Date {
+  const [year, month, day] = dateYmd.split('-').map((part) => Number.parseInt(part, 10));
+  const [hour, minute] = timeHm.split(':').map((part) => Number.parseInt(part, 10));
+  if ([year, month, day, hour, minute].some((n) => Number.isNaN(n))) {
+    throw new BadRequestException('Fecha u hora inválida');
+  }
+  const localMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  return new Date(localMs - BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
+}
+
+function isBogotaSunday(instant: Date): boolean {
+  const local = new Date(instant.getTime() + BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
+  return local.getUTCDay() === SUNDAY;
 }
