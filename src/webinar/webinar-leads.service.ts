@@ -206,10 +206,13 @@ export class WebinarLeadsService {
             phone: lead.phone,
             whatsapp: lead.phone,
             email: lead.email?.trim() ? lead.email.trim() : undefined,
+            lifecycleStatus: 'customer',
+            leadSources: ['webinar'],
           },
           actorUserId.length > 0 ? actorUserId : WEBINAR_INGEST_ACTOR_ID,
         );
         customerId = created._id as Types.ObjectId;
+        await this.customerService.appendLeadSource(customerId, 'webinar');
         this.logger.log(
           `Converted webinar lead ${leadId} created customer ${String(customerId)}`,
         );

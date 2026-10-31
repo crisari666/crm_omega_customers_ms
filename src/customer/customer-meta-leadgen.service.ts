@@ -154,11 +154,14 @@ export class CustomerMetaLeadgenService {
           phone: canonicalPhone,
           whatsapp: canonicalPhone,
           email,
+          lifecycleStatus: 'lead',
+          leadSources: ['meta_form'],
         },
         META_LEADGEN_ACTOR_ID,
       );
       this.logger.log(`Created customer ${String(customer._id)} from leadgenId=${leadgenId}`);
     } else {
+      await this.customerService.tagLeadIngress(customer._id as Types.ObjectId, 'meta_form');
       this.logger.log(`Linked existing customer ${String(customer._id)} for leadgenId=${leadgenId}`);
     }
     if (registryForm?.flowStrategy === 'lead_conversation') {

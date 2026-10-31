@@ -124,7 +124,14 @@ export class CustomerMetaWebhookService {
       if (!customer) {
         const split = this.splitProfileName(contactName);
         const doc = await this.customerService.createCustomer(
-          { name: split.name, lastName: split.lastName, phone: normalizedWaId, whatsapp: normalizedWaId },
+          {
+            name: split.name,
+            lastName: split.lastName,
+            phone: normalizedWaId,
+            whatsapp: normalizedWaId,
+            lifecycleStatus: 'lead',
+            leadSources: ['whatsapp_inbound'],
+          },
           actorId,
         );
         await this.customerModel.updateOne(
@@ -133,6 +140,8 @@ export class CustomerMetaWebhookService {
         );
         customer = (await this.customerModel.findById(doc._id).exec())!;
         created = true;
+      } else {
+        await this.customerService.tagLeadIngress(customer._id as Types.ObjectId, 'whatsapp_inbound');
       }
       await this.executePersistMetaClickIdFromReferral(customer, msg);
       const assignmentWindowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();

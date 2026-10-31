@@ -35,15 +35,32 @@ export class LeadCustomerService {
     const phone = normalizeCustomerPhone(waId);
     const matches = await findCustomersByPhoneCandidates(this.customerModel, phone);
     const preferred = await this.pickPreferredCustomer(matches);
-    if (preferred) return preferred;
+    if (preferred) {
+      await this.customerService.tagLeadIngress(preferred._id as Types.ObjectId, 'whatsapp_lead_conversation');
+      return preferred;
+    }
     const { name, lastName } = splitProfileName(profileName);
     try {
-      return await this.customerService.createCustomer({ name, lastName, phone, whatsapp: phone }, actorUserId);
+      return await this.customerService.createCustomer(
+        {
+          name,
+          lastName,
+          phone,
+          whatsapp: phone,
+          lifecycleStatus: 'lead',
+          leadSources: ['whatsapp_lead_conversation'],
+        },
+        actorUserId,
+      );
     } catch (err) {
       if (!(err instanceof ConflictException)) throw err;
       const raced = await findCustomersByPhoneCandidates(this.customerModel, phone);
       const racedPreferred = await this.pickPreferredCustomer(raced);
       if (!racedPreferred) throw err;
+      await this.customerService.tagLeadIngress(
+        racedPreferred._id as Types.ObjectId,
+        'whatsapp_lead_conversation',
+      );
       return racedPreferred;
     }
   }
