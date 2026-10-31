@@ -47,6 +47,7 @@ import {
 } from '../customer-steps/schemas/customer-step.schema';
 import { normalizeCustomerPhone } from './utils/normalize-customer-phone.util';
 import { buildAdminListFilter } from './utils/build-admin-list-filter.util';
+import { DEFAULT_VENTOR_MINE_VISIBILITY_DAYS } from './utils/resolve-ventor-mine-visibility-days.util';
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 
 const DUPLICATE_PHONE_MESSAGE =
@@ -55,10 +56,7 @@ const DUPLICATE_EMAIL_MESSAGE =
   'Ya existe un cliente con este correo electrónico.';
 const DUPLICATE_DOCUMENT_MESSAGE =
   'Ya existe un cliente con este documento.';
-/** Default rolling window for `GET customer/mine` (assignedDate / createdAt). */
-const VENTOR_MINE_LIST_WINDOW_DAYS = 30;
-/** Extra days kept on the mine list when the customer's step is `isPotentialBuyer`. */
-const VENTOR_MINE_POTENTIAL_BUYER_EXTRA_DAYS = 15;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function isMongoDuplicateKeyError(err: unknown): boolean {
   return (
@@ -240,22 +238,15 @@ export class CustomerService {
 
   /**
    * Ventor mine list: customers this user created or is assigned to, limited to a
-   * rolling window on `assignedDate` (fallback `createdAt`). Default 30 days;
-   * 45 days when the customer's step has `isPotentialBuyer`. Customers with
-   * `isProspect: true` are always included regardless of the date window.
+   * rolling window on `assignedDate` (fallback `createdAt`). Window length comes
+   * from the customer's step `ventorMineVisibilityDays`, or 30 when unset.
+   * Customers with `isProspect: true` are always included.
    */
   async findCustomersCreatedBy(
     createdBy: string,
     sort: 'createdAt' | 'lastUpdate' = 'createdAt',
   ): Promise<CustomerDocument[]> {
-    const now = new Date();
-    const cutoffDefault = new Date(now);
-    cutoffDefault.setDate(cutoffDefault.getDate() - VENTOR_MINE_LIST_WINDOW_DAYS);
-    const cutoffPotential = new Date(now);
-    cutoffPotential.setDate(
-      cutoffPotential.getDate() -
-        (VENTOR_MINE_LIST_WINDOW_DAYS + VENTOR_MINE_POTENTIAL_BUYER_EXTRA_DAYS),
-    );
+    const nowMs = Date.now();
     const matched = await this.customerModel
       .aggregate<{ _id: Types.ObjectId }>([
         {
@@ -282,11 +273,24 @@ export class CustomerService {
                 else: '$createdAt',
               },
             },
-            __isPotentialBuyer: {
-              $ifNull: [
-                { $arrayElemAt: ['$__step.isPotentialBuyer', 0] },
-                false,
-              ],
+            __stepVisibilityDays: {
+              $arrayElemAt: ['$__step.ventorMineVisibilityDays', 0],
+            },
+          },
+        },
+        {
+          $addFields: {
+            __windowDays: {
+              $cond: {
+                if: {
+                  $and: [
+                    { $ne: ['$__stepVisibilityDays', null] },
+                    { $gte: ['$__stepVisibilityDays', 1] },
+                  ],
+                },
+                then: { $floor: '$__stepVisibilityDays' },
+                else: DEFAULT_VENTOR_MINE_VISIBILITY_DAYS,
+              },
             },
           },
         },
@@ -295,11 +299,15 @@ export class CustomerService {
             $expr: {
               $or: [
                 { $eq: ['$isProspect', true] },
-                { $gte: ['$__effectiveDate', cutoffDefault] },
                 {
-                  $and: [
-                    { $eq: ['$__isPotentialBuyer', true] },
-                    { $gte: ['$__effectiveDate', cutoffPotential] },
+                  $gte: [
+                    '$__effectiveDate',
+                    {
+                      $subtract: [
+                        new Date(nowMs),
+                        { $multiply: ['$__windowDays', MS_PER_DAY] },
+                      ],
+                    },
                   ],
                 },
               ],
@@ -1012,6 +1020,7 @@ export class CustomerService {
     const trimmed = dto.assignedTo.trim();
     const assignedTo = trimmed === '' ? undefined : trimmed;
     customer.assignedTo = assignedTo;
+    customer.assignedDate = new Date().toISOString();
     customer.$locals['__auditActorUserId'] = actorUserId;
     customer.$locals[ASSIGNMENT_CHANGE_LOGGED_KEY] = true;
     const saved = await customer.save();
