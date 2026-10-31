@@ -20,9 +20,16 @@ export class CustomerStep {
   @Prop({ type: Boolean, required: true, default: true, index: true })
   isActive: boolean;
 
-  /** When true, ventor mine list keeps customers on this step for 15 extra days past the default window. */
+  /** CRM flag for potential-buyer steps (not used for mine-list duration). */
   @Prop({ type: Boolean, required: true, default: false, index: true })
   isPotentialBuyer: boolean;
+
+  /**
+   * Optional days a customer on this step stays on the ventor mine list after
+   * assignment (`assignedDate`, else `createdAt`). When unset, mine list uses 30.
+   */
+  @Prop({ type: Number, required: false, min: 1 })
+  ventorMineVisibilityDays?: number;
 
   @Prop({ required: true, index: true })
   createdBy: string;

@@ -6,6 +6,7 @@ export type CustomerStepResponse = {
   color?: string;
   isActive: boolean;
   isPotentialBuyer: boolean;
+  ventorMineVisibilityDays?: number;
   createdAt: string;
   updatedAt: string;
 };

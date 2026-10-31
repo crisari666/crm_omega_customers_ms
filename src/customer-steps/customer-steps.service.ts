@@ -39,6 +39,9 @@ export class CustomerStepsService {
       ...(dto.color !== undefined && { color: dto.color.trim() }),
       isActive: dto.isActive ?? true,
       isPotentialBuyer: dto.isPotentialBuyer ?? false,
+      ...(typeof dto.ventorMineVisibilityDays === 'number' && {
+        ventorMineVisibilityDays: dto.ventorMineVisibilityDays,
+      }),
       createdBy: actorUserId,
       updatedBy: actorUserId,
     }).save();
@@ -75,6 +78,14 @@ export class CustomerStepsService {
     if (dto.isPotentialBuyer !== undefined) {
       step.isPotentialBuyer = dto.isPotentialBuyer;
     }
+    if (dto.ventorMineVisibilityDays !== undefined) {
+      if (dto.ventorMineVisibilityDays === null) {
+        step.ventorMineVisibilityDays = undefined;
+        step.set('ventorMineVisibilityDays', undefined);
+      } else {
+        step.ventorMineVisibilityDays = dto.ventorMineVisibilityDays;
+      }
+    }
     step.updatedBy = actorUserId;
     const saved = await step.save();
     return this.mapToResponse(saved.toObject());
@@ -88,6 +99,7 @@ export class CustomerStepsService {
     color?: string;
     isActive: boolean;
     isPotentialBuyer?: boolean;
+    ventorMineVisibilityDays?: number;
     createdAt?: Date | string;
     updatedAt?: Date | string;
   }): CustomerStepResponse {
@@ -101,6 +113,9 @@ export class CustomerStepsService {
       ...(doc.color !== undefined && { color: doc.color }),
       isActive: doc.isActive,
       isPotentialBuyer: doc.isPotentialBuyer ?? false,
+      ...(doc.ventorMineVisibilityDays !== undefined && {
+        ventorMineVisibilityDays: doc.ventorMineVisibilityDays,
+      }),
       createdAt:
         createdAt instanceof Date
           ? createdAt.toISOString()
