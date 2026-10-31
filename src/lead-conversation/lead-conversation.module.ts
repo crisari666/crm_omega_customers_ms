@@ -7,6 +7,10 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 import { CustomerMetadataModule } from '../customer-metadata/customer-metadata.module';
 import { CustomerModule } from '../customer/customer.module';
 import { Customer, CustomerSchema } from '../customer/schemas/customer.schema';
+import {
+  MetaLeadCampaign,
+  MetaLeadCampaignSchema,
+} from '../customer/schemas/meta-lead-campaign.schema';
 import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
 import { LEAD_OUTBOUND_QUEUE, LEAD_REMINDER_QUEUE, LEAD_WS_MS_CLIENT } from './constants/lead-conversation.constants';
 import {
@@ -81,6 +85,7 @@ const STEP_HANDLERS = [
       { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
       { name: LeadConversationMessage.name, schema: LeadConversationMessageSchema },
       { name: Customer.name, schema: CustomerSchema },
+      { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
     ]),
     BullModule.forRootAsync({

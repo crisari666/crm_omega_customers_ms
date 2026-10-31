@@ -21,6 +21,10 @@ import {
   MONGO_DUPLICATE_KEY_CODE,
 } from './constants/lead-call-slots.constants';
 import { LeadCustomerService } from './lead-customer.service';
+import {
+  LeadConversationSession,
+  LeadConversationSessionDocument,
+} from './schemas/lead-conversation-session.schema';
 import type { BookCallSlotResult } from './types/book-call-slot-result.type';
 import type { LeadCallPeriod } from './types/lead-call-period.type';
 import type { LeadCallSlot } from './types/lead-call-slot.type';
@@ -36,6 +40,8 @@ type BusyEvent = { readonly userId: string; readonly scheduledAt: Date };
 type BookSlotInput = {
   readonly sessionId: Types.ObjectId;
   readonly customerId: Types.ObjectId;
+  readonly waId: string;
+  readonly profileName?: string;
   readonly slotStart: Date;
   readonly now?: Date;
 };
@@ -50,6 +56,8 @@ export class LeadCallSlotService {
 
   constructor(
     @InjectModel(VentorScheduleEvent.name) private readonly eventModel: Model<VentorScheduleEventDocument>,
+    @InjectModel(LeadConversationSession.name)
+    private readonly sessionModel: Model<LeadConversationSessionDocument>,
     private readonly ventorAssignment: CustomerVentorAssignmentService,
     private readonly leadCustomer: LeadCustomerService,
     private readonly configService: ConfigService,
@@ -73,10 +81,25 @@ export class LeadCallSlotService {
    * Books the slot with the least-loaded free advance-leads user and assigns the customer to that user.
    * Idempotent per session: an existing pending booking at the same start is returned as is.
    */
-  async bookSlot({ sessionId, customerId, slotStart, now = new Date() }: BookSlotInput): Promise<BookCallSlotResult> {
+  async bookSlot({
+    sessionId,
+    customerId,
+    waId,
+    profileName,
+    slotStart,
+    now = new Date(),
+  }: BookSlotInput): Promise<BookCallSlotResult> {
     if (!this.isBookableStart(slotStart, now)) return { booked: false };
     const existing = await this.findPendingSessionCall(sessionId);
     if (existing && existing.scheduledAt.getTime() === slotStart.getTime()) {
+      await this.executeUnifyCustomerOnBook({
+        sessionId,
+        eventId: existing._id,
+        customerId,
+        waId,
+        profileName,
+        ventorId: existing.userId,
+      });
       return this.buildBookedResult({
         eventId: String(existing._id),
         userId: existing.userId,
@@ -91,7 +114,14 @@ export class LeadCallSlotService {
       const created = await this.tryCreateCall({ userId, sessionId, customerId, slotStart });
       if (!created) continue;
       if (existing) await this.cancelEvent(existing._id);
-      await this.leadCustomer.assignToVentor(customerId, userId);
+      await this.executeUnifyCustomerOnBook({
+        sessionId,
+        eventId: created._id,
+        customerId,
+        waId,
+        profileName,
+        ventorId: userId,
+      });
       this.logger.log(`Lead call booked session=${String(sessionId)} user=${userId} at=${slotStart.toISOString()}`);
       return this.buildBookedResult({
         eventId: String(created._id),
@@ -101,6 +131,34 @@ export class LeadCallSlotService {
       });
     }
     return { booked: false };
+  }
+
+  /**
+   * Re-resolve Customer by CO phone variants, rematch session/event, assign ventor.
+   */
+  private async executeUnifyCustomerOnBook(input: {
+    readonly sessionId: Types.ObjectId;
+    readonly eventId: Types.ObjectId;
+    readonly customerId: Types.ObjectId;
+    readonly waId: string;
+    readonly profileName?: string;
+    readonly ventorId: string;
+  }): Promise<Types.ObjectId> {
+    const resolved = await this.leadCustomer.resolveCanonicalCustomerForSchedule({
+      customerId: input.customerId,
+      waId: input.waId,
+      profileName: input.profileName,
+    });
+    if (resolved.rematched) {
+      await this.eventModel
+        .updateOne({ _id: input.eventId }, { $set: { customerId: resolved.customerId } })
+        .exec();
+      await this.sessionModel
+        .updateOne({ _id: input.sessionId }, { $set: { customerId: resolved.customerId } })
+        .exec();
+    }
+    await this.leadCustomer.assignToVentor(resolved.customerId, input.ventorId);
+    return resolved.customerId;
   }
 
   /** Free advance-leads users at a slot start (excluding `excludeUserId`), least loaded that day first. */

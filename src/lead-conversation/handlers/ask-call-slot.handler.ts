@@ -34,7 +34,13 @@ export class AskCallSlotHandler implements LeadStepHandler {
     if (!slotStart) {
       return this.transitions.buildRetry(session);
     }
-    const result = await this.callSlots.bookSlot({ sessionId: session._id, customerId: session.customerId, slotStart });
+    const result = await this.callSlots.bookSlot({
+      sessionId: session._id,
+      customerId: session.customerId,
+      waId: session.waId,
+      profileName: session.firstName,
+      slotStart,
+    });
     if (!result.booked) {
       return this.transitions.buildAskCallSlot(findCallPeriod(slotStart) ?? DEFAULT_PERIOD, true);
     }

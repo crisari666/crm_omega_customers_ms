@@ -30,7 +30,11 @@ describe('LeadCallSlotService', () => {
     updateOne: jest.fn(),
   };
   const mockAssignment = { executeFetchAdvanceLeadVentors: jest.fn() };
-  const mockLeadCustomer = { assignToVentor: jest.fn() };
+  const mockLeadCustomer = {
+    assignToVentor: jest.fn(),
+    resolveCanonicalCustomerForSchedule: jest.fn(),
+  };
+  const mockSessionModel = { updateOne: jest.fn() };
   const mockConfig = { get: jest.fn().mockReturnValue(7) };
 
   beforeEach(() => {
@@ -40,12 +44,25 @@ describe('LeadCallSlotService', () => {
     mockEventModel.findOne.mockImplementation(() => buildChain(null));
     mockEventModel.aggregate.mockImplementation(() => ({ exec: jest.fn().mockResolvedValue([]) }));
     mockEventModel.create.mockImplementation(async (doc: Record<string, unknown>) => ({ _id: new Types.ObjectId(), ...doc }));
+    mockEventModel.updateOne = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+    mockSessionModel.updateOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
     mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([
       { id: 'u1', name: 'Ana', lastName: 'López', phone: '3001112233', phoneJob: '6015551212', voipPhone: '' },
       { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '', voipPhone: '' },
     ]);
+    mockLeadCustomer.resolveCanonicalCustomerForSchedule.mockImplementation(
+      async ({ customerId }: { customerId: Types.ObjectId }) => ({
+        customerId,
+        rematched: false,
+      }),
+    );
     service = new LeadCallSlotService(
       mockEventModel as never,
+      mockSessionModel as never,
       mockAssignment as unknown as CustomerVentorAssignmentService,
       mockLeadCustomer as unknown as LeadCustomerService,
       mockConfig as unknown as ConfigService,
@@ -105,7 +122,12 @@ describe('LeadCallSlotService', () => {
   });
 
   describe('bookSlot', () => {
-    const inputBase = { sessionId: new Types.ObjectId(), customerId: new Types.ObjectId(), now: NOW };
+    const inputBase = {
+      sessionId: new Types.ObjectId(),
+      customerId: new Types.ObjectId(),
+      waId: '573001112233',
+      now: NOW,
+    };
 
     it('books a free user, tags the event as lead_conversation and assigns the customer', async () => {
       busyRows = [{ userId: 'u1', scheduledAt: TOMORROW_9AM }];
@@ -157,6 +179,26 @@ describe('LeadCallSlotService', () => {
         ventor: { id: 'u1', name: 'Ana', phone: '3001112233', phoneJob: '6015551212', voipPhone: '' },
       });
       expect(mockEventModel.create).not.toHaveBeenCalled();
+    });
+
+    it('rematches session and event to the canonical customer when phone reunifies', async () => {
+      const canonicalId = new Types.ObjectId();
+      mockLeadCustomer.resolveCanonicalCustomerForSchedule.mockResolvedValueOnce({
+        customerId: canonicalId,
+        rematched: true,
+        previousCustomerId: inputBase.customerId,
+      });
+      const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
+      expect(actual).toMatchObject({ booked: true, userId: 'u1' });
+      expect(mockEventModel.updateOne).toHaveBeenCalledWith(
+        { _id: expect.any(Types.ObjectId) },
+        { $set: { customerId: canonicalId } },
+      );
+      expect(mockSessionModel.updateOne).toHaveBeenCalledWith(
+        { _id: inputBase.sessionId },
+        { $set: { customerId: canonicalId } },
+      );
+      expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(canonicalId, 'u1');
     });
   });
 });
