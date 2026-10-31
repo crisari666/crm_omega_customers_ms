@@ -75,6 +75,26 @@ describe('CustomerLeadsAdminService', () => {
     );
   });
 
+  it('treats legacy non-prospect without lifecycleStatus as promoted customer', async () => {
+    const row = {
+      _id: customerId,
+      name: 'Anderson',
+      lastName: 'L.',
+      phone: '573118857808',
+      isProspect: false,
+      createdBy: 'lead-conversation-bot',
+      createdAt: new Date('2026-10-15T12:00:00.000Z'),
+    };
+    mockCustomerModel.find.mockReturnValue(buildChain([row]));
+    mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+    const actual = await service.listLeads({ page: 0, limit: 50 });
+    expect(actual.items[0]).toMatchObject({
+      phone: '573118857808',
+      lifecycleStatus: 'customer',
+      isPromoted: true,
+    });
+  });
+
   it('filters list by source and lifecycleStatus', async () => {
     mockCustomerModel.find.mockReturnValue(buildChain([]));
     mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(0) });

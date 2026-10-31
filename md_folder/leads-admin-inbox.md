@@ -27,6 +27,8 @@ Assign may set `assignedTo` while lifecycle stays `lead` until convert.
 
 **Routing:** `CustomerLeadsAdminController` must load before `CustomerAdminController` (static `leads` vs `:customerId`).
 
+**Legacy:** docs missing `lifecycleStatus` with `isProspect: false` resolve as `customer` (`isPromoted`) so Convert is hidden. Backfill sets explicit `lifecycleStatus` where missing.
+
 ## Admin UI
 
 `crm_lots_agents` → `/dashboard/leads` (menu Leads → Bandeja). Reuses `CustomerDetailDialogCP` + lead summary strip; convert CTA with optional ventor assign.

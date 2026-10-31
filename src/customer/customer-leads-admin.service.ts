@@ -221,6 +221,10 @@ function resolveLifecycle(row: CustomerLeadLean): CustomerLifecycleStatus {
   if (row.lifecycleStatus === 'customer' || row.lifecycleStatus === 'lead') {
     return row.lifecycleStatus;
   }
+  // Legacy docs without lifecycleStatus: non-prospects are already customers in CRM terms.
+  if (row.isProspect === false) {
+    return 'customer';
+  }
   return 'lead';
 }
 
