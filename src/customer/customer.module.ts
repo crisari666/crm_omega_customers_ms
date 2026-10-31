@@ -77,6 +77,12 @@ import { CustomerCallAuditService } from './call-audit/customer-call-audit.servi
 import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketing.module';
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
+import {
+  LeadConversationSession,
+  LeadConversationSessionSchema,
+} from '../lead-conversation/schemas/lead-conversation-session.schema';
+import { CustomerLeadsAdminController } from './customer-leads-admin.controller';
+import { CustomerLeadsAdminService } from './customer-leads-admin.service';
 
 @Module({
   imports: [
@@ -126,10 +132,13 @@ import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
       { name: VentorScheduleEvent.name, schema: VentorScheduleEventSchema },
       { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
       { name: CustomerCallAudit.name, schema: CustomerCallAuditSchema },
+      { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
     ]),
   ],
   controllers: [
     CustomerController,
+    // Before CustomerAdminController so `GET admin/customer/leads` is not captured by `:customerId`.
+    CustomerLeadsAdminController,
     CustomerAdminController,
     VoiceCallRmqController,
     CustomerWhatsappRmqController,
@@ -140,6 +149,7 @@ import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
   providers: [
     ParseHexObjectIdPipe,
     CustomerService,
+    CustomerLeadsAdminService,
     CustomerAuditService,
     CustomerCallLogsService,
     GoogleMeetArtifactsService,
