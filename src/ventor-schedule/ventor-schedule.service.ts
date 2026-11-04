@@ -26,6 +26,7 @@ import {
 } from './google-meet-audit.constants';
 import { VentorMeetGoogleCalendarService } from './ventor-meet-google-calendar.service';
 import { VentorMeetWorkspaceEventsService } from './ventor-meet-workspace-events.service';
+import { parseBogotaWallToUtc } from '../lead-conversation/utils/bogota-wall-time.util';
 import {
   VentorScheduleEvent,
   VentorScheduleEventDocument,
@@ -45,10 +46,23 @@ const ON_LAND_CUSTOMER_EVENT_DESCRIPTION = {
   agentCleared: 'On-land agent assignment cleared.',
 } as const;
 
+/** Visit/virtual wall clock stored as UTC Date.UTC (ISO clock = display clock). */
 function parseUtcDateTime(dateYmd: string, timeHm: string): Date {
   const [y, mo, d] = dateYmd.split('-').map((n) => Number.parseInt(n, 10));
   const [h, mi] = timeHm.split(':').map((n) => Number.parseInt(n, 10));
   return new Date(Date.UTC(y, mo - 1, d, h, mi, 0, 0));
+}
+
+/** `call` → Bogota wall to true UTC; visits → wall-as-Z. */
+function parseScheduledAtForCreate(
+  eventType: VentorScheduleEventType,
+  dateYmd: string,
+  timeHm: string,
+): Date {
+  if (eventType === VentorScheduleEventType.Call) {
+    return parseBogotaWallToUtc(dateYmd, timeHm);
+  }
+  return parseUtcDateTime(dateYmd, timeHm);
 }
 
 /** Inclusive start / exclusive end of UTC calendar day for `YYYY-MM-DD`. */
@@ -240,7 +254,7 @@ export class VentorScheduleService {
     dto: CreateVentorScheduleEventDto,
   ): Promise<VentorScheduleEventDocument> {
     await this.assertCustomerAccessible(userId, dto.customerId);
-    const scheduledAt = parseUtcDateTime(dto.date, dto.time);
+    const scheduledAt = parseScheduledAtForCreate(dto.eventType, dto.date, dto.time);
     if (dto.eventType === VentorScheduleEventType.Virtual) {
       return this.createVirtualMeetSchedule(userId, dto, scheduledAt);
     }
@@ -251,6 +265,9 @@ export class VentorScheduleService {
       eventType: dto.eventType,
       note: dto.note,
       status: VentorScheduleEventStatus.Pending,
+      ...(dto.eventType === VentorScheduleEventType.Call
+        ? { callScheduledAtEncoding: 'true_utc' as const }
+        : {}),
     });
     const saved = await doc.save();
     if (dto.eventType === VentorScheduleEventType.OnLand) {

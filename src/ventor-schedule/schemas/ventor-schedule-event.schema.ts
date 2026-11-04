@@ -103,6 +103,14 @@ export class VentorScheduleEvent {
 
   @Prop({ type: Types.ObjectId, ref: 'LeadConversationSession', required: false })
   leadConversationSessionId?: Types.ObjectId;
+
+  /**
+   * Encoding of `scheduledAt` for `call` events.
+   * `true_utc` = America/Bogota wall stored as a real UTC instant (canonical).
+   * Missing on legacy manual rows that used wall-clock-as-Z (migration target).
+   */
+  @Prop({ type: String })
+  callScheduledAtEncoding?: 'true_utc';
 }
 
 export const VentorScheduleEventSchema = SchemaFactory.createForClass(

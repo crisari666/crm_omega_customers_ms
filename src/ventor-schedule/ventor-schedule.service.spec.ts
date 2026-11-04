@@ -319,4 +319,76 @@ describe('VentorScheduleService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('create stores call wall time as true UTC (Bogota 09:30 → 14:30Z)', async () => {
+    const deps = setup();
+    const service = await compileService(deps);
+    const saved = {
+      _id: new Types.ObjectId(eventId),
+      scheduledAt: new Date('2026-10-15T14:30:00.000Z'),
+      eventType: VentorScheduleEventType.Call,
+    };
+    const save = jest.fn().mockResolvedValue(saved);
+    (deps.scheduleModel as unknown as jest.Mock).mockImplementation(
+      (payload: { scheduledAt: Date }) => ({
+        ...payload,
+        save,
+      }),
+    );
+    deps.customerFindById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(customerId),
+        assignedTo: otherUserId,
+      }),
+    });
+    const out = await service.create(otherUserId, {
+      customerId,
+      date: '2026-10-15',
+      time: '09:30',
+      eventType: VentorScheduleEventType.Call,
+    });
+    expect(out).toBe(saved);
+    expect(deps.scheduleModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: VentorScheduleEventType.Call,
+        scheduledAt: new Date('2026-10-15T14:30:00.000Z'),
+        callScheduledAtEncoding: 'true_utc',
+      }),
+    );
+  });
+
+  it('create stores office wall time as UTC Date.UTC (09:30 → 09:30Z)', async () => {
+    const deps = setup();
+    const service = await compileService(deps);
+    const saved = {
+      _id: new Types.ObjectId(eventId),
+      scheduledAt: new Date('2026-10-15T09:30:00.000Z'),
+      eventType: VentorScheduleEventType.Office,
+    };
+    const save = jest.fn().mockResolvedValue(saved);
+    (deps.scheduleModel as unknown as jest.Mock).mockImplementation(
+      (payload: { scheduledAt: Date }) => ({
+        ...payload,
+        save,
+      }),
+    );
+    deps.customerFindById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(customerId),
+        assignedTo: otherUserId,
+      }),
+    });
+    await service.create(otherUserId, {
+      customerId,
+      date: '2026-10-15',
+      time: '09:30',
+      eventType: VentorScheduleEventType.Office,
+    });
+    expect(deps.scheduleModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: VentorScheduleEventType.Office,
+        scheduledAt: new Date('2026-10-15T09:30:00.000Z'),
+      }),
+    );
+  });
 });

@@ -267,6 +267,7 @@ export class LeadCallSlotService {
         source: VentorScheduleEventSource.LeadConversation,
         leadConversationSessionId: input.sessionId,
         note: 'Llamada agendada por el asistente IA de leads',
+        callScheduledAtEncoding: 'true_utc',
       });
     } catch (err: unknown) {
       if ((err as { code?: number }).code === MONGO_DUPLICATE_KEY_CODE) return null;
