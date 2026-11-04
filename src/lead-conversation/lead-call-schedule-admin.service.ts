@@ -27,11 +27,11 @@ import {
 } from './schemas/lead-conversation-session.schema';
 import type { LeadCallAdminItem } from './types/lead-call-admin-item.type';
 import type { LeadCallVentor } from './types/lead-call-ventor.type';
+import { isBogotaSunday, parseBogotaWallToUtc } from './utils/bogota-wall-time.util';
 import { findCallPeriod } from './utils/find-call-period.util';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 31;
-const SUNDAY = 0;
 
 type CallEventRow = {
   readonly _id: Types.ObjectId;
@@ -218,7 +218,12 @@ export class LeadCallScheduleAdminService {
     userId: string,
   ): Promise<void> {
     try {
-      await this.eventModel.updateOne({ _id: eventId }, { $set: { scheduledAt, userId } }).exec();
+      await this.eventModel
+        .updateOne(
+          { _id: eventId },
+          { $set: { scheduledAt, userId, callScheduledAtEncoding: 'true_utc' } },
+        )
+        .exec();
     } catch (err: unknown) {
       if ((err as { code?: number }).code === MONGO_DUPLICATE_KEY_CODE) {
         throw new ConflictException('El asesor ya tiene una llamada en ese horario');
@@ -322,20 +327,4 @@ function buildRange(from: string, to: string): { readonly start: Date; readonly 
     throw new BadRequestException(`El rango debe estar entre 1 y ${MAX_RANGE_DAYS} días`);
   }
   return { start, end };
-}
-
-/** Bogota wall `YYYY-MM-DD` + `HH:mm` → true UTC instant (UTC−5, no DST). */
-function parseBogotaWallToUtc(dateYmd: string, timeHm: string): Date {
-  const [year, month, day] = dateYmd.split('-').map((part) => Number.parseInt(part, 10));
-  const [hour, minute] = timeHm.split(':').map((part) => Number.parseInt(part, 10));
-  if ([year, month, day, hour, minute].some((n) => Number.isNaN(n))) {
-    throw new BadRequestException('Fecha u hora inválida');
-  }
-  const localMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
-  return new Date(localMs - BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
-}
-
-function isBogotaSunday(instant: Date): boolean {
-  const local = new Date(instant.getTime() + BOGOTA_UTC_OFFSET_HOURS * HOUR_MS);
-  return local.getUTCDay() === SUNDAY;
 }
