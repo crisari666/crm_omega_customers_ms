@@ -67,6 +67,14 @@ export class MetaLeadCampaign {
   @Prop({ type: Types.ObjectId, ref: 'Customer', required: false, index: true })
   customerId?: Types.ObjectId;
 
+  /** WhatsApp profile username stamped when CTWA / leads-line inbound relates to this lead. */
+  @Prop({ type: String, required: false, index: true, sparse: true })
+  whatsappUsername?: string;
+
+  /** Opaque Meta WhatsApp user id (`CO.…`) stamped from leads-line CTWA inbound. */
+  @Prop({ type: String, required: false, index: true, sparse: true })
+  metaWhatsappUserId?: string;
+
   @Prop({
     type: String,
     enum: MetaLeadCampaignStatus,

@@ -19,6 +19,16 @@ export type ResolveCanonicalCustomerResult = {
   readonly previousCustomerId?: Types.ObjectId;
 };
 
+export type LeadCustomerIdentityInput = {
+  readonly waId: string;
+  readonly profileName: string;
+  readonly actorUserId: string;
+  readonly email?: string;
+  readonly whatsappUsername?: string;
+  readonly metaWhatsappUserId?: string;
+  readonly ctwaClid?: string;
+};
+
 /** Customer lookup/creation for the lead qualification line (reuses CustomerService rules). */
 @Injectable()
 export class LeadCustomerService {
@@ -31,15 +41,27 @@ export class LeadCustomerService {
     private readonly customerService: CustomerService,
   ) {}
 
-  async findOrCreateByWaId(waId: string, profileName: string, actorUserId: string): Promise<CustomerDocument> {
-    const phone = normalizeCustomerPhone(waId);
-    const matches = await findCustomersByPhoneCandidates(this.customerModel, phone);
-    const preferred = await this.pickPreferredCustomer(matches);
+  /**
+   * Resolves the Ceiba/leadgen Customer (phone → email → metaWhatsappUserId) or creates a lead.
+   * Enrichment never clears `assignedTo`.
+   */
+  async findOrCreateByWaId(input: LeadCustomerIdentityInput): Promise<CustomerDocument> {
+    const phone = normalizeCustomerPhone(input.waId);
+    const byPhone = await findCustomersByPhoneCandidates(this.customerModel, phone);
+    let preferred = await this.pickPreferredCustomer(byPhone);
+    if (!preferred && input.email) {
+      preferred = await this.findByEmail(input.email);
+    }
+    if (!preferred && input.metaWhatsappUserId) {
+      preferred = await this.findByMetaWhatsappUserId(input.metaWhatsappUserId);
+    }
     if (preferred) {
+      await this.enrichCustomerIdentity(preferred, { ...input, waId: phone });
+      await this.stampMetaLeadCampaignWhatsappIdentity(preferred._id as Types.ObjectId, input);
       await this.customerService.tagLeadIngress(preferred._id as Types.ObjectId, 'whatsapp_lead_conversation');
       return preferred;
     }
-    const { name, lastName } = splitProfileName(profileName);
+    const { name, lastName } = splitProfileName(input.profileName);
     try {
       return await this.customerService.createCustomer(
         {
@@ -49,14 +71,20 @@ export class LeadCustomerService {
           whatsapp: phone,
           lifecycleStatus: 'lead',
           leadSources: ['whatsapp_lead_conversation'],
+          ...(input.email ? { email: input.email } : {}),
+          ...(input.whatsappUsername ? { whatsappUsername: input.whatsappUsername } : {}),
+          ...(input.metaWhatsappUserId ? { metaWhatsappUserId: input.metaWhatsappUserId } : {}),
+          ...(input.ctwaClid ? { metaCtwaClid: input.ctwaClid } : {}),
         },
-        actorUserId,
+        input.actorUserId,
       );
     } catch (err) {
       if (!(err instanceof ConflictException)) throw err;
       const raced = await findCustomersByPhoneCandidates(this.customerModel, phone);
       const racedPreferred = await this.pickPreferredCustomer(raced);
       if (!racedPreferred) throw err;
+      await this.enrichCustomerIdentity(racedPreferred, { ...input, waId: phone });
+      await this.stampMetaLeadCampaignWhatsappIdentity(racedPreferred._id as Types.ObjectId, input);
       await this.customerService.tagLeadIngress(
         racedPreferred._id as Types.ObjectId,
         'whatsapp_lead_conversation',
@@ -99,10 +127,26 @@ export class LeadCustomerService {
     };
   }
 
-  /** Assigns the customer to the office user who owns the booked lead call (overwrites any previous assignee). */
-  async assignToVentor(customerId: Types.ObjectId, ventorId: string, actorUserId = LEAD_BOT_ACTOR_ID): Promise<void> {
+  /**
+   * Assigns the customer to a ventor. When `overwrite` is false (default for bot booking),
+   * keeps an existing Meta/CRM assignee.
+   */
+  async assignToVentor(
+    customerId: Types.ObjectId,
+    ventorId: string,
+    actorUserId = LEAD_BOT_ACTOR_ID,
+    options: { readonly overwrite?: boolean } = {},
+  ): Promise<void> {
     const customer = await this.customerModel.findById(customerId).exec();
     if (!customer) return;
+    const existing = (customer.assignedTo ?? '').trim();
+    const overwrite = options.overwrite === true;
+    if (existing.length > 0 && !overwrite) {
+      this.logger.debug(
+        `Skip assignToVentor customer=${String(customerId)} keeps=${existing} ignored=${ventorId}`,
+      );
+      return;
+    }
     customer.assignedTo = ventorId;
     customer.assignedDate = new Date().toISOString();
     customer.$locals['__auditActorUserId'] = actorUserId;
@@ -138,16 +182,100 @@ export class LeadCustomerService {
     return withMeta ?? matches[0];
   }
 
-  private async fillNameIfEmpty(customer: CustomerDocument, profileName: string): Promise<void> {
-    const hasName = customer.name.trim().length > 0 && customer.name.trim() !== FALLBACK_CUSTOMER_NAME;
-    if (hasName) return;
-    const { name, lastName } = splitProfileName(profileName);
-    customer.name = name;
-    if (!customer.lastName?.trim()) {
-      customer.lastName = lastName;
+  private async findByEmail(email: string): Promise<CustomerDocument | null> {
+    const trimmed = email.trim();
+    if (!trimmed) return null;
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.customerModel
+      .findOne({ email: { $regex: new RegExp(`^${escaped}$`, 'i') } })
+      .exec();
+  }
+
+  /**
+   * Stamps WA nick / Meta user id on the newest Meta lead campaign for this customer (bridge visibility).
+   */
+  private async stampMetaLeadCampaignWhatsappIdentity(
+    customerId: Types.ObjectId,
+    input: LeadCustomerIdentityInput,
+  ): Promise<void> {
+    const $set: Record<string, string> = {};
+    if (input.whatsappUsername?.trim()) $set.whatsappUsername = input.whatsappUsername.trim();
+    if (input.metaWhatsappUserId?.trim()) $set.metaWhatsappUserId = input.metaWhatsappUserId.trim();
+    if (Object.keys($set).length === 0) return;
+    const campaign = await this.metaLeadCampaignModel
+      .findOne({ customerId })
+      .sort({ createdAt: -1 })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    if (!campaign?._id) return;
+    await this.metaLeadCampaignModel.updateOne({ _id: campaign._id }, { $set }).exec();
+  }
+
+  private async findByMetaWhatsappUserId(metaWhatsappUserId: string): Promise<CustomerDocument | null> {
+    const trimmed = metaWhatsappUserId.trim();
+    if (!trimmed) return null;
+    return this.customerModel.findOne({ metaWhatsappUserId: trimmed }).exec();
+  }
+
+  private async enrichCustomerIdentity(
+    customer: CustomerDocument,
+    input: LeadCustomerIdentityInput,
+  ): Promise<void> {
+    const phone = normalizeCustomerPhone(input.waId);
+    const existingPhone = normalizeCustomerPhone(customer.phone ?? '');
+    if (phone && existingPhone && phone !== existingPhone) {
+      this.logger.warn(
+        `Identity enrich phone mismatch customer=${String(customer._id)} ` +
+          `keptPhone=${existingPhone} formWaId=${phone} (phone not overwritten)`,
+      );
     }
+    let dirty = false;
+    if (input.profileName) {
+      const filled = this.applyNameIfEmpty(customer, input.profileName);
+      dirty = dirty || filled;
+    }
+    if (input.email && !(customer.email ?? '').trim()) {
+      customer.email = input.email.trim();
+      dirty = true;
+    }
+    if (input.whatsappUsername && !(customer.whatsappUsername ?? '').trim()) {
+      customer.whatsappUsername = input.whatsappUsername.trim();
+      dirty = true;
+    }
+    if (input.metaWhatsappUserId && !(customer.metaWhatsappUserId ?? '').trim()) {
+      customer.metaWhatsappUserId = input.metaWhatsappUserId.trim();
+      dirty = true;
+    }
+    if (input.ctwaClid && !(customer.metaCtwaClid ?? '').trim()) {
+      customer.metaCtwaClid = input.ctwaClid.trim();
+      dirty = true;
+    }
+    if (phone && !(customer.whatsapp ?? '').trim()) {
+      customer.whatsapp = phone;
+      dirty = true;
+    }
+    if (!dirty) return;
     customer.$locals['__auditActorUserId'] = LEAD_BOT_ACTOR_ID;
     await customer.save();
+  }
+
+  private async fillNameIfEmpty(customer: CustomerDocument, profileName: string): Promise<void> {
+    if (!this.applyNameIfEmpty(customer, profileName)) return;
+    customer.$locals['__auditActorUserId'] = LEAD_BOT_ACTOR_ID;
+    await customer.save();
+  }
+
+  private applyNameIfEmpty(customer: CustomerDocument, profileName: string): boolean {
+    const currentName = (customer.name ?? '').trim();
+    const hasName = currentName.length > 0 && currentName !== FALLBACK_CUSTOMER_NAME;
+    if (hasName) return false;
+    const { name, lastName } = splitProfileName(profileName);
+    customer.name = name;
+    if (!(customer.lastName ?? '').trim()) {
+      customer.lastName = lastName;
+    }
+    return true;
   }
 }
 

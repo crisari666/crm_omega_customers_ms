@@ -25,6 +25,18 @@ export class LeadConversationSession {
   @Prop({ default: '' })
   profileName: string;
 
+  /** WhatsApp profile username when Meta sends `contacts.profile.username`. */
+  @Prop({ required: false })
+  whatsappUsername?: string;
+
+  /** Opaque Meta WhatsApp user id (`CO.…`) correlated to this session. */
+  @Prop({ required: false })
+  metaWhatsappUserId?: string;
+
+  /** True after the Instant Form dump was used for identity and skipped as a project answer. */
+  @Prop({ type: Boolean, default: false })
+  identityBootstrappedFromForm?: boolean;
+
   @Prop({ default: '' })
   firstName: string;
 

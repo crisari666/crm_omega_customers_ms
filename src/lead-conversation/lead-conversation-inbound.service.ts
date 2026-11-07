@@ -44,12 +44,22 @@ export class LeadConversationInboundService {
 
   private async executeProcessMessage(message: InboundLeadMessage): Promise<void> {
     const actorUserId = this.configService.get<string>('leadConversation.actorUserId', 'lead-conversation-bot');
-    const customer = await this.leadCustomer.findOrCreateByWaId(message.waId, message.profileName, actorUserId);
+    const customer = await this.leadCustomer.findOrCreateByWaId({
+      waId: message.waId,
+      profileName: message.profileName,
+      actorUserId,
+      ...(message.email ? { email: message.email } : {}),
+      ...(message.whatsappUsername ? { whatsappUsername: message.whatsappUsername } : {}),
+      ...(message.metaWhatsappUserId ? { metaWhatsappUserId: message.metaWhatsappUserId } : {}),
+      ...(message.ctwaClid ? { ctwaClid: message.ctwaClid } : {}),
+    });
     const session = await this.sessionService.findOrCreate({
       customerId: customer._id,
       waId: message.waId,
       phoneNumberId: message.phoneNumberId,
       profileName: message.profileName,
+      ...(message.whatsappUsername ? { whatsappUsername: message.whatsappUsername } : {}),
+      ...(message.metaWhatsappUserId ? { metaWhatsappUserId: message.metaWhatsappUserId } : {}),
     });
     const isNew = await this.messageLog.saveInboundIfNew({ sessionId: session._id, customerId: customer._id, message });
     if (!isNew) {

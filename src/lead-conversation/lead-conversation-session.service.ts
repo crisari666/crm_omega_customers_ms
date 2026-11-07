@@ -35,11 +35,17 @@ export class LeadConversationSessionService {
     readonly waId: string;
     readonly phoneNumberId: string;
     readonly profileName: string;
+    readonly whatsappUsername?: string;
+    readonly metaWhatsappUserId?: string;
   }): Promise<LeadSessionSnapshot> {
+    const $set: Record<string, unknown> = {};
+    if (input.whatsappUsername) $set.whatsappUsername = input.whatsappUsername;
+    if (input.metaWhatsappUserId) $set.metaWhatsappUserId = input.metaWhatsappUserId;
     return this.sessionModel
       .findOneAndUpdate(
         { waId: input.waId, phoneNumberId: input.phoneNumberId },
         {
+          ...(Object.keys($set).length > 0 ? { $set } : {}),
           $setOnInsert: {
             customerId: input.customerId,
             waId: input.waId,
