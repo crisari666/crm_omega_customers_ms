@@ -112,7 +112,7 @@ export class LeadCallScheduleAdminService {
       throw new ConflictException('El asesor no está habilitado para leads calificados o no está libre en ese horario');
     }
     await this.executeMoveEvent(event._id, targetUserId);
-    await this.leadCustomer.assignToVentor(event.customerId, targetUserId, actorUserId);
+    await this.leadCustomer.assignToVentor(event.customerId, targetUserId, actorUserId, { overwrite: true });
     if (event.leadConversationSessionId) {
       await this.sessionService.setAssignedVentor(event.leadConversationSessionId, targetUserId);
     }
@@ -172,7 +172,9 @@ export class LeadCallScheduleAdminService {
     }
     await this.executeRescheduleEvent(event._id, scheduledAt, targetUserId);
     if (targetUserId !== event.userId) {
-      await this.leadCustomer.assignToVentor(event.customerId, targetUserId, input.actorUserId);
+      await this.leadCustomer.assignToVentor(event.customerId, targetUserId, input.actorUserId, {
+        overwrite: true,
+      });
       if (event.leadConversationSessionId) {
         await this.sessionService.setAssignedVentor(event.leadConversationSessionId, targetUserId);
       }

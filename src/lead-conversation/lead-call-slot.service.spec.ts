@@ -33,6 +33,7 @@ describe('LeadCallSlotService', () => {
   const mockLeadCustomer = {
     assignToVentor: jest.fn(),
     resolveCanonicalCustomerForSchedule: jest.fn(),
+    findById: jest.fn(),
   };
   const mockSessionModel = { updateOne: jest.fn() };
   const mockConfig = { get: jest.fn().mockReturnValue(7) };
@@ -60,6 +61,7 @@ describe('LeadCallSlotService', () => {
         rematched: false,
       }),
     );
+    mockLeadCustomer.findById.mockResolvedValue(null);
     service = new LeadCallSlotService(
       mockEventModel as never,
       mockSessionModel as never,
@@ -140,6 +142,13 @@ describe('LeadCallSlotService', () => {
       expect(mockEventModel.create).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: VentorScheduleEventType.Call, source: VentorScheduleEventSource.LeadConversation }),
       );
+      expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(inputBase.customerId, 'u2');
+    });
+
+    it('prefers the Meta-assigned ventor when they are free in the advance-leads pool', async () => {
+      mockLeadCustomer.findById.mockResolvedValue({ assignedTo: 'u2' });
+      const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
+      expect(actual).toMatchObject({ booked: true, userId: 'u2' });
       expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(inputBase.customerId, 'u2');
     });
 

@@ -109,7 +109,10 @@ export class LeadCallSlotService {
     const ventors = await this.findAdvanceVentors();
     const userIds = ventors.map((ventor) => ventor.id);
     const busy = await this.findBusyEvents(userIds, slotStart, new Date(slotStart.getTime() + CALL_SLOT_MS));
-    const candidates = await this.sortByDayLoad(findFreeUserIds(userIds, busy, slotStart), slotStart);
+    const freeUserIds = findFreeUserIds(userIds, busy, slotStart);
+    const preferredVentorId = await this.resolvePreferredBookVentorId(customerId);
+    const byLoad = await this.sortByDayLoad(freeUserIds, slotStart);
+    const candidates = preferUserIdFirst(byLoad, preferredVentorId);
     for (const userId of candidates) {
       const created = await this.tryCreateCall({ userId, sessionId, customerId, slotStart });
       if (!created) continue;
@@ -134,7 +137,8 @@ export class LeadCallSlotService {
   }
 
   /**
-   * Re-resolve Customer by CO phone variants, rematch session/event, assign ventor.
+   * Re-resolve Customer by CO phone variants, rematch session/event.
+   * Does not overwrite an existing Meta/CRM `assignedTo` with the call-slot pool user.
    */
   private async executeUnifyCustomerOnBook(input: {
     readonly sessionId: Types.ObjectId;
@@ -159,6 +163,13 @@ export class LeadCallSlotService {
     }
     await this.leadCustomer.assignToVentor(resolved.customerId, input.ventorId);
     return resolved.customerId;
+  }
+
+  /** Prefer Meta-assigned ventor for the calendar event when they are in the advance-leads pool. */
+  private async resolvePreferredBookVentorId(customerId: Types.ObjectId): Promise<string | undefined> {
+    const customer = await this.leadCustomer.findById(customerId);
+    const assignedTo = (customer?.assignedTo ?? '').trim();
+    return assignedTo.length > 0 ? assignedTo : undefined;
   }
 
   /** Free advance-leads users at a slot start (excluding `excludeUserId`), least loaded that day first. */
@@ -297,6 +308,12 @@ function findFreeUserIds(userIds: readonly string[], busy: readonly BusyEvent[],
       .map((event) => event.userId),
   );
   return userIds.filter((id) => !busyUsers.has(id));
+}
+
+/** Moves `preferred` to the front when present in `userIds` (stable for the rest). */
+function preferUserIdFirst(userIds: readonly string[], preferred: string | undefined): string[] {
+  if (!preferred || !userIds.includes(preferred)) return [...userIds];
+  return [preferred, ...userIds.filter((id) => id !== preferred)];
 }
 
 function buildBogotaDayBounds(instant: Date): { readonly dayStart: Date; readonly dayEnd: Date } {

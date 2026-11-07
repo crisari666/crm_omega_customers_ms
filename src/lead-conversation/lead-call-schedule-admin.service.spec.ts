@@ -63,7 +63,9 @@ describe('LeadCallScheduleAdminService', () => {
     const actual = await service.reassignCall({ eventId: String(eventId), actorUserId: 'admin1' });
     expect(mockCallSlots.findFreeUserIdsAt).toHaveBeenCalledWith(pendingEvent.scheduledAt, 'u1');
     expect(mockEventModel.updateOne).toHaveBeenCalledWith({ _id: eventId }, { $set: { userId: 'u2' } });
-    expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(customerId, 'u2', 'admin1');
+    expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(customerId, 'u2', 'admin1', {
+      overwrite: true,
+    });
     expect(mockSessionService.setAssignedVentor).toHaveBeenCalledWith(sessionId, 'u2');
     expect(actual).toMatchObject({ userId: 'u2', ventorName: 'Laura Gómez', customerName: 'Ana Ruiz', score: 6 });
   });
@@ -114,7 +116,13 @@ describe('LeadCallScheduleAdminService', () => {
       });
       expect(mockEventModel.updateOne).toHaveBeenCalledWith(
         { _id: eventId },
-        { $set: { scheduledAt: new Date('2026-10-15T23:30:00.000Z'), userId: 'u1' } },
+        {
+          $set: {
+            scheduledAt: new Date('2026-10-15T23:30:00.000Z'),
+            userId: 'u1',
+            callScheduledAtEncoding: 'true_utc',
+          },
+        },
       );
       expect(mockSessionService.patchScheduledCallAnswers).toHaveBeenCalledWith(sessionId, {
         fechaLlamada: '2026-10-15T23:30:00.000Z',
