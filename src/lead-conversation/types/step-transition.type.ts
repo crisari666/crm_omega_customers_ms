@@ -9,6 +9,8 @@ export type StepSessionPatch = {
   readonly projectTitle?: string;
   readonly isAllProjects?: boolean;
   readonly stepBeforeReminder?: LeadConversationStep;
+  /** Set when the first inbound was a Meta Instant Form dump used only for identity. */
+  readonly identityBootstrappedFromForm?: boolean;
 };
 
 /**
