@@ -33,6 +33,9 @@ import { MetaLeadFormsModule } from './meta-lead-forms/meta-lead-forms.module';
         uri: configService.getOrThrow<string>('database.uri'),
       }),
     }),
+    // Before CustomerModule so `admin/customer/meta-lead-forms` registers ahead of `:customerId`
+    // if the controller is ever mounted from this module again.
+    MetaLeadFormsModule,
     CustomerModule,
     CustomerConversationsModule,
     CustomerMetadataModule,
@@ -42,7 +45,6 @@ import { MetaLeadFormsModule } from './meta-lead-forms/meta-lead-forms.module';
     WhatsappMarketingModule,
     WebinarModule,
     LeadConversationModule,
-    MetaLeadFormsModule,
   ],
   controllers: [AppController],
   providers: [AppService, TokenJwtMiddleware],

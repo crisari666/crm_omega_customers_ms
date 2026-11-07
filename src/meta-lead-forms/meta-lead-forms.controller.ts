@@ -23,6 +23,8 @@ import type {
 
 /**
  * Admin registry for Meta Lead Ads forms → CRM flow strategy.
+ * Registered on CustomerModule before CustomerAdminController so
+ * `GET admin/customer/meta-lead-forms` is not captured by `:customerId`.
  */
 @Controller('admin/customer/meta-lead-forms')
 export class MetaLeadFormsController {

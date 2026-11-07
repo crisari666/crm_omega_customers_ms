@@ -18,7 +18,6 @@ import { MetaLeadFormLookupService } from './meta-lead-form-lookup.service';
 import { MetaLeadFormQualificationProcessor } from './meta-lead-form-qualification.processor';
 import { MetaLeadFormQualificationScheduler } from './meta-lead-form-qualification.scheduler';
 import { MetaLeadFormQualificationService } from './meta-lead-form-qualification.service';
-import { MetaLeadFormsController } from './meta-lead-forms.controller';
 import { MetaLeadFormsService } from './meta-lead-forms.service';
 import {
   MetaLeadFormSettings,
@@ -63,7 +62,8 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
       },
     ]),
   ],
-  controllers: [MetaLeadFormsController],
+  // HTTP controller lives on CustomerModule (before `:customerId`) so
+  // `GET admin/customer/meta-lead-forms` is not captured as a customer id.
   providers: [
     MetaLeadFormsService,
     MetaLeadFormLookupService,
@@ -71,6 +71,10 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
     MetaLeadFormQualificationService,
     MetaLeadFormQualificationProcessor,
   ],
-  exports: [MetaLeadFormLookupService, MetaLeadFormQualificationScheduler],
+  exports: [
+    MetaLeadFormsService,
+    MetaLeadFormLookupService,
+    MetaLeadFormQualificationScheduler,
+  ],
 })
 export class MetaLeadFormsModule {}
