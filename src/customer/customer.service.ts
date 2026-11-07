@@ -802,6 +802,9 @@ export class CustomerService {
       isReferral: dto.isReferral === true,
       lifecycleStatus: dto.lifecycleStatus ?? 'lead',
       leadSources: dto.leadSources ?? [],
+      ...(dto.whatsappUsername?.trim() ? { whatsappUsername: dto.whatsappUsername.trim() } : {}),
+      ...(dto.metaWhatsappUserId?.trim() ? { metaWhatsappUserId: dto.metaWhatsappUserId.trim() } : {}),
+      ...(dto.metaCtwaClid?.trim() ? { metaCtwaClid: dto.metaCtwaClid.trim() } : {}),
       createdBy,
     });
     created.$locals['__auditActorUserId'] = createdBy;

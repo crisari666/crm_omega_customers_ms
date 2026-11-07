@@ -102,6 +102,14 @@ export class Customer {
   @Prop({ type: String, required: false, index: true })
   metaLeadgenId?: string;
 
+  /** WhatsApp profile username / nick (e.g. CTWA `contacts.profile.username`). */
+  @Prop({ type: String, required: false, index: true, sparse: true })
+  whatsappUsername?: string;
+
+  /** Opaque Meta WhatsApp user id (e.g. `CO.…` from `from_user_id` / `contacts.user_id`). */
+  @Prop({ type: String, required: false, index: true, sparse: true, unique: true })
+  metaWhatsappUserId?: string;
+
   @Prop({ type: Types.ObjectId, ref: 'CustomerStep', required: false, index: true })
   customerStepId?: Types.ObjectId;
 

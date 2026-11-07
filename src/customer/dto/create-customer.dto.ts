@@ -32,6 +32,18 @@ export class CreateCustomerDto {
   email?: string;
 
   @IsOptional()
+  @IsString()
+  whatsappUsername?: string;
+
+  @IsOptional()
+  @IsString()
+  metaWhatsappUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  metaCtwaClid?: string;
+
+  @IsOptional()
   @IsEnum(DocumentType)
   documentType?: DocumentType;
 
