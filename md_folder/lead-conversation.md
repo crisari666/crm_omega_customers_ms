@@ -4,7 +4,17 @@ Module: `src/lead-conversation/`. Scores Meta WhatsApp leads, saves answers, ass
 
 ## Flow
 1. Meta → `omega_gateway` `POST /webhooks/lead_conversation` (no signature validation). The gateway emits `customers.lead_conversation.inbound.v1` on `crm.customers.whatsapp_integration`.
-2. `LeadConversationInboundService`: parse → find/create customer (+ interestedProjects) → find/create session → dedupe by `wamid` → cancel reminder → state machine (optimistic `version` lock, 3 retries) → side effects → dispatch outbound.
+2. `LeadConversationInboundService`: parse → find/create customer (+ interestedProjects) → find/create session → dedupe by `wamid` → cancel reminder (+ cancel delayed meta-lead-form welcome by waId) → state machine (optimistic `version` lock, 3 retries) → side effects → dispatch outbound.
+
+### Ceiba leadgen ↔ CTWA WhatsApp bridge
+Many Instant Forms also fire Page `leadgen` on `POST /webhooks/ceiba` (Customer upsert + optional ventor assign) and then redirect the user into the leads WhatsApp line with a form dump. Those CTWA webhooks often omit `message.from` and only send `from_user_id` / `contacts.user_id` (`CO.…`) plus phone/email/name in the text body.
+
+`parseMetaLeadMessages` resolves `waId` from `from`, else labeled phone in the body (`Phone number:` / `Teléfono:`). It also maps `whatsappUsername`, `metaWhatsappUserId`, form email/name, and `referral.ctwa_clid`, and flags `isInstantFormDump` when the body looks like a Meta Instant Form redirect. Opaque `CO.…` ids are **never** used as Graph `to`. Username-only messages with no recoverable phone are skipped with a structured warn (Cloud API cannot send without a phone).
+
+Customer unify order: phone candidates → email → `metaWhatsappUserId` → create. Enrichment fills empty name/email/username/userId/`metaCtwaClid` only and **never** clears `assignedTo` or overwrites a different existing phone. On match, the newest `meta_lead_campaigns` row for that Customer is stamped with `whatsappUsername` / `metaWhatsappUserId`. Session stores username + Meta user id.
+
+#### Instant Form first message
+When `isInstantFormDump` and the session is still `initial`, `InitialHandler` does **not** run project detection on the dump (avoids matching noise from investment/city lines). It bootstraps to `ask_project` and sets `identityBootstrappedFromForm: true` on the session.
 3. Outbound goes through the BullMQ queue `lead-conversation-outbound`, one chained job per message with `delayMs` (plan +3s, lots +4s). Each job calls RPC `lead_conversation.send.v1` on `ws_ms_queue` (whatsapp_cloud_ms leads line). The last message of a question arms the reminder.
 4. Reminder: queue `lead-conversation-reminder`, jobId `reminder-{sessionId}`, `LEAD_CONVERSATION_REMINDER_MS` (1h). Sí → resume `stepBeforeReminder`. No → `disqualified`, score 1, priority 1.
 
@@ -18,7 +28,7 @@ Invalid reply: retry up to `MAX_QUESTION_RETRIES=2`, then `abandoned`. Retries i
 - Periods (America/Bogota, fixed UTC-5): morning 9–12, afternoon 14–17, night 18–21. Reply ids `slot:morning|afternoon|night`.
 - Slot = 30 min, start ≥ now + 30 min, within `LEAD_CALL_SLOT_LOOKAHEAD_DAYS` (default 7). Up to 10 next free slots of the chosen period are sent as a list (row id `callslot:<ISO>`; text reply by row number also works). No Sundays. A closed window or Bogota time ≥ 21:00 rolls to the next open day.
 - Pool: office_back users with `assignAdvanceLeads=true` + `enable=true` (`GET {officeBackInternal.baseUrl}/internal/ventors/advance-leads-candidates`, header `X-Internal-Key`). A slot is free when ≥1 pool user has no overlapping pending event.
-- Booking: least-loaded free user that Bogota day → `ventor_schedule_events` `{eventType:'call', source:'lead_conversation', leadConversationSessionId}`, customer `assignedTo` = that user. Idempotent per session (re-booking cancels the previous pending call). On book success, `resolveCanonicalCustomerForSchedule` re-matches by CO phone variants (prefer MetaLeadCampaign) and remaps session + event `customerId` when a better Customer exists, then assigns that ventor. Manual override: referrals-boost schedule card **Relacionar cliente** → `PATCH /ventor-schedule/:id/customer` `{customerId}` (call events only; updates session + assigns owner). Confirmation outbound: text with advisor name, then optional `contacts` vCard (`phone`→CELL, `phoneJob`→WORK, Twilio User DID `voipPhone`→MAIN) via `lead_conversation.send.v1`. Pool from office_back includes preferred non-intl Twilio User number when assigned.
+- Booking: prefer the Customer's existing `assignedTo` when that user is free in the advance-leads pool; else least-loaded free pool user → `ventor_schedule_events` `{eventType:'call', source:'lead_conversation', leadConversationSessionId}`. Idempotent per session (re-booking cancels the previous pending call). On book success, `resolveCanonicalCustomerForSchedule` re-matches by CO phone variants (prefer MetaLeadCampaign) and remaps session + event `customerId` when a better Customer exists. Customer `assignedTo` is set only when still empty (Meta/Ceiba assignee is preserved; admin reassign/reschedule uses `overwrite: true`). Manual override: referrals-boost schedule card **Relacionar cliente** → `PATCH /ventor-schedule/:id/customer` `{customerId}` (call events only; updates session + assigns owner). Confirmation outbound: text with advisor name, then optional `contacts` vCard (`phone`→CELL, `phoneJob`→WORK, Twilio User DID `voipPhone`→MAIN) via `lead_conversation.send.v1`. Pool from office_back includes preferred non-intl Twilio User number when assigned.
 
 - Race guard: unique partial index `uniq_pending_call_slot` `{userId, scheduledAt, eventType}` for pending calls; duplicate key → next free user; all taken → "slot taken" notice + fresh list. No slots in the period → back to `ask_schedule` with `noCallSlots`.
 - answers: `horarioLlamada` (period), `fechaLlamada` (ISO slot start). Metadata `scheduledCallAt`.
@@ -27,7 +37,8 @@ Project detection: fuzzy match against cached omega_rag titles (`GET {RAG_URL}/r
 Options: buttons when ≤3, list otherwise. Replies match by reply id, then title, number or keyword.
 
 ## Persistence
-- `lead_conversation_sessions` (unique `waId + phoneNumberId`): step, status, answers `{rangoLote, formaPago, horarioLlamada, fechaLlamada}`, score, priority, scoreHistory, pendingOptions, assignedVentorId.
+- `lead_conversation_sessions` (unique `waId + phoneNumberId`): step, status, answers `{rangoLote, formaPago, horarioLlamada, fechaLlamada}`, score, priority, scoreHistory, pendingOptions, assignedVentorId, optional `whatsappUsername` / `metaWhatsappUserId`.
+- Customer optional identity: `whatsappUsername`, `metaWhatsappUserId` (sparse unique), plus existing `metaCtwaClid`.
 - `lead_conversation_messages` (unique partial `wamid`): transcript.
 - `customer_metadata` (merged): `projectId`, `lotRange`, `paymentMethod` (financing/cash), `preferredCallTime` (morning/afternoon/night; legacy noon/evening), `scheduledCallAt`. The score stays on the session.
 
@@ -68,4 +79,4 @@ customers-ms: `REDIS_URL`, `RAG_URL`, `RAG_PUBLIC_URL`, `DEEPSEEK_API_KEY`, `LEA
 office_back: user field `assignAdvanceLeads` ("Asignar Leads Calificados").
 whatsapp_cloud_ms: `WHATSAPP_CLOUD_LEADS_PHONE_NUMBER_ID`, `WHATSAPP_CLOUD_LEADS_ACCESS_TOKEN`.
 
-Templates: `templates/lead-conversation.templates.ts`. Tests: `lead-conversation-flow.spec.ts`, `lead-scoring.service.spec.ts`, `lead-call-slot.service.spec.ts`, `lead-call-schedule-admin.service.spec.ts`, `utils/matchers.util.spec.ts`.
+Templates: `templates/lead-conversation.templates.ts`. Tests: `lead-conversation-flow.spec.ts`, `lead-scoring.service.spec.ts`, `lead-call-slot.service.spec.ts`, `lead-call-schedule-admin.service.spec.ts`, `lead-customer.service.spec.ts`, `handlers/initial.handler.spec.ts`, `utils/parse-meta-lead-messages.util.spec.ts`, `utils/extract-form-fields-from-lead-text.util.spec.ts`, `utils/matchers.util.spec.ts`.

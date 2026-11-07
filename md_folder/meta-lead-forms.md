@@ -20,6 +20,10 @@ Singleton `meta_lead_form_settings` (`key: default`):
 
 On lead_conversation ingest → BullMQ job `meta-lead-form-qualification` delayed by that value. Inbound on leads line cancels job by phone/waId. On fire: skip if session already has inbound; else send welcome **template** via `lead_conversation.send.v1` (`kind: template`).
 
+## Ceiba leadgen + CTWA WhatsApp redirect
+
+Same Instant Form often hits Page `leadgen` (`POST /webhooks/ceiba` → `customers.meta.leadgen.ingest.v1`) **and** redirects the user into the leads WhatsApp line (`POST /webhooks/lead_conversation`). Leadgen owns Customer upsert / optional ventor assign. The CTWA inbound must resolve the **same** Customer (phone in form text when Meta omits `from`) and must not steal `assignedTo` when the bot later books a call slot. See `lead-conversation.md` § Ceiba leadgen ↔ CTWA WhatsApp bridge.
+
 ## Env
 
 | Var | Default |
