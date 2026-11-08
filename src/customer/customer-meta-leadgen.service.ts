@@ -171,6 +171,7 @@ export class CustomerMetaLeadgenService {
         phone: canonicalPhone,
         contactName: envelope.contact.name,
         mappedFields: envelope.mappedFields,
+        flowStrategy: 'lead_conversation',
       });
       return;
     }
@@ -179,6 +180,7 @@ export class CustomerMetaLeadgenService {
         leadgenId,
         customer,
         mappedFields: envelope.mappedFields,
+        flowStrategy: 'immediate_assign',
       });
       return;
     }
@@ -201,12 +203,14 @@ export class CustomerMetaLeadgenService {
     readonly phone: string;
     readonly contactName: string;
     readonly mappedFields: Record<string, string>;
+    readonly flowStrategy: 'lead_conversation';
   }): Promise<void> {
     await this.metaLeadCampaignModel.updateOne(
       { leadgenId: input.leadgenId },
       {
         $set: {
           customerId: input.customer._id as Types.ObjectId,
+          flowStrategy: input.flowStrategy,
           status: MetaLeadCampaignStatus.Processed,
           lastError: undefined,
         },
@@ -235,6 +239,7 @@ export class CustomerMetaLeadgenService {
     readonly leadgenId: string;
     readonly customer: CustomerDocument;
     readonly mappedFields: Record<string, string>;
+    readonly flowStrategy: 'immediate_assign';
   }): Promise<void> {
     const windowHours = this.ventorAssignment.getGatewayIngressAssignmentWindowHours();
     await this.ventorAssignment.executeAssignCustomerIfUnassigned({
@@ -247,6 +252,7 @@ export class CustomerMetaLeadgenService {
       {
         $set: {
           customerId: input.customer._id as Types.ObjectId,
+          flowStrategy: input.flowStrategy,
           status: MetaLeadCampaignStatus.Processed,
           lastError: undefined,
         },

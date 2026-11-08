@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import {
+  META_LEAD_FORM_FLOW_STRATEGIES,
+  type MetaLeadFormFlowStrategy,
+} from '../../meta-lead-forms/types/meta-lead-form-flow-strategy.type';
 
 export type MetaLeadCampaignDocument = HydratedDocument<MetaLeadCampaign>;
 
@@ -74,6 +78,18 @@ export class MetaLeadCampaign {
   /** Opaque Meta WhatsApp user id (`CO.…`) stamped from leads-line CTWA inbound. */
   @Prop({ type: String, required: false, index: true, sparse: true })
   metaWhatsappUserId?: string;
+
+  /**
+   * Registry flow that processed this leadgen (`immediate_assign` | `lead_conversation`).
+   * Unset for legacy / hardcoded ingest paths.
+   */
+  @Prop({
+    type: String,
+    enum: META_LEAD_FORM_FLOW_STRATEGIES,
+    required: false,
+    index: true,
+  })
+  flowStrategy?: MetaLeadFormFlowStrategy;
 
   @Prop({
     type: String,
