@@ -129,7 +129,7 @@ export class LeadCustomerService {
 
   /**
    * Assigns the customer to a ventor. When `overwrite` is false (default for bot booking),
-   * keeps an existing Meta/CRM assignee.
+   * keeps an existing Meta/CRM assignee — especially `immediate_assign` form leads.
    */
   async assignToVentor(
     customerId: Types.ObjectId,
@@ -142,15 +142,42 @@ export class LeadCustomerService {
     const existing = (customer.assignedTo ?? '').trim();
     const overwrite = options.overwrite === true;
     if (existing.length > 0 && !overwrite) {
-      this.logger.debug(
-        `Skip assignToVentor customer=${String(customerId)} keeps=${existing} ignored=${ventorId}`,
-      );
+      const isImmediateAssign = await this.hasImmediateAssignCampaign(customerId);
+      if (isImmediateAssign) {
+        this.logger.warn(
+          `Skip assignToVentor immediate_assign customer=${String(customerId)} keeps=${existing} ignored=${ventorId}`,
+        );
+      } else {
+        this.logger.debug(
+          `Skip assignToVentor customer=${String(customerId)} keeps=${existing} ignored=${ventorId}`,
+        );
+      }
       return;
+    }
+    if (!overwrite && (await this.hasImmediateAssignCampaign(customerId))) {
+      const refreshed = await this.customerModel.findById(customerId).select({ assignedTo: 1 }).exec();
+      const raceAssignee = (refreshed?.assignedTo ?? '').trim();
+      if (raceAssignee.length > 0) {
+        this.logger.warn(
+          `Skip assignToVentor immediate_assign race customer=${String(customerId)} keeps=${raceAssignee} ignored=${ventorId}`,
+        );
+        return;
+      }
     }
     customer.assignedTo = ventorId;
     customer.assignedDate = new Date().toISOString();
     customer.$locals['__auditActorUserId'] = actorUserId;
     await customer.save();
+  }
+
+  /** True when the newest Meta campaign for this customer used registry `immediate_assign`. */
+  private async hasImmediateAssignCampaign(customerId: Types.ObjectId): Promise<boolean> {
+    const campaign = await this.metaLeadCampaignModel
+      .findOne({ customerId, flowStrategy: 'immediate_assign' })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    return campaign != null;
   }
 
   /** Adds the project to `interestedProjects` once. */

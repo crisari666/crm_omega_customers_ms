@@ -20,6 +20,24 @@ describe('LeadCustomerService', () => {
   };
   let service: LeadCustomerService;
 
+  const buildCampaignFindOneChain = (value: unknown) => {
+    const chain: {
+      sort: jest.Mock;
+      select: jest.Mock;
+      lean: jest.Mock;
+      exec: jest.Mock;
+    } = {
+      sort: jest.fn(),
+      select: jest.fn(),
+      lean: jest.fn(),
+      exec: jest.fn().mockResolvedValue(value),
+    };
+    chain.sort.mockReturnValue(chain);
+    chain.select.mockReturnValue(chain);
+    chain.lean.mockReturnValue(chain);
+    return chain;
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockCustomerModel.find.mockReturnValue({
@@ -31,13 +49,7 @@ describe('LeadCustomerService', () => {
         lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
       }),
     });
-    mockMetaLeadCampaignModel.findOne.mockReturnValue({
-      sort: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
-        }),
-      }),
-    });
+    mockMetaLeadCampaignModel.findOne.mockReturnValue(buildCampaignFindOneChain(null));
     mockMetaLeadCampaignModel.updateOne.mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) });
     service = new LeadCustomerService(
       mockCustomerModel as never,
@@ -66,13 +78,7 @@ describe('LeadCustomerService', () => {
     mockCustomerModel.find.mockReturnValue({
       sort: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([customer]) }),
     });
-    mockMetaLeadCampaignModel.findOne.mockReturnValue({
-      sort: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: campaignId }) }),
-        }),
-      }),
-    });
+    mockMetaLeadCampaignModel.findOne.mockReturnValue(buildCampaignFindOneChain({ _id: campaignId }));
     const actual = await service.findOrCreateByWaId({
       waId: '573182620113',
       profileName: 'Andres Palomino',
@@ -135,6 +141,27 @@ describe('LeadCustomerService', () => {
     };
     mockCustomerModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
     await service.assignToVentor(customerId, 'pool-user');
+    expect(customer.save).not.toHaveBeenCalled();
+    expect(customer.assignedTo).toBe('ventor-meta');
+  });
+
+  it('keeps immediate_assign Meta ventor when bot tries to reassign', async () => {
+    const customerId = new Types.ObjectId();
+    const customer = {
+      _id: customerId,
+      assignedTo: 'ventor-meta',
+      save: jest.fn(),
+      $locals: {} as Record<string, unknown>,
+    };
+    mockCustomerModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
+    mockMetaLeadCampaignModel.findOne.mockReturnValue(
+      buildCampaignFindOneChain({ _id: new Types.ObjectId() }),
+    );
+    await service.assignToVentor(customerId, 'pool-user');
+    expect(mockMetaLeadCampaignModel.findOne).toHaveBeenCalledWith({
+      customerId,
+      flowStrategy: 'immediate_assign',
+    });
     expect(customer.save).not.toHaveBeenCalled();
     expect(customer.assignedTo).toBe('ventor-meta');
   });
