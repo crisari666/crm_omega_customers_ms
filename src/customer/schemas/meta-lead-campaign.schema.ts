@@ -47,8 +47,21 @@ export class MetaLeadCampaign {
   @Prop({ type: String, required: false })
   formId?: string;
 
-  @Prop({ type: String, required: false })
+  @Prop({ type: String, required: false, index: true })
   graphAdId?: string;
+
+  @Prop({ type: String, required: false })
+  graphAdName?: string;
+
+  @Prop({ type: String, required: false, index: true })
+  graphCampaignId?: string;
+
+  @Prop({ type: String, required: false })
+  graphCampaignName?: string;
+
+  /** RAG project id resolved from meta_lead_ad_campaigns registry at ingest. */
+  @Prop({ type: String, required: false, index: true })
+  resolvedProjectId?: string;
 
   @Prop({ type: String, required: false })
   graphFormId?: string;

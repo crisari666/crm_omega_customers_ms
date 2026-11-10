@@ -12,6 +12,8 @@ export type MetaLeadgenFormMeta = {
 export type MetaLeadgenGraphPayload = {
   readonly fieldData: readonly MetaLeadgenFieldRow[];
   readonly adId?: string;
+  readonly adName?: string;
+  readonly campaignId?: string;
   readonly formId?: string;
   readonly createdTime?: string;
   readonly platform?: string;

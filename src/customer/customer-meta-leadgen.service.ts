@@ -23,6 +23,7 @@ import {
 import { buildBbqAsadoTemplateComponents } from './utils/build-bbq-asado-template-components.util';
 import { isBbqAsadoFormName } from './utils/is-bbq-asado-form-name.util';
 import type { MarketingCampaignMsEvent } from '../whatsapp-marketing/types/marketing-campaign-ms-event.type';
+import { MetaLeadAdCampaignLookupService } from '../meta-lead-forms/meta-lead-ad-campaign-lookup.service';
 import { MetaLeadFormLookupService } from '../meta-lead-forms/meta-lead-form-lookup.service';
 import { MetaLeadFormQualificationScheduler } from '../meta-lead-forms/meta-lead-form-qualification.scheduler';
 
@@ -51,6 +52,7 @@ export class CustomerMetaLeadgenService {
     private readonly ventorAssignment: CustomerVentorAssignmentService,
     private readonly marketingTemplateOutbound: CustomerMarketingTemplateOutboundService,
     private readonly metaLeadFormLookup: MetaLeadFormLookupService,
+    private readonly metaLeadAdCampaignLookup: MetaLeadAdCampaignLookupService,
     private readonly qualificationScheduler: MetaLeadFormQualificationScheduler,
   ) {}
 
@@ -164,6 +166,11 @@ export class CustomerMetaLeadgenService {
       await this.customerService.tagLeadIngress(customer._id as Types.ObjectId, 'meta_form');
       this.logger.log(`Linked existing customer ${String(customer._id)} for leadgenId=${leadgenId}`);
     }
+    await this.executeSeedProjectFromAdRegistry({
+      leadgenId,
+      customer,
+      adId: envelope.graph.adId ?? envelope.mappedFields.ad_id,
+    });
     if (registryForm?.flowStrategy === 'lead_conversation') {
       await this.executeLeadConversationFormPath({
         leadgenId,
@@ -516,6 +523,9 @@ export class CustomerMetaLeadgenService {
             values: [...(row.values ?? [])],
           })),
           graphAdId: envelope.graph.adId,
+          graphAdName: envelope.graph.adName,
+          graphCampaignId: envelope.graph.campaignId,
+          graphCampaignName: envelope.graph.campaignName,
           graphFormId: envelope.graph.formId,
           graphCreatedTime: envelope.graph.createdTime,
           graphPlatform: envelope.graph.platform,
@@ -528,6 +538,52 @@ export class CustomerMetaLeadgenService {
         $setOnInsert: { leadgenId },
       },
       { upsert: true },
+    );
+  }
+
+  /**
+   * When Meta ad_id is registered to a RAG project, seed customer.interestedProjects
+   * and stamp resolvedProjectId on the campaign row.
+   */
+  private async executeSeedProjectFromAdRegistry(input: {
+    readonly leadgenId: string;
+    readonly customer: CustomerDocument;
+    readonly adId?: string;
+  }): Promise<void> {
+    const adId = (input.adId ?? '').trim();
+    if (adId.length === 0) {
+      return;
+    }
+    const match = await this.metaLeadAdCampaignLookup.executeFindEnabledByAdId(adId);
+    if (match == null || match.projectId.trim().length === 0) {
+      return;
+    }
+    const projectId = match.projectId.trim();
+    await this.customerModel
+      .updateOne(
+        {
+          _id: input.customer._id,
+          'interestedProjects.projectId': { $ne: projectId },
+        },
+        {
+          $push: {
+            interestedProjects: {
+              projectId,
+              date: new Date(),
+              addedBy: META_LEADGEN_ACTOR_ID,
+            },
+          },
+        },
+      )
+      .exec();
+    await this.metaLeadCampaignModel
+      .updateOne(
+        { leadgenId: input.leadgenId },
+        { $set: { resolvedProjectId: projectId } },
+      )
+      .exec();
+    this.logger.log(
+      `Ad registry seed: customer ${String(input.customer._id)} adId=${adId} projectId=${projectId}`,
     );
   }
 
