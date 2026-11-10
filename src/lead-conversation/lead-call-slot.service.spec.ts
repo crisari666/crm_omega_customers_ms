@@ -29,7 +29,10 @@ describe('LeadCallSlotService', () => {
     create: jest.fn(),
     updateOne: jest.fn(),
   };
-  const mockAssignment = { executeFetchAdvanceLeadVentors: jest.fn() };
+  const mockAssignment = {
+    executeFetchAdvanceLeadVentors: jest.fn(),
+    executeFindVentorById: jest.fn(),
+  };
   const mockLeadCustomer = {
     assignToVentor: jest.fn(),
     resolveCanonicalCustomerForSchedule: jest.fn(),
@@ -55,6 +58,7 @@ describe('LeadCallSlotService', () => {
       { id: 'u1', name: 'Ana', lastName: 'López', phone: '3001112233', phoneJob: '6015551212', voipPhone: '' },
       { id: 'u2', name: 'Bruno', lastName: 'Díaz', phone: '3002223344', phoneJob: '', voipPhone: '' },
     ]);
+    mockAssignment.executeFindVentorById.mockResolvedValue(null);
     mockLeadCustomer.resolveCanonicalCustomerForSchedule.mockImplementation(
       async ({ customerId }: { customerId: Types.ObjectId }) => ({
         customerId,
@@ -121,6 +125,16 @@ describe('LeadCallSlotService', () => {
       mockAssignment.executeFetchAdvanceLeadVentors.mockResolvedValue([]);
       expect(await service.findFreeSlots('morning', NOW)).toEqual([]);
     });
+
+    it('when customer is assigned, only offers slots free for that ventor', async () => {
+      const customerId = new Types.ObjectId();
+      mockLeadCustomer.findById.mockResolvedValue({ assignedTo: 'u1' });
+      busyRows = [{ userId: 'u1', scheduledAt: TOMORROW_9AM }];
+      const actualSlots = await service.findFreeSlots('morning', NOW, customerId);
+      const actualStarts = actualSlots.map((slot) => slot.start.toISOString());
+      expect(actualStarts).not.toContain(TOMORROW_9AM.toISOString());
+      expect(actualStarts).toContain('2026-10-15T14:30:00.000Z');
+    });
   });
 
   describe('bookSlot', () => {
@@ -145,11 +159,42 @@ describe('LeadCallSlotService', () => {
       expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(inputBase.customerId, 'u2');
     });
 
-    it('prefers the Meta-assigned ventor when they are free in the advance-leads pool', async () => {
+    it('books only the Meta-assigned ventor when they are free', async () => {
       mockLeadCustomer.findById.mockResolvedValue({ assignedTo: 'u2' });
       const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
-      expect(actual).toMatchObject({ booked: true, userId: 'u2' });
+      expect(actual).toMatchObject({
+        booked: true,
+        userId: 'u2',
+        ventor: { id: 'u2', name: 'Bruno', lastName: 'Díaz' },
+      });
       expect(mockLeadCustomer.assignToVentor).toHaveBeenCalledWith(inputBase.customerId, 'u2');
+    });
+
+    it('does not fall back to another pool user when the assignee is busy', async () => {
+      mockLeadCustomer.findById.mockResolvedValue({ assignedTo: 'u1' });
+      busyRows = [{ userId: 'u1', scheduledAt: TOMORROW_9AM }];
+      const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
+      expect(actual).toEqual({ booked: false });
+      expect(mockEventModel.create).not.toHaveBeenCalled();
+    });
+
+    it('resolves confirmation contact from assignedTo via physical lookup when outside advance pool', async () => {
+      mockLeadCustomer.findById.mockResolvedValue({ assignedTo: 'meta-v1' });
+      mockAssignment.executeFindVentorById.mockResolvedValue({
+        id: 'meta-v1',
+        name: 'Carlos',
+        lastName: 'Ruiz',
+        phone: '3009998877',
+        phoneJob: '',
+        voipPhone: '',
+      });
+      const actual = await service.bookSlot({ ...inputBase, slotStart: TOMORROW_9AM });
+      expect(actual).toMatchObject({
+        booked: true,
+        userId: 'meta-v1',
+        ventor: { id: 'meta-v1', name: 'Carlos', phone: '3009998877' },
+      });
+      expect(mockAssignment.executeFindVentorById).toHaveBeenCalledWith('meta-v1');
     });
 
     it('falls back to the next user on a duplicate key race and fails when none is left', async () => {

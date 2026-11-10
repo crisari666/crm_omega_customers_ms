@@ -160,7 +160,7 @@ describe('Lead conversation flow (state machine + handlers + composer)', () => {
     ]);
     session = applyInMemory(scoring, session, payment);
     const period = await stateMachine.executeTransition(session, buildMessage('Noche 6-9', REPLY_ID.slotNight));
-    expect(mockCallSlots.findFreeSlots).toHaveBeenCalledWith('night');
+    expect(mockCallSlots.findFreeSlots).toHaveBeenCalledWith('night', expect.any(Date), expect.any(Types.ObjectId));
     expect(period.nextStep).toBe(LeadConversationStep.AskCallSlot);
     expect(period.outbound[0].kind).toBe('list');
     expect(period.outbound[0].options?.[0].id).toBe(`callslot:${SLOT_START.toISOString()}`);

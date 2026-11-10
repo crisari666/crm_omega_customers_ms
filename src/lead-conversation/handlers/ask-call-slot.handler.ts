@@ -15,8 +15,8 @@ const ROW_NUMBER_REGEX = /^\s*(\d{1,2})\s*$/;
 const DEFAULT_PERIOD: LeadCallPeriod = 'morning';
 
 /**
- * Customer picks a 30-minute slot (`horario_llamada`, +3) → call booked with a free advance-leads user,
- * customer assigned to that user, confirmation with date and time.
+ * Customer picks a 30-minute slot (`horario_llamada`, +3) → call booked with assignee (when set)
+ * or a free advance-leads user, confirmation with date/time and that ventor's contact.
  */
 @Injectable()
 export class AskCallSlotHandler implements LeadStepHandler {
@@ -42,7 +42,11 @@ export class AskCallSlotHandler implements LeadStepHandler {
       slotStart,
     });
     if (!result.booked) {
-      return this.transitions.buildAskCallSlot(findCallPeriod(slotStart) ?? DEFAULT_PERIOD, true);
+      return this.transitions.buildAskCallSlot(
+        findCallPeriod(slotStart) ?? DEFAULT_PERIOD,
+        true,
+        session.customerId,
+      );
     }
     return {
       nextStep: LeadConversationStep.Scheduled,

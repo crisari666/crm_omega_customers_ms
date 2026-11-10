@@ -18,6 +18,6 @@ export class AskScheduleHandler implements LeadStepHandler {
     if (!period) {
       return this.transitions.buildRetry(session);
     }
-    return this.transitions.buildAskCallSlot(period);
+    return this.transitions.buildAskCallSlot(period, false, session.customerId);
   }
 }

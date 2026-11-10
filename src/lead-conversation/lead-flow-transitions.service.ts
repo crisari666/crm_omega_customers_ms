@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { MAX_QUESTION_RETRIES } from './constants/lead-conversation.constants';
 import { LeadCallSlotService } from './lead-call-slot.service';
 import { LeadMessageComposerService } from './lead-message-composer.service';
@@ -53,9 +54,14 @@ export class LeadFlowTransitionsService {
   /**
    * Free 30-minute slots of the period (list), or the "no slots" notice + period buttons when none is free.
    * `isTaken` prefixes the "that slot was just taken" notice.
+   * Pass `customerId` so already-assigned leads only see their ventor's free times.
    */
-  async buildAskCallSlot(period: LeadCallPeriod, isTaken = false): Promise<StepTransition> {
-    const slots = await this.callSlots.findFreeSlots(period);
+  async buildAskCallSlot(
+    period: LeadCallPeriod,
+    isTaken = false,
+    customerId?: Types.ObjectId,
+  ): Promise<StepTransition> {
+    const slots = await this.callSlots.findFreeSlots(period, new Date(), customerId);
     if (slots.length === 0) {
       return {
         nextStep: LeadConversationStep.AskSchedule,
@@ -82,7 +88,7 @@ export class LeadFlowTransitionsService {
     }
     const period = session.answers?.horarioLlamada;
     if (session.step === LeadConversationStep.AskCallSlot && period && LEAD_CALL_PERIODS.includes(period)) {
-      const fresh = await this.buildAskCallSlot(period);
+      const fresh = await this.buildAskCallSlot(period, false, session.customerId);
       return { ...fresh, outbound: this.composer.composeRetry(fresh.outbound), isRetry: true };
     }
     const lastQuestion =

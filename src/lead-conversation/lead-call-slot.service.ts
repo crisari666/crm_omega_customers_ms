@@ -48,7 +48,8 @@ type BookSlotInput = {
 
 /**
  * 30-minute lead call slots backed by `ventor_schedule_events` (type `call`).
- * A slot is free when at least one `assignAdvanceLeads` office user has no pending event inside it.
+ * Unassigned leads: a slot is free when ≥1 `assignAdvanceLeads` user is free.
+ * Already-assigned leads: only that ventor's free times (no pool fallback).
  */
 @Injectable()
 export class LeadCallSlotService {
@@ -63,10 +64,16 @@ export class LeadCallSlotService {
     private readonly configService: ConfigService,
   ) {}
 
-  /** Up to 10 free slots of the period, soonest first, within the lookahead days. */
-  async findFreeSlots(period: LeadCallPeriod, now: Date = new Date()): Promise<LeadCallSlot[]> {
-    const ventors = await this.findAdvanceVentors();
-    const userIds = ventors.map((ventor) => ventor.id);
+  /**
+   * Up to 10 free slots of the period, soonest first, within the lookahead days.
+   * When `customerId` has `assignedTo`, only that ventor's calendar is considered.
+   */
+  async findFreeSlots(
+    period: LeadCallPeriod,
+    now: Date = new Date(),
+    customerId?: Types.ObjectId,
+  ): Promise<LeadCallSlot[]> {
+    const userIds = await this.resolveBookableUserIds(customerId);
     if (userIds.length === 0) return [];
     const starts = buildPeriodSlotStarts({ period, now, lookaheadDays: this.getLookaheadDays() });
     if (starts.length === 0) return [];
@@ -78,7 +85,7 @@ export class LeadCallSlotService {
   }
 
   /**
-   * Books the slot with the least-loaded free advance-leads user and assigns the customer to that user.
+   * Books the slot: assignee-only when `assignedTo` is set; else least-loaded free advance-leads user.
    * Idempotent per session: an existing pending booking at the same start is returned as is.
    */
   async bookSlot({
@@ -104,15 +111,19 @@ export class LeadCallSlotService {
         eventId: String(existing._id),
         userId: existing.userId,
         scheduledAt: existing.scheduledAt,
+        customerId,
       });
     }
-    const ventors = await this.findAdvanceVentors();
-    const userIds = ventors.map((ventor) => ventor.id);
+    const preferredVentorId = await this.resolvePreferredBookVentorId(customerId);
+    const userIds = await this.resolveBookableUserIds(customerId, preferredVentorId);
     const busy = await this.findBusyEvents(userIds, slotStart, new Date(slotStart.getTime() + CALL_SLOT_MS));
     const freeUserIds = findFreeUserIds(userIds, busy, slotStart);
-    const preferredVentorId = await this.resolvePreferredBookVentorId(customerId);
-    const byLoad = await this.sortByDayLoad(freeUserIds, slotStart);
-    const candidates = preferUserIdFirst(byLoad, preferredVentorId);
+    const candidates =
+      preferredVentorId != null
+        ? freeUserIds.includes(preferredVentorId)
+          ? [preferredVentorId]
+          : []
+        : await this.sortByDayLoad(freeUserIds, slotStart);
     for (const userId of candidates) {
       const created = await this.tryCreateCall({ userId, sessionId, customerId, slotStart });
       if (!created) continue;
@@ -130,7 +141,7 @@ export class LeadCallSlotService {
         eventId: String(created._id),
         userId,
         scheduledAt: slotStart,
-        ventors,
+        customerId,
       });
     }
     return { booked: false };
@@ -165,11 +176,27 @@ export class LeadCallSlotService {
     return resolved.customerId;
   }
 
-  /** Prefer Meta-assigned ventor for the calendar event when they are in the advance-leads pool. */
+  /** Customer's existing Meta/CRM assignee, when set. */
   private async resolvePreferredBookVentorId(customerId: Types.ObjectId): Promise<string | undefined> {
     const customer = await this.leadCustomer.findById(customerId);
     const assignedTo = (customer?.assignedTo ?? '').trim();
     return assignedTo.length > 0 ? assignedTo : undefined;
+  }
+
+  /**
+   * Bookable calendar owners: assignee-only when `assignedTo` is set; else the advance-leads pool.
+   * `preferredVentorId` avoids a second customer read when the caller already resolved it.
+   */
+  private async resolveBookableUserIds(
+    customerId?: Types.ObjectId,
+    preferredVentorId?: string,
+  ): Promise<string[]> {
+    const preferred =
+      preferredVentorId ?? (customerId != null ? await this.resolvePreferredBookVentorId(customerId) : undefined);
+    if (preferred != null) {
+      return [preferred];
+    }
+    return (await this.findAdvanceVentors()).map((ventor) => ventor.id);
   }
 
   /** Free advance-leads users at a slot start (excluding `excludeUserId`), least loaded that day first. */
@@ -194,14 +221,19 @@ export class LeadCallSlotService {
     return (await this.findAdvanceVentors()).map((ventor) => ventor.id);
   }
 
+  /**
+   * Confirmation ventor follows customer ownership (`assignedTo`) when set;
+   * otherwise the booked calendar user from the advance-leads pool.
+   */
   private async buildBookedResult(input: {
     readonly eventId: string;
     readonly userId: string;
     readonly scheduledAt: Date;
-    readonly ventors?: readonly VentorAssignmentCandidate[];
+    readonly customerId: Types.ObjectId;
   }): Promise<BookCallSlotResult> {
-    const pool = input.ventors ?? (await this.findAdvanceVentors());
-    const ventor = pool.find((candidate) => candidate.id === input.userId);
+    const preferredVentorId = await this.resolvePreferredBookVentorId(input.customerId);
+    const contactUserId = preferredVentorId ?? input.userId;
+    const ventor = await this.resolveVentorContact(contactUserId);
     return {
       booked: true,
       eventId: input.eventId,
@@ -209,6 +241,17 @@ export class LeadCallSlotService {
       scheduledAt: input.scheduledAt,
       ...(ventor ? { ventor } : {}),
     };
+  }
+
+  /** Advance-leads pool first, then physical candidates (for Meta-assigned ventors outside the call pool). */
+  private async resolveVentorContact(ventorId: string): Promise<VentorAssignmentCandidate | undefined> {
+    const advance = await this.findAdvanceVentors();
+    const fromAdvance = advance.find((candidate) => candidate.id === ventorId);
+    if (fromAdvance != null) {
+      return fromAdvance;
+    }
+    const fromPhysical = await this.ventorAssignment.executeFindVentorById(ventorId);
+    return fromPhysical ?? undefined;
   }
 
   private isBookableStart(slotStart: Date, now: Date): boolean {
@@ -308,12 +351,6 @@ function findFreeUserIds(userIds: readonly string[], busy: readonly BusyEvent[],
       .map((event) => event.userId),
   );
   return userIds.filter((id) => !busyUsers.has(id));
-}
-
-/** Moves `preferred` to the front when present in `userIds` (stable for the rest). */
-function preferUserIdFirst(userIds: readonly string[], preferred: string | undefined): string[] {
-  if (!preferred || !userIds.includes(preferred)) return [...userIds];
-  return [preferred, ...userIds.filter((id) => id !== preferred)];
 }
 
 function buildBogotaDayBounds(instant: Date): { readonly dayStart: Date; readonly dayEnd: Date } {
