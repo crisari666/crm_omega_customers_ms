@@ -11,6 +11,7 @@ import { AskScheduleHandler } from './handlers/ask-schedule.handler';
 import { InitialHandler } from './handlers/initial.handler';
 import { ReminderReplyHandler } from './handlers/reminder-reply.handler';
 import { TerminalHandler } from './handlers/terminal.handler';
+import { LeadAdProjectResolverService } from './lead-ad-project-resolver.service';
 import type { LeadSessionSnapshot } from './lead-conversation-session.service';
 import { LeadConversationStateMachineService } from './lead-conversation-state-machine.service';
 import { LeadFlowTransitionsService } from './lead-flow-transitions.service';
@@ -131,6 +132,10 @@ describe('Lead conversation flow (state machine + handlers + composer)', () => {
         { provide: ProjectMatcherService, useValue: mockMatcher },
         { provide: ProjectCatalogService, useValue: mockCatalog },
         { provide: LeadCallSlotService, useValue: mockCallSlots },
+        {
+          provide: LeadAdProjectResolverService,
+          useValue: { executeResolveForCustomer: jest.fn().mockResolvedValue(undefined) },
+        },
         { provide: ConfigService, useValue: { get: (_key: string, fallback: unknown) => fallback } },
       ],
     }).compile();

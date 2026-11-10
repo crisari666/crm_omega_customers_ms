@@ -23,6 +23,7 @@ import { AskPaymentHandler } from './handlers/ask-payment.handler';
 import { AskProjectHandler } from './handlers/ask-project.handler';
 import { AskScheduleHandler } from './handlers/ask-schedule.handler';
 import { InitialHandler } from './handlers/initial.handler';
+import { LeadAdProjectResolverService } from './lead-ad-project-resolver.service';
 import { ReminderReplyHandler } from './handlers/reminder-reply.handler';
 import { TerminalHandler } from './handlers/terminal.handler';
 import { LeadCallScheduleAdminController } from './lead-call-schedule-admin.controller';
@@ -135,6 +136,7 @@ const STEP_HANDLERS = [
     LeadConversationQueryService,
     LeadCallSlotService,
     LeadCustomerService,
+    LeadAdProjectResolverService,
     LeadFlowTransitionsService,
     LeadMessageComposerService,
     LeadMessageDispatcherService,

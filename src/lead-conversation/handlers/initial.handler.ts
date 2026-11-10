@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LeadAdProjectResolverService } from '../lead-ad-project-resolver.service';
 import { LeadFlowTransitionsService } from '../lead-flow-transitions.service';
 import { ProjectMatcherService } from '../project-matcher.service';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
@@ -15,10 +16,27 @@ export class InitialHandler implements LeadStepHandler {
   constructor(
     private readonly matcher: ProjectMatcherService,
     private readonly transitions: LeadFlowTransitionsService,
+    private readonly adProjectResolver: LeadAdProjectResolverService,
   ) {}
 
   async handle({ session, message }: StepContext): Promise<StepTransition> {
     if (message.isInstantFormDump === true || isInstantFormDump(message.text)) {
+      const mappedProject = await this.adProjectResolver.executeResolveForCustomer(
+        session.customerId,
+      );
+      if (mappedProject != null) {
+        const transition = await this.transitions.buildProjectIntro(
+          session,
+          mappedProject,
+        );
+        return {
+          ...transition,
+          sessionPatch: {
+            ...transition.sessionPatch,
+            identityBootstrappedFromForm: true,
+          },
+        };
+      }
       const transition = await this.transitions.buildAskProject(session);
       return {
         ...transition,
