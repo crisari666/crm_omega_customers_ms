@@ -6,7 +6,7 @@ Admin registry (`meta_lead_forms`) maps Meta Lead Ads **formId** / **formName** 
 
 | `flowStrategy` | Behavior |
 |---|---|
-| `immediate_assign` | Upsert customer + ventor assign (no BBQ template). Strategy is stamped on `meta_lead_campaigns.flowStrategy`. Lead-conversation bot **must not** reassign `assignedTo` (admin reassign still allowed). |
+| `immediate_assign` | Upsert customer + ventor assign (no BBQ template). Strategy is stamped on `meta_lead_campaigns.flowStrategy`. Lead-conversation bot **must not** reassign `assignedTo` (admin reassign still allowed). **Assign pool (physical only):** office users with `level=ventor`, `physical=true`, `enable=true`, and `autoCustomerAssignmentDisabled ≠ true` (`GET internal/ventors/physical-assignment-candidates`). **`assignAdvanceLeads` is ignored** for form assign — that flag is only for AI-qualified call slots. Staff with only “Asignar Leads Calificados” and auto-assign OFF do not receive Instant Form leads (by design). |
 | `lead_conversation` | Upsert customer **without** assign; schedule delayed WhatsApp template on leads line. Bot may assign when a call is booked. |
 
 If no enabled registry row matches: **hardcoded safety net** still runs for `datos_clientes*` / `formulario_asado*`. Other names skip assign (campaign saved with skip note). Legacy campaigns may omit `flowStrategy`; bot still keeps any existing `assignedTo`.
