@@ -35,6 +35,12 @@ export class ListAdminLeadsQueryDto {
   @IsString()
   to?: string;
 
+  /** Meta Lead Ads form id (`meta_lead_campaigns.formId` / `graphFormId`). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  formId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -21,6 +21,7 @@ describe('CustomerLeadsAdminService', () => {
   };
   const mockSessionModel = { find: jest.fn() };
   const mockScheduleModel = { find: jest.fn() };
+  const mockMetaLeadCampaignModel = { find: jest.fn() };
   const mockCustomerService = { assignCustomerAssignee: jest.fn() };
   let service: CustomerLeadsAdminService;
 
@@ -30,10 +31,12 @@ describe('CustomerLeadsAdminService', () => {
     mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(0) });
     mockSessionModel.find.mockReturnValue(buildChain([]));
     mockScheduleModel.find.mockReturnValue(buildChain([]));
+    mockMetaLeadCampaignModel.find.mockReturnValue(buildChain([]));
     service = new CustomerLeadsAdminService(
       mockCustomerModel as never,
       mockSessionModel as never,
       mockScheduleModel as never,
+      mockMetaLeadCampaignModel as never,
       mockCustomerService as unknown as CustomerService,
     );
   });
@@ -46,10 +49,21 @@ describe('CustomerLeadsAdminService', () => {
       phone: '573001112233',
       lifecycleStatus: 'lead',
       leadSources: ['meta_form'],
+      metaLeadgenId: 'leadgen-1',
       createdAt: new Date('2026-10-15T12:00:00.000Z'),
     };
     mockCustomerModel.find.mockReturnValue(buildChain([row]));
     mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+    mockMetaLeadCampaignModel.find.mockReturnValue(
+      buildChain([
+        {
+          customerId,
+          leadgenId: 'leadgen-1',
+          formId: 'form-123',
+          graphFormName: 'datos_clientes_cartagena',
+        },
+      ]),
+    );
     const actual = await service.listLeads({ page: 0, limit: 50 });
     expect(actual.total).toBe(1);
     expect(actual.items[0]).toMatchObject({
@@ -58,6 +72,8 @@ describe('CustomerLeadsAdminService', () => {
       lifecycleStatus: 'lead',
       isPromoted: false,
       leadSources: ['meta_form'],
+      metaFormId: 'form-123',
+      metaFormName: 'datos_clientes_cartagena',
     });
     expect(mockCustomerModel.find).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -72,6 +88,30 @@ describe('CustomerLeadsAdminService', () => {
                 'meta-gateway-ingest',
               ],
             },
+          },
+        ]),
+      }),
+    );
+  });
+
+  it('filters leads by Meta form id via campaigns', async () => {
+    mockMetaLeadCampaignModel.find.mockReturnValueOnce(
+      buildChain([{ customerId, leadgenId: 'leadgen-1' }]),
+    );
+    mockCustomerModel.find.mockReturnValue(buildChain([]));
+    mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(0) });
+    await service.listLeads({ page: 0, limit: 50, formId: 'form-123' });
+    expect(mockMetaLeadCampaignModel.find).toHaveBeenCalledWith({
+      $or: [{ formId: 'form-123' }, { graphFormId: 'form-123' }],
+    });
+    expect(mockCustomerModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $and: expect.arrayContaining([
+          {
+            $or: [
+              { _id: { $in: [customerId] } },
+              { metaLeadgenId: { $in: ['leadgen-1'] } },
+            ],
           },
         ]),
       }),

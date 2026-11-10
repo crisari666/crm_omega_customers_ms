@@ -14,6 +14,10 @@ import {
 import { CustomerService } from './customer.service';
 import type { ConvertAdminLeadDto } from './dto/convert-admin-lead.dto';
 import type { ListAdminLeadsQueryDto } from './dto/list-admin-leads.query.dto';
+import {
+  MetaLeadCampaign,
+  MetaLeadCampaignDocument,
+} from './schemas/meta-lead-campaign.schema';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import type { CustomerLeadSource } from './types/customer-lead-source.type';
 import type { CustomerLifecycleStatus } from './types/customer-lifecycle-status.type';
@@ -70,6 +74,19 @@ type CustomerLeadLean = {
   readonly isProspect?: boolean;
 };
 
+type CampaignFormLean = {
+  readonly leadgenId?: string;
+  readonly customerId?: Types.ObjectId;
+  readonly formId?: string;
+  readonly graphFormId?: string;
+  readonly graphFormName?: string;
+};
+
+type LeadFormMeta = {
+  readonly metaFormId?: string;
+  readonly metaFormName?: string;
+};
+
 /**
  * Admin inbox for Customer rows with lead lifecycle / source tags.
  */
@@ -83,13 +100,15 @@ export class CustomerLeadsAdminService {
     private readonly sessionModel: Model<LeadConversationSessionDocument>,
     @InjectModel(VentorScheduleEvent.name)
     private readonly scheduleModel: Model<VentorScheduleEventDocument>,
+    @InjectModel(MetaLeadCampaign.name)
+    private readonly metaLeadCampaignModel: Model<MetaLeadCampaignDocument>,
     private readonly customerService: CustomerService,
   ) {}
 
   async listLeads(query: ListAdminLeadsQueryDto): Promise<AdminLeadListPage> {
     const page = query.page ?? 0;
     const limit = query.limit ?? DEFAULT_LIMIT;
-    const filter = this.buildFilter(query);
+    const filter = await this.buildFilter(query);
     const [rows, total] = await Promise.all([
       this.customerModel
         .find(filter)
@@ -101,12 +120,18 @@ export class CustomerLeadsAdminService {
       this.customerModel.countDocuments(filter).exec(),
     ]);
     const customerIds = rows.map((row) => row._id);
-    const [sessions, schedules] = await Promise.all([
+    const [sessions, schedules, formByCustomerId] = await Promise.all([
       this.findLatestSessions(customerIds),
       this.findNextScheduledCalls(customerIds),
+      this.findFormMetaForCustomers(rows),
     ]);
     const items = rows.map((row) =>
-      this.toItem(row, sessions.get(String(row._id)), schedules.get(String(row._id))),
+      this.toItem(
+        row,
+        sessions.get(String(row._id)),
+        schedules.get(String(row._id)),
+        formByCustomerId.get(String(row._id)),
+      ),
     );
     return { items, total, page, limit };
   }
@@ -152,14 +177,18 @@ export class CustomerLeadsAdminService {
       this.findLatestSessions([refreshed._id]),
       this.findNextScheduledCalls([refreshed._id]),
     ]);
+    const formByCustomerId = await this.findFormMetaForCustomers([refreshed]);
     return this.toItem(
       refreshed,
       sessions.get(String(refreshed._id)),
       schedules.get(String(refreshed._id)),
+      formByCustomerId.get(String(refreshed._id)),
     );
   }
 
-  private buildFilter(query: ListAdminLeadsQueryDto): QueryFilter<CustomerDocument> {
+  private async buildFilter(
+    query: ListAdminLeadsQueryDto,
+  ): Promise<QueryFilter<CustomerDocument>> {
     const filter: QueryFilter<CustomerDocument> = {};
     if (query.lifecycleStatus) {
       filter.lifecycleStatus = query.lifecycleStatus;
@@ -197,7 +226,104 @@ export class CustomerLeadsAdminService {
       }
       filter.createdAt = createdAt;
     }
+    const formId = query.formId?.trim() ?? '';
+    if (formId.length > 0) {
+      const formScope = await this.resolveCustomerScopeForFormId(formId);
+      filter.$and = [
+        ...(filter.$and ?? []),
+        {
+          $or: [
+            ...(formScope.customerIds.length > 0
+              ? [{ _id: { $in: formScope.customerIds } }]
+              : []),
+            ...(formScope.leadgenIds.length > 0
+              ? [{ metaLeadgenId: { $in: formScope.leadgenIds } }]
+              : []),
+            // Force empty result when no campaigns match this form.
+            ...(formScope.customerIds.length === 0 && formScope.leadgenIds.length === 0
+              ? [{ _id: { $in: [] } }]
+              : []),
+          ],
+        },
+      ];
+    }
     return filter;
+  }
+
+  private async resolveCustomerScopeForFormId(formId: string): Promise<{
+    readonly customerIds: Types.ObjectId[];
+    readonly leadgenIds: string[];
+  }> {
+    const campaigns = await this.metaLeadCampaignModel
+      .find({
+        $or: [{ formId }, { graphFormId: formId }],
+      })
+      .select({ customerId: 1, leadgenId: 1 })
+      .lean<CampaignFormLean[]>()
+      .exec();
+    const customerIds: Types.ObjectId[] = [];
+    const leadgenIds: string[] = [];
+    for (const campaign of campaigns) {
+      if (campaign.customerId != null) {
+        customerIds.push(campaign.customerId);
+      }
+      const leadgenId = (campaign.leadgenId ?? '').trim();
+      if (leadgenId.length > 0) {
+        leadgenIds.push(leadgenId);
+      }
+    }
+    return { customerIds, leadgenIds };
+  }
+
+  private async findFormMetaForCustomers(
+    rows: readonly CustomerLeadLean[],
+  ): Promise<Map<string, LeadFormMeta>> {
+    const map = new Map<string, LeadFormMeta>();
+    if (rows.length === 0) {
+      return map;
+    }
+    const customerIds = rows.map((row) => row._id);
+    const leadgenIds = rows
+      .map((row) => (row.metaLeadgenId ?? '').trim())
+      .filter((id) => id.length > 0);
+    const campaigns = await this.metaLeadCampaignModel
+      .find({
+        $or: [
+          ...(customerIds.length > 0 ? [{ customerId: { $in: customerIds } }] : []),
+          ...(leadgenIds.length > 0 ? [{ leadgenId: { $in: leadgenIds } }] : []),
+        ],
+      })
+      .select({ customerId: 1, leadgenId: 1, formId: 1, graphFormId: 1, graphFormName: 1 })
+      .sort({ createdAt: -1 })
+      .lean<CampaignFormLean[]>()
+      .exec();
+    const byLeadgenId = new Map<string, LeadFormMeta>();
+    const byCustomerId = new Map<string, LeadFormMeta>();
+    for (const campaign of campaigns) {
+      const meta = resolveLeadFormMeta(campaign);
+      if (meta.metaFormId == null && meta.metaFormName == null) {
+        continue;
+      }
+      if (campaign.customerId != null) {
+        const key = String(campaign.customerId);
+        if (!byCustomerId.has(key)) {
+          byCustomerId.set(key, meta);
+        }
+      }
+      const leadgenId = (campaign.leadgenId ?? '').trim();
+      if (leadgenId.length > 0 && !byLeadgenId.has(leadgenId)) {
+        byLeadgenId.set(leadgenId, meta);
+      }
+    }
+    for (const row of rows) {
+      const byCustomer = byCustomerId.get(String(row._id));
+      const byLeadgen = byLeadgenId.get((row.metaLeadgenId ?? '').trim());
+      const meta = byCustomer ?? byLeadgen;
+      if (meta != null) {
+        map.set(String(row._id), meta);
+      }
+    }
+    return map;
   }
 
   private async findLatestSessions(
@@ -264,6 +390,7 @@ export class CustomerLeadsAdminService {
     row: CustomerLeadLean,
     session?: SessionLean,
     scheduledCall?: AdminLeadScheduledCall,
+    formMeta?: LeadFormMeta,
   ): AdminLeadListItem {
     const lifecycle = resolveLifecycle(row);
     const sources = row.leadSources ?? [];
@@ -277,6 +404,8 @@ export class CustomerLeadsAdminService {
       isPromoted: lifecycle === 'customer',
       ...(row.assignedTo ? { assignedTo: row.assignedTo } : {}),
       ...(row.metaLeadgenId ? { metaLeadgenId: row.metaLeadgenId } : {}),
+      ...(formMeta?.metaFormId ? { metaFormId: formMeta.metaFormId } : {}),
+      ...(formMeta?.metaFormName ? { metaFormName: formMeta.metaFormName } : {}),
       createdAt: toIso(row.createdAt),
       ...(session
         ? {
@@ -292,6 +421,16 @@ export class CustomerLeadsAdminService {
       ...(scheduledCall ? { scheduledCall } : {}),
     };
   }
+}
+
+function resolveLeadFormMeta(campaign: CampaignFormLean): LeadFormMeta {
+  const metaFormId =
+    (campaign.formId ?? '').trim() || (campaign.graphFormId ?? '').trim() || undefined;
+  const metaFormName = (campaign.graphFormName ?? '').trim() || undefined;
+  return {
+    ...(metaFormId ? { metaFormId } : {}),
+    ...(metaFormName ? { metaFormName } : {}),
+  };
 }
 
 function resolveLifecycle(row: CustomerLeadLean): CustomerLifecycleStatus {

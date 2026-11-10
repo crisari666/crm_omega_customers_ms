@@ -28,6 +28,10 @@ export type AdminLeadListItem = {
   readonly isPromoted: boolean;
   readonly assignedTo?: string;
   readonly metaLeadgenId?: string;
+  /** Meta Lead Ads form id from linked `meta_lead_campaigns` row. */
+  readonly metaFormId?: string;
+  /** Meta Lead Ads form name from linked campaign. */
+  readonly metaFormName?: string;
   readonly createdAt: string;
   readonly leadSession?: AdminLeadSessionSummary;
   readonly scheduledCall?: AdminLeadScheduledCall;
