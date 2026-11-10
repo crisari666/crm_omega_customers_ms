@@ -130,3 +130,6 @@ export const MetaLeadCampaignSchema = SchemaFactory.createForClass(MetaLeadCampa
 
 MetaLeadCampaignSchema.index({ createdAt: -1 });
 MetaLeadCampaignSchema.index({ status: 1, createdAt: -1 });
+MetaLeadCampaignSchema.index({ formId: 1, createdAt: -1 });
+MetaLeadCampaignSchema.index({ graphFormId: 1, createdAt: -1 });
+MetaLeadCampaignSchema.index({ customerId: 1, createdAt: -1 });

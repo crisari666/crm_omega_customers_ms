@@ -6,6 +6,10 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
+  MetaLeadCampaign,
+  MetaLeadCampaignDocument,
+} from '../customer/schemas/meta-lead-campaign.schema';
+import {
   DEFAULT_OUTBOUND_DELAY_MINUTES,
   META_LEAD_FORM_SETTINGS_KEY,
 } from './constants/meta-lead-form.constants';
@@ -24,6 +28,16 @@ import type {
   MetaLeadFormListItem,
   MetaLeadFormSettingsView,
 } from './types/meta-lead-form-list-item.type';
+import type {
+  MetaLeadFormCampaignGroup,
+  MetaLeadFormStatsResponse,
+} from './types/meta-lead-form-stats.type';
+
+type CampaignFormAggRow = {
+  readonly _id: string;
+  readonly formName?: string;
+  readonly leadCount: number;
+};
 
 /**
  * Admin CRUD for Meta Lead Ads form registry and outbound delay settings.
@@ -35,6 +49,8 @@ export class MetaLeadFormsService {
     private readonly metaLeadFormModel: Model<MetaLeadFormDocument>,
     @InjectModel(MetaLeadFormSettings.name)
     private readonly settingsModel: Model<MetaLeadFormSettingsDocument>,
+    @InjectModel(MetaLeadCampaign.name)
+    private readonly metaLeadCampaignModel: Model<MetaLeadCampaignDocument>,
   ) {}
 
   async executeList(): Promise<MetaLeadFormListItem[]> {
@@ -148,6 +164,74 @@ export class MetaLeadFormsService {
   async executeGetOutboundDelayMs(): Promise<number> {
     const settings = await this.executeEnsureSettings();
     return settings.outboundDelayMinutes * 60_000;
+  }
+
+  /**
+   * Aggregates leadgen campaigns by Meta form id and joins against the registry.
+   */
+  async executeGetStats(): Promise<MetaLeadFormStatsResponse> {
+    const [forms, groups] = await Promise.all([
+      this.metaLeadFormModel.find().sort({ formName: 1 }).lean().exec(),
+      this.metaLeadCampaignModel
+        .aggregate<CampaignFormAggRow>([
+          {
+            $addFields: {
+              resolvedFormId: {
+                $trim: {
+                  input: {
+                    $ifNull: ['$formId', { $ifNull: ['$graphFormId', ''] }],
+                  },
+                },
+              },
+              resolvedFormName: {
+                $trim: {
+                  input: { $ifNull: ['$graphFormName', ''] },
+                },
+              },
+            },
+          },
+          {
+            $match: {
+              resolvedFormId: { $ne: '' },
+            },
+          },
+          {
+            $group: {
+              _id: '$resolvedFormId',
+              formName: { $first: '$resolvedFormName' },
+              leadCount: { $sum: 1 },
+            },
+          },
+          { $sort: { leadCount: -1 } },
+        ])
+        .exec(),
+    ]);
+    const countByFormId = new Map<string, MetaLeadFormCampaignGroup>();
+    for (const group of groups) {
+      const formId = (group._id ?? '').trim();
+      if (formId.length === 0) {
+        continue;
+      }
+      countByFormId.set(formId, {
+        formId,
+        formName: (group.formName ?? '').trim(),
+        leadCount: group.leadCount,
+      });
+    }
+    const registeredIds = new Set(forms.map((form) => form.formId.trim()));
+    const registered = forms.map((form) => {
+      const match = countByFormId.get(form.formId.trim());
+      return {
+        id: String(form._id),
+        formId: form.formId,
+        formName: form.formName,
+        leadCount: match?.leadCount ?? 0,
+      };
+    });
+    const unregisteredForms = [...countByFormId.values()].filter(
+      (group) => !registeredIds.has(group.formId),
+    );
+    return { registered, unregisteredForms };
   }
 
   private async executeEnsureSettings(): Promise<{

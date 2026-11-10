@@ -20,6 +20,7 @@ import type {
   MetaLeadFormListItem,
   MetaLeadFormSettingsView,
 } from './types/meta-lead-form-list-item.type';
+import type { MetaLeadFormStatsResponse } from './types/meta-lead-form-stats.type';
 
 /**
  * Admin registry for Meta Lead Ads forms → CRM flow strategy.
@@ -41,6 +42,14 @@ export class MetaLeadFormsController {
   ): Promise<MetaLeadFormSettingsView> {
     assertOfficeAdmin(jwtUser);
     return this.metaLeadFormsService.executeGetSettings();
+  }
+
+  @Get('stats')
+  getStats(
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ): Promise<MetaLeadFormStatsResponse> {
+    assertOfficeAdmin(jwtUser);
+    return this.metaLeadFormsService.executeGetStats();
   }
 
   @Patch('settings')
