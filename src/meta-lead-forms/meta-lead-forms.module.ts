@@ -14,11 +14,17 @@ import {
 } from '../lead-conversation/schemas/lead-conversation-session.schema';
 import { parseRedisUrl } from '../lead-conversation/utils/parse-redis-url.util';
 import { META_LEAD_FORM_QUALIFICATION_QUEUE } from './constants/meta-lead-form.constants';
+import { MetaLeadAdCampaignLookupService } from './meta-lead-ad-campaign-lookup.service';
+import { MetaLeadAdCampaignsService } from './meta-lead-ad-campaigns.service';
 import { MetaLeadFormLookupService } from './meta-lead-form-lookup.service';
 import { MetaLeadFormQualificationProcessor } from './meta-lead-form-qualification.processor';
 import { MetaLeadFormQualificationScheduler } from './meta-lead-form-qualification.scheduler';
 import { MetaLeadFormQualificationService } from './meta-lead-form-qualification.service';
 import { MetaLeadFormsService } from './meta-lead-forms.service';
+import {
+  MetaLeadAdCampaign,
+  MetaLeadAdCampaignSchema,
+} from './schemas/meta-lead-ad-campaign.schema';
 import {
   MetaLeadFormSettings,
   MetaLeadFormSettingsSchema,
@@ -26,12 +32,13 @@ import {
 import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schema';
 
 /**
- * Meta Lead Ads form registry: admin CRUD, settings, delayed qualification outbound.
+ * Meta Lead Ads form + ad→project registry: admin CRUD, settings, delayed qualification outbound.
  */
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: MetaLeadForm.name, schema: MetaLeadFormSchema },
+      { name: MetaLeadAdCampaign.name, schema: MetaLeadAdCampaignSchema },
       { name: MetaLeadFormSettings.name, schema: MetaLeadFormSettingsSchema },
       { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
       { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
@@ -67,6 +74,8 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
   providers: [
     MetaLeadFormsService,
     MetaLeadFormLookupService,
+    MetaLeadAdCampaignsService,
+    MetaLeadAdCampaignLookupService,
     MetaLeadFormQualificationScheduler,
     MetaLeadFormQualificationService,
     MetaLeadFormQualificationProcessor,
@@ -74,6 +83,8 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
   exports: [
     MetaLeadFormsService,
     MetaLeadFormLookupService,
+    MetaLeadAdCampaignsService,
+    MetaLeadAdCampaignLookupService,
     MetaLeadFormQualificationScheduler,
   ],
 })

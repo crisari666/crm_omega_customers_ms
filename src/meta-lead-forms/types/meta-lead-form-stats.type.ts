@@ -1,3 +1,8 @@
+import type {
+  MetaLeadAdCampaignGroup,
+  MetaLeadAdCampaignRegisteredStat,
+} from './meta-lead-ad-campaign-stats.type';
+
 export type MetaLeadFormCampaignGroup = {
   readonly formId: string;
   readonly formName: string;
@@ -14,4 +19,6 @@ export type MetaLeadFormRegisteredStat = {
 export type MetaLeadFormStatsResponse = {
   readonly registered: readonly MetaLeadFormRegisteredStat[];
   readonly unregisteredForms: readonly MetaLeadFormCampaignGroup[];
+  readonly registeredAds: readonly MetaLeadAdCampaignRegisteredStat[];
+  readonly unregisteredAds: readonly MetaLeadAdCampaignGroup[];
 };

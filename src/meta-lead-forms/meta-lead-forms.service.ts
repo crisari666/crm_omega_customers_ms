@@ -28,6 +28,7 @@ import type {
   MetaLeadFormListItem,
   MetaLeadFormSettingsView,
 } from './types/meta-lead-form-list-item.type';
+import { MetaLeadAdCampaignsService } from './meta-lead-ad-campaigns.service';
 import type {
   MetaLeadFormCampaignGroup,
   MetaLeadFormStatsResponse,
@@ -51,6 +52,7 @@ export class MetaLeadFormsService {
     private readonly settingsModel: Model<MetaLeadFormSettingsDocument>,
     @InjectModel(MetaLeadCampaign.name)
     private readonly metaLeadCampaignModel: Model<MetaLeadCampaignDocument>,
+    private readonly metaLeadAdCampaignsService: MetaLeadAdCampaignsService,
   ) {}
 
   async executeList(): Promise<MetaLeadFormListItem[]> {
@@ -170,7 +172,7 @@ export class MetaLeadFormsService {
    * Aggregates leadgen campaigns by Meta form id and joins against the registry.
    */
   async executeGetStats(): Promise<MetaLeadFormStatsResponse> {
-    const [forms, groups] = await Promise.all([
+    const [forms, groups, adStats] = await Promise.all([
       this.metaLeadFormModel.find().sort({ formName: 1 }).lean().exec(),
       this.metaLeadCampaignModel
         .aggregate<CampaignFormAggRow>([
@@ -205,6 +207,7 @@ export class MetaLeadFormsService {
           { $sort: { leadCount: -1 } },
         ])
         .exec(),
+      this.metaLeadAdCampaignsService.executeGetAdStats(),
     ]);
     const countByFormId = new Map<string, MetaLeadFormCampaignGroup>();
     for (const group of groups) {
@@ -231,7 +234,12 @@ export class MetaLeadFormsService {
     const unregisteredForms = [...countByFormId.values()].filter(
       (group) => !registeredIds.has(group.formId),
     );
-    return { registered, unregisteredForms };
+    return {
+      registered,
+      unregisteredForms,
+      registeredAds: adStats.registeredAds,
+      unregisteredAds: adStats.unregisteredAds,
+    };
   }
 
   private async executeEnsureSettings(): Promise<{
