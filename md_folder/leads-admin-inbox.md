@@ -22,7 +22,8 @@ Assign may set `assignedTo` while lifecycle stays `lead` until convert.
 
 ## Admin API (JWT `/admin/customer`)
 
-- `GET admin/customer/leads` — filters: `lifecycleStatus`, `source`, `assignedTo`, `search`, `from`, `to`, `page`, `limit`. Default filter = leads **and** converted customers with `leadSources`, plus legacy prospect heuristics. Use `lifecycleStatus=lead|customer` to narrow.
+- `GET admin/customer/leads` — filters: `lifecycleStatus`, `source`, `formId` (Meta Graph form id via `meta_lead_campaigns.formId`/`graphFormId`), `assignedTo`, `search`, `from`, `to`, `page`, `limit`. Default filter = leads **and** converted customers with `leadSources`, plus legacy prospect heuristics. Use `lifecycleStatus=lead|customer` to narrow.
+- List items may include `metaFormId` / `metaFormName` enriched from the linked campaign.
 - `POST admin/customer/leads/:id/convert` — body `{ assignToUserId? }` → `lifecycleStatus=customer`, `isProspect=false`, optional assign.
 
 **Routing:** `CustomerLeadsAdminController` must load before `CustomerAdminController` (static `leads` vs `:customerId`).
@@ -31,6 +32,6 @@ Assign may set `assignedTo` while lifecycle stays `lead` until convert.
 
 ## Admin UI
 
-`crm_lots_agents` → `/dashboard/leads` (menu Leads → Bandeja). Reuses `CustomerDetailDialogCP` + lead summary strip; convert CTA with optional ventor assign. Convert CTA is hidden when `assignedTo` is set (or when already promoted).
+`crm_lots_agents` → `/dashboard/leads` (menu Leads → Bandeja). Form picker filter (registered Meta forms). Table + detail strip show `metaFormName` when present. Reuses `CustomerDetailDialogCP` + lead summary strip; convert CTA with optional ventor assign. Convert CTA is hidden when `assignedTo` is set (or when already promoted).
 
 **Conversación IA:** opens the shared lead-conversation chat drawer on the leads page (no bare redirect). List rows may include `scheduledCall` (next pending call); shown as a strip in the drawer header.

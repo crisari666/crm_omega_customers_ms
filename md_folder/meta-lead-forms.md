@@ -33,9 +33,17 @@ Same Instant Form often hits Page `leadgen` (`POST /webhooks/ceiba` → `custome
 
 Template must be approved on the **leads** WABA (24h window). Body param: `contact_name`.
 
+## Form ↔ lead link
+
+Soft join via `meta_lead_campaigns`: `formId` / `graphFormId` / `graphFormName` (+ optional `flowStrategy`). Customer links by `metaLeadgenId` ↔ campaign `leadgenId` (and `customerId` on campaign). Registry is config-only at ingest.
+
+Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`.
+
 ## Admin API
 
 `admin/customer/meta-lead-forms` — list / get / create / patch / delete (JWT admin).
+
+- `GET admin/customer/meta-lead-forms/stats` — aggregates campaigns by coalesced form id; returns `registered[]` (`id`, `formId`, `formName`, `leadCount`) and `unregisteredForms[]` (campaigns with form id not in registry).
 
 ## Gateway
 
@@ -43,4 +51,4 @@ Template must be approved on the **leads** WABA (24h window). Body param: `conta
 
 ## UI
 
-crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly).
+crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly). Shows per-form `leadCount` chips and an unregistered-forms section from `/stats`.
