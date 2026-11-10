@@ -77,7 +77,6 @@ import { CustomerCallAuditService } from './call-audit/customer-call-audit.servi
 import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketing.module';
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
-import { MetaLeadAdCampaignsController } from '../meta-lead-forms/meta-lead-ad-campaigns.controller';
 import { MetaLeadFormsController } from '../meta-lead-forms/meta-lead-forms.controller';
 import {
   LeadConversationSession,
@@ -141,7 +140,6 @@ import { CustomerLeadsAdminService } from './customer-leads-admin.service';
     CustomerController,
     // Before CustomerAdminController so static paths are not captured by `:customerId`.
     CustomerLeadsAdminController,
-    MetaLeadAdCampaignsController,
     MetaLeadFormsController,
     CustomerAdminController,
     VoiceCallRmqController,

@@ -20,7 +20,7 @@ Collection `meta_lead_ad_campaigns` maps Meta **`adId`** → RAG `projectId` (op
 - On customer upsert, enabled ad registry match seeds `customer.interestedProjects` and stamps `meta_lead_campaigns.resolvedProjectId`.
 - Instant Form WhatsApp inbound uses this mapping to send **project intro** instead of ask-project (see `lead-conversation.md`).
 
-Admin: `admin/customer/meta-lead-forms/ad-campaigns` CRUD. Stats include `registeredAds` / `unregisteredAds` (distinct `graphAdId` not in registry).
+Admin: `admin/customer/meta-lead-forms/ad-campaigns` CRUD (static routes on the forms controller, above `:id`, so Nest does not treat `ad-campaigns` as a form ObjectId). Stats include `registeredAds` / `unregisteredAds` (distinct `graphAdId` not in registry).
 
 ## Delay setting
 
