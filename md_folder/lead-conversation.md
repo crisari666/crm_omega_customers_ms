@@ -14,7 +14,7 @@ Many Instant Forms also fire Page `leadgen` on `POST /webhooks/ceiba` (Customer 
 Customer unify order: phone candidates → email → `metaWhatsappUserId` → create. Enrichment fills empty name/email/username/userId/`metaCtwaClid` only and **never** clears `assignedTo` or overwrites a different existing phone. On match, the newest `meta_lead_campaigns` row for that Customer is stamped with `whatsappUsername` / `metaWhatsappUserId`. Session stores username + Meta user id.
 
 #### Instant Form first message
-When `isInstantFormDump` and the session is still `initial`, `InitialHandler` does **not** run project detection on the dump (avoids matching noise from investment/city lines). It bootstraps to `ask_project` and sets `identityBootstrappedFromForm: true` on the session.
+When `isInstantFormDump` and the session is still `initial`, `InitialHandler` does **not** run fuzzy/LLM project detection on the dump (avoids matching noise from investment/city lines). Instead `LeadAdProjectResolverService` resolves a RAG project from the customer's newest `meta_lead_campaigns.graphAdId` → `meta_lead_ad_campaigns` registry (or `resolvedProjectId` / latest `interestedProjects`). If found → `buildProjectIntro` (plan + lots). Else → `ask_project`. Always sets `identityBootstrappedFromForm: true`.
 3. Outbound goes through the BullMQ queue `lead-conversation-outbound`, one chained job per message with `delayMs` (plan +3s, lots +4s). Each job calls RPC `lead_conversation.send.v1` on `ws_ms_queue` (whatsapp_cloud_ms leads line). The last message of a question arms the reminder.
 4. Reminder: queue `lead-conversation-reminder`, jobId `reminder-{sessionId}`, `LEAD_CONVERSATION_REMINDER_MS` (1h). Sí → resume `stepBeforeReminder`. No → `disqualified`, score 1, priority 1.
 

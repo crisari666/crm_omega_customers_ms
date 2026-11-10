@@ -11,6 +11,17 @@ Admin registry (`meta_lead_forms`) maps Meta Lead Ads **formId** / **formName** 
 
 If no enabled registry row matches: **hardcoded safety net** still runs for `datos_clientes*` / `formulario_asado*`. Other names skip assign (campaign saved with skip note). Legacy campaigns may omit `flowStrategy`; bot still keeps any existing `assignedTo`.
 
+## Ad → project registry
+
+Collection `meta_lead_ad_campaigns` maps Meta **`adId`** → RAG `projectId` (optional `adName`, `campaignId`, `campaignName`, `projectTitle`, `enabled`).
+
+- Gateway Graph leadgen already returns `ad_id`; ad Graph fetch adds `adName` / `campaignId` onto the ingest envelope (`graph.adId`, `graph.adName`, `graph.campaignId`, `graph.campaignName`).
+- Campaign row stores `graphAdId`, `graphAdName`, `graphCampaignId`, `graphCampaignName`.
+- On customer upsert, enabled ad registry match seeds `customer.interestedProjects` and stamps `meta_lead_campaigns.resolvedProjectId`.
+- Instant Form WhatsApp inbound uses this mapping to send **project intro** instead of ask-project (see `lead-conversation.md`).
+
+Admin: `admin/customer/meta-lead-forms/ad-campaigns` CRUD. Stats include `registeredAds` / `unregisteredAds` (distinct `graphAdId` not in registry).
+
 ## Delay setting
 
 Singleton `meta_lead_form_settings` (`key: default`):
@@ -37,13 +48,14 @@ Template must be approved on the **leads** WABA (24h window). Body param: `conta
 
 Soft join via `meta_lead_campaigns`: `formId` / `graphFormId` / `graphFormName` (+ optional `flowStrategy`). Customer links by `metaLeadgenId` ↔ campaign `leadgenId` (and `customerId` on campaign). Registry is config-only at ingest.
 
-Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`.
+Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`, `{ graphAdId: 1 }` (sparse via optional field).
 
 ## Admin API
 
 `admin/customer/meta-lead-forms` — list / get / create / patch / delete (JWT admin).
 
-- `GET admin/customer/meta-lead-forms/stats` — aggregates campaigns by coalesced form id; returns `registered[]` (`id`, `formId`, `formName`, `leadCount`) and `unregisteredForms[]` (campaigns with form id not in registry).
+- `GET admin/customer/meta-lead-forms/stats` — form aggregates + `registeredAds` / `unregisteredAds`.
+- `admin/customer/meta-lead-forms/ad-campaigns` — ad→project CRUD.
 
 ## Gateway
 
@@ -51,4 +63,4 @@ Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`.
 
 ## UI
 
-crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly). Shows per-form `leadCount` chips and an unregistered-forms section from `/stats`.
+crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly). Form registry + ad→project section (list, unregistered ads with one-click register, project Autocomplete).
