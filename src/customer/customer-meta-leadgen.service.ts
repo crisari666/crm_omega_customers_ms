@@ -169,7 +169,8 @@ export class CustomerMetaLeadgenService {
     await this.executeSeedProjectFromAdRegistry({
       leadgenId,
       customer,
-      adId: envelope.graph.adId ?? envelope.mappedFields.ad_id,
+      campaignId:
+        envelope.graph.campaignId ?? envelope.mappedFields.campaign_id,
     });
     if (registryForm?.flowStrategy === 'lead_conversation') {
       await this.executeLeadConversationFormPath({
@@ -542,19 +543,22 @@ export class CustomerMetaLeadgenService {
   }
 
   /**
-   * When Meta ad_id is registered to a RAG project, seed customer.interestedProjects
+   * When Meta campaign_id is registered to a RAG project, seed customer.interestedProjects
    * and stamp resolvedProjectId on the campaign row.
    */
   private async executeSeedProjectFromAdRegistry(input: {
     readonly leadgenId: string;
     readonly customer: CustomerDocument;
-    readonly adId?: string;
+    readonly campaignId?: string;
   }): Promise<void> {
-    const adId = (input.adId ?? '').trim();
-    if (adId.length === 0) {
+    const campaignId = (input.campaignId ?? '').trim();
+    if (campaignId.length === 0) {
       return;
     }
-    const match = await this.metaLeadAdCampaignLookup.executeFindEnabledByAdId(adId);
+    const match =
+      await this.metaLeadAdCampaignLookup.executeFindEnabledByCampaignId(
+        campaignId,
+      );
     if (match == null || match.projectId.trim().length === 0) {
       return;
     }
@@ -583,7 +587,7 @@ export class CustomerMetaLeadgenService {
       )
       .exec();
     this.logger.log(
-      `Ad registry seed: customer ${String(input.customer._id)} adId=${adId} projectId=${projectId}`,
+      `Campaign registry seed: customer ${String(input.customer._id)} campaignId=${campaignId} projectId=${projectId}`,
     );
   }
 

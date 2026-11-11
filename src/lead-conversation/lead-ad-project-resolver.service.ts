@@ -11,7 +11,7 @@ import { ProjectCatalogService } from './project-catalog.service';
 import type { LeadProject } from './types/lead-project.type';
 
 /**
- * Resolves a RAG project for a lead from Meta ad registry or seeded interestedProjects.
+ * Resolves a RAG project for a lead from Meta campaign registry or seeded interestedProjects.
  */
 @Injectable()
 export class LeadAdProjectResolverService {
@@ -27,20 +27,26 @@ export class LeadAdProjectResolverService {
   async executeResolveForCustomer(
     customerId: Types.ObjectId,
   ): Promise<LeadProject | undefined> {
-    const fromAd = await this.resolveFromLatestCampaignAd(customerId);
-    if (fromAd != null) {
-      return fromAd;
+    const fromCampaign = await this.resolveFromLatestCampaign(customerId);
+    if (fromCampaign != null) {
+      return fromCampaign;
     }
     return this.resolveFromInterestedProjects(customerId);
   }
 
-  private async resolveFromLatestCampaignAd(
+  private async resolveFromLatestCampaign(
     customerId: Types.ObjectId,
   ): Promise<LeadProject | undefined> {
     const campaign = await this.metaLeadCampaignModel
-      .findOne({ customerId, graphAdId: { $exists: true, $nin: [null, ''] } })
+      .findOne({
+        customerId,
+        $or: [
+          { graphCampaignId: { $exists: true, $nin: [null, ''] } },
+          { resolvedProjectId: { $exists: true, $nin: [null, ''] } },
+        ],
+      })
       .sort({ createdAt: -1 })
-      .select({ graphAdId: 1, resolvedProjectId: 1 })
+      .select({ graphCampaignId: 1, resolvedProjectId: 1 })
       .lean()
       .exec();
     if (campaign == null) {
@@ -53,11 +59,12 @@ export class LeadAdProjectResolverService {
         return byResolved;
       }
     }
-    const adId = (campaign.graphAdId ?? '').trim();
-    if (adId.length === 0) {
+    const campaignId = (campaign.graphCampaignId ?? '').trim();
+    if (campaignId.length === 0) {
       return undefined;
     }
-    const match = await this.adCampaignLookup.executeFindEnabledByAdId(adId);
+    const match =
+      await this.adCampaignLookup.executeFindEnabledByCampaignId(campaignId);
     if (match == null || match.projectId.trim().length === 0) {
       return undefined;
     }
