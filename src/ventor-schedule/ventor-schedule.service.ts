@@ -20,9 +20,9 @@ import {
   LeadConversationSessionDocument,
 } from '../lead-conversation/schemas/lead-conversation-session.schema';
 import {
-  MEET_AUDIT_SUBJECT_EMAIL,
   MEET_AUDIT_SUBSCRIPTION_TTL_MS,
   MeetSubscriptionStatus,
+  resolveMeetAuditSubjectEmail,
 } from './google-meet-audit.constants';
 import { VentorMeetGoogleCalendarService } from './ventor-meet-google-calendar.service';
 import { VentorMeetWorkspaceEventsService } from './ventor-meet-workspace-events.service';
@@ -371,7 +371,7 @@ export class VentorScheduleService {
       const organizer =
         doc.organizerEmail?.trim() ||
         doc.ventorEmail?.trim() ||
-        MEET_AUDIT_SUBJECT_EMAIL;
+        resolveMeetAuditSubjectEmail();
       const sub =
         await this.ventorMeetWorkspaceEventsService.executeCreateMeetSpaceSubscription(
           spaceId,
@@ -468,7 +468,7 @@ export class VentorScheduleService {
     const artifacts =
       await this.googleMeetArtifactsService.fetchArtifactsByMeetUrl({
         googleMeetUrl: meetUrl,
-        organizerEmail: doc.organizerEmail?.trim() || MEET_AUDIT_SUBJECT_EMAIL,
+        organizerEmail: doc.organizerEmail?.trim() || resolveMeetAuditSubjectEmail(),
       });
     if (artifacts.recordingDriveFileId) {
       doc.recordingDriveFileId = artifacts.recordingDriveFileId;
@@ -527,7 +527,7 @@ export class VentorScheduleService {
     const artifacts =
       await this.googleMeetArtifactsService.fetchArtifactsByMeetUrl({
         googleMeetUrl: meetUrl,
-        organizerEmail: doc.organizerEmail?.trim() || MEET_AUDIT_SUBJECT_EMAIL,
+        organizerEmail: doc.organizerEmail?.trim() || resolveMeetAuditSubjectEmail(),
       });
     if (artifacts.recordingDriveFileId) {
       doc.recordingDriveFileId = artifacts.recordingDriveFileId;

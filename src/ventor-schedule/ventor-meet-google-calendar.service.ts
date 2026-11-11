@@ -8,8 +8,8 @@ import {
   MEET_AUDIT_CALENDAR_SCOPE,
   MEET_AUDIT_DEFAULT_DURATION_MS,
   MEET_AUDIT_MEETINGS_READONLY_SCOPE,
-  MEET_AUDIT_SUBJECT_EMAIL,
   MEET_AUDIT_TIME_ZONE,
+  resolveMeetAuditSubjectEmail,
 } from './google-meet-audit.constants';
 import { loadMeetAuditServiceAccountCredentials } from './load-meet-audit-credentials.util';
 import { resolveMeetSpaceResourceName } from './resolve-meet-space-name.util';
@@ -57,7 +57,7 @@ export class VentorMeetGoogleCalendarService {
     const requestId = `ventor-virtual-${input.scheduleEventId}`;
     const attendees = this.buildUniqueAttendees([
       input.customerEmail,
-      MEET_AUDIT_SUBJECT_EMAIL,
+      resolveMeetAuditSubjectEmail(),
     ], organizerEmail);
     const response = await calendar.events.insert({
       calendarId: 'primary',
@@ -161,7 +161,7 @@ export class VentorMeetGoogleCalendarService {
           return;
         }
         this.logger.warn(
-          `Audit invite not yet on ${MEET_AUDIT_SUBJECT_EMAIL} calendar eventId=${input.eventId} attempt=${attempt}; retrying`,
+          `Audit invite not yet on ${resolveMeetAuditSubjectEmail()} calendar eventId=${input.eventId} attempt=${attempt}; retrying`,
         );
         await this.delayMs(VentorMeetGoogleCalendarService.AUDIT_INVITE_RETRY_MS);
       }
@@ -172,7 +172,7 @@ export class VentorMeetGoogleCalendarService {
     readonly eventId: string;
     readonly iCalUID: string;
   }): Promise<void> {
-    const calendar = this.getCalendarApi(MEET_AUDIT_SUBJECT_EMAIL);
+    const calendar = this.getCalendarApi(resolveMeetAuditSubjectEmail());
     const attendeeEventId = await this.resolveAuditCalendarEventId(
       calendar,
       input,
@@ -181,7 +181,7 @@ export class VentorMeetGoogleCalendarService {
       calendarId: 'primary',
       eventId: attendeeEventId,
     });
-    const auditEmail = MEET_AUDIT_SUBJECT_EMAIL.toLowerCase();
+    const auditEmail = resolveMeetAuditSubjectEmail().toLowerCase();
     const currentAttendees = existing.data.attendees ?? [];
     const attendees = currentAttendees.map((attendee) => {
       const email = attendee.email?.trim().toLowerCase() ?? '';
@@ -195,7 +195,7 @@ export class VentorMeetGoogleCalendarService {
     );
     if (!hasAudit) {
       attendees.push({
-        email: MEET_AUDIT_SUBJECT_EMAIL,
+        email: resolveMeetAuditSubjectEmail(),
         responseStatus: 'accepted',
       });
     }
@@ -210,7 +210,7 @@ export class VentorMeetGoogleCalendarService {
         (attendee) => attendee.email?.trim().toLowerCase() === auditEmail,
       )?.responseStatus ?? 'accepted';
     this.logger.log(
-      `Meet invite auto-agree success email=${MEET_AUDIT_SUBJECT_EMAIL} organizerEventId=${input.eventId} auditEventId=${attendeeEventId} responseStatus=${agreedStatus}`,
+      `Meet invite auto-agree success email=${resolveMeetAuditSubjectEmail()} organizerEventId=${input.eventId} auditEventId=${attendeeEventId} responseStatus=${agreedStatus}`,
     );
   }
 
@@ -251,7 +251,7 @@ export class VentorMeetGoogleCalendarService {
       }
     }
     const notFound = new Error(
-      `Not Found: invite not on ${MEET_AUDIT_SUBJECT_EMAIL} calendar yet`,
+      `Not Found: invite not on ${resolveMeetAuditSubjectEmail()} calendar yet`,
     ) as Error & { code: number };
     notFound.code = 404;
     throw notFound;

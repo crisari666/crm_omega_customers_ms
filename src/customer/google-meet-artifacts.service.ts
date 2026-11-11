@@ -5,14 +5,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { google } from 'googleapis';
-import * as fs from 'fs';
-import * as path from 'path';
 import { extractGoogleMeetingCode } from './utils/google-meet-call-log.util';
 import {
   MEET_AUDIT_MEETINGS_READONLY_SCOPE,
-  MEET_AUDIT_SA_RELATIVE_PATH,
-  MEET_AUDIT_SUBJECT_EMAIL,
+  resolveMeetAuditSubjectEmail,
 } from '../ventor-schedule/google-meet-audit.constants';
+import { loadMeetAuditServiceAccountCredentials } from '../ventor-schedule/load-meet-audit-credentials.util';
 import { formatTimedTranscriptFromUtterances } from './call-audit/utils/format-timed-transcript.util';
 import { parseMeetDriveTranscriptDocument } from './call-audit/utils/parse-meet-drive-transcript.util';
 
@@ -36,57 +34,12 @@ export type GoogleMeetTranscriptFetchResult = {
   transcriptDriveDocId?: string;
 };
 
-type ServiceAccountCredentials = {
-  clientEmail: string;
-  privateKey: string;
-};
-
 @Injectable()
 export class GoogleMeetArtifactsService {
   private readonly logger = new Logger(GoogleMeetArtifactsService.name);
 
-  private getServiceAccountCredentials(): ServiceAccountCredentials {
-    const keyPath = path.join(process.cwd(), MEET_AUDIT_SA_RELATIVE_PATH);
-    if (fs.existsSync(keyPath)) {
-      const parsed = JSON.parse(fs.readFileSync(keyPath, 'utf8')) as {
-        client_email?: string;
-        private_key?: string;
-      };
-      if (parsed.client_email && parsed.private_key) {
-        return {
-          clientEmail: parsed.client_email,
-          privateKey: parsed.private_key,
-        };
-      }
-    }
-    const envClientEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
-    const envPrivateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-    if (envClientEmail && envPrivateKey) {
-      return { clientEmail: envClientEmail, privateKey: envPrivateKey };
-    }
-    const envPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-    if (!envPath || !fs.existsSync(envPath)) {
-      throw new InternalServerErrorException(
-        `Google Meet SA credentials missing. Place ${MEET_AUDIT_SA_RELATIVE_PATH} at repo root.`,
-      );
-    }
-    const parsed = JSON.parse(fs.readFileSync(envPath, 'utf8')) as {
-      client_email?: string;
-      private_key?: string;
-    };
-    if (!parsed.client_email || !parsed.private_key) {
-      throw new InternalServerErrorException(
-        'Invalid Google credentials file for Meet transcript fetch.',
-      );
-    }
-    return {
-      clientEmail: parsed.client_email,
-      privateKey: parsed.private_key,
-    };
-  }
-
   private async getAccessToken(subjectEmail: string): Promise<string> {
-    const credentials = this.getServiceAccountCredentials();
+    const credentials = loadMeetAuditServiceAccountCredentials();
     const auth = new google.auth.JWT({
       email: credentials.clientEmail,
       key: credentials.privateKey,
@@ -145,7 +98,7 @@ export class GoogleMeetArtifactsService {
       throw new BadRequestException('Could not parse Google Meet meeting code');
     }
     const subject =
-      args.organizerEmail.trim() || MEET_AUDIT_SUBJECT_EMAIL;
+      args.organizerEmail.trim() || resolveMeetAuditSubjectEmail();
     const accessToken = await this.getAccessToken(subject);
     const filter = encodeURIComponent(`space.meeting_code="${meetingCode}"`);
     const listUrl = `https://meet.googleapis.com/v2/conferenceRecords?filter=${filter}`;

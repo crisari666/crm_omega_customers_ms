@@ -4,9 +4,9 @@ import {
   MEET_AUDIT_EVENT_TYPES,
   MEET_AUDIT_MEETINGS_READONLY_SCOPE,
   MEET_AUDIT_MEETINGS_SPACE_CREATED_SCOPE,
-  MEET_AUDIT_SUBJECT_EMAIL,
   MEET_AUDIT_SUBSCRIPTION_TTL_MS,
   resolveMeetAuditPubsubTopic,
+  resolveMeetAuditSubjectEmail,
 } from './google-meet-audit.constants';
 import { loadMeetAuditServiceAccountCredentials } from './load-meet-audit-credentials.util';
 import { resolveMeetSpaceResourceName } from './resolve-meet-space-name.util';
@@ -31,7 +31,7 @@ export class VentorMeetWorkspaceEventsService {
     organizerEmail?: string,
   ): Promise<CreateMeetSpaceSubscriptionResult> {
     const subject =
-      organizerEmail?.trim().toLowerCase() || MEET_AUDIT_SUBJECT_EMAIL;
+      organizerEmail?.trim().toLowerCase() || resolveMeetAuditSubjectEmail();
     const credentials = loadMeetAuditServiceAccountCredentials();
     const auth = new google.auth.JWT({
       email: credentials.clientEmail,

@@ -1,9 +1,27 @@
-/** Hardcoded Meet audit constants — no new env vars for credentials/subject. */
-export const MEET_AUDIT_SUBJECT_EMAIL = 'records@laceiba.group' as const;
+/** Default Laceiba Meet-audit invitee when `MEET_AUDIT_SUBJECT_EMAIL` is unset. */
+const MEET_AUDIT_SUBJECT_EMAIL_DEFAULT = 'records@laceiba.group' as const;
 
-/** Repo-root Firebase SA JSON used for Calendar / Meet / Workspace Events JWT. */
-export const MEET_AUDIT_SA_RELATIVE_PATH =
+/** Default Laceiba SA JSON at repo root when `MEET_AUDIT_SA_RELATIVE_PATH` is unset. */
+const MEET_AUDIT_SA_RELATIVE_PATH_DEFAULT =
   'la-ceiba-34945-firebase-adminsdk-fbsvc-b8fe807f1d.json' as const;
+
+/**
+ * Workspace user invited to every ventor Meet (auto-accept for recording ACL).
+ * Override per tenant with `MEET_AUDIT_SUBJECT_EMAIL` (e.g. records@gtower.cloud).
+ */
+export function resolveMeetAuditSubjectEmail(): string {
+  const fromEnv = (process.env.MEET_AUDIT_SUBJECT_EMAIL ?? '').trim();
+  return fromEnv || MEET_AUDIT_SUBJECT_EMAIL_DEFAULT;
+}
+
+/**
+ * Repo-relative (or absolute) path to Meet-audit SA JSON for Calendar / Meet / Workspace Events JWT.
+ * Override per tenant with `MEET_AUDIT_SA_RELATIVE_PATH` (e.g. gtower-app-cfa3750527b7.json).
+ */
+export function resolveMeetAuditSaRelativePath(): string {
+  const fromEnv = (process.env.MEET_AUDIT_SA_RELATIVE_PATH ?? '').trim();
+  return fromEnv || MEET_AUDIT_SA_RELATIVE_PATH_DEFAULT;
+}
 
 export const MEET_AUDIT_CALENDAR_SCOPE =
   'https://www.googleapis.com/auth/calendar' as const;
@@ -24,22 +42,25 @@ export const MEET_AUDIT_SUBSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Cloud Pub/Sub topic for Workspace Events (project matches SA JSON).
- * Ops must create this topic + push subscription to customers-ms webhook.
- * Resolved at call time so Nest `ConfigModule` / `.env` `IS_PROD` is available.
- * Local / non-prod (`IS_PROD` not `true`) uses the `-dev` suffix.
+ * Override with full topic resource name via `MEET_AUDIT_PUBSUB_TOPIC`.
+ * Otherwise uses `MEET_AUDIT_GCP_PROJECT` (default la-ceiba-34945) + omega-meet-artifacts(-dev).
  */
-const MEET_AUDIT_PUBSUB_TOPIC_BASE =
-  'projects/la-ceiba-34945/topics/omega-meet-artifacts' as const;
+const MEET_AUDIT_PUBSUB_TOPIC_NAME = 'omega-meet-artifacts' as const;
 
 /**
  * Returns the Workspace Events Pub/Sub topic for the current process env.
  */
 export function resolveMeetAuditPubsubTopic(): string {
+  const fromEnv = (process.env.MEET_AUDIT_PUBSUB_TOPIC ?? '').trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  const gcpProject =
+    (process.env.MEET_AUDIT_GCP_PROJECT ?? '').trim() || 'la-ceiba-34945';
+  const base = `projects/${gcpProject}/topics/${MEET_AUDIT_PUBSUB_TOPIC_NAME}`;
   const isMeetAuditProd: boolean =
     (process.env.IS_PROD ?? '').trim().toLowerCase() === 'true';
-  return isMeetAuditProd
-    ? MEET_AUDIT_PUBSUB_TOPIC_BASE
-    : `${MEET_AUDIT_PUBSUB_TOPIC_BASE}-dev`;
+  return isMeetAuditProd ? base : `${base}-dev`;
 }
 
 export const MEET_AUDIT_EVENT_TYPES = [
