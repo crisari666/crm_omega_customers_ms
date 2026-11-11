@@ -56,6 +56,7 @@ Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`, `{
 
 - `GET admin/customer/meta-lead-forms/stats` — form aggregates + `registeredAds` / `unregisteredAds`.
 - `admin/customer/meta-lead-forms/ad-campaigns` — ad→project CRUD.
+- `GET admin/customer/assignment-timeline` — ventor × time assignment events (`assignedAt` + `arrivedAt`, optional `flowStrategy`); UI on `/dashboard/leads`. See `assignment-timeline.md`.
 
 ## Gateway
 
