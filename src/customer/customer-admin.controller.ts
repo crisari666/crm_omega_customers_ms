@@ -21,7 +21,9 @@ import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 import { CustomerAdminImportService } from './customer-admin-import.service';
 import { ImportCustomersAdminDto } from './dto/import-customers-admin.dto';
 import { CustomerAssignmentAuditService } from './customer-assignment-audit.service';
+import { CustomerAssignmentTimelineService } from './customer-assignment-timeline.service';
 import { ListCustomerAssignmentChangesQueryDto } from './dto/list-customer-assignment-changes.query.dto';
+import { ListAssignmentTimelineQueryDto } from './dto/list-assignment-timeline-query.dto';
 import { CallAuditLlmConfigService } from './call-audit/call-audit-llm-config.service';
 import { CustomerCallAuditService } from './call-audit/customer-call-audit.service';
 import { ListCallAuditAiReviewQueryDto } from './call-audit/dto/list-call-audit-ai-review.query.dto';
@@ -44,6 +46,7 @@ export class CustomerAdminController {
     private readonly customerAdminImportService: CustomerAdminImportService,
     private readonly customerMetaLeadgenService: CustomerMetaLeadgenService,
     private readonly customerAssignmentAuditService: CustomerAssignmentAuditService,
+    private readonly customerAssignmentTimelineService: CustomerAssignmentTimelineService,
     private readonly callAuditLlmConfigService: CallAuditLlmConfigService,
     private readonly customerCallAuditService: CustomerCallAuditService,
   ) {}
@@ -147,6 +150,12 @@ export class CustomerAdminController {
     @Query() query: ListCustomerAssignmentChangesQueryDto,
   ) {
     return this.customerAssignmentAuditService.listAdmin(query);
+  }
+
+  /** Ventor × time assignment timeline (Meta form + lead-conversation assigns). */
+  @Get('assignment-timeline')
+  listCustomerAssignmentTimeline(@Query() query: ListAssignmentTimelineQueryDto) {
+    return this.customerAssignmentTimelineService.listTimeline(query);
   }
 
   @Post('import')
