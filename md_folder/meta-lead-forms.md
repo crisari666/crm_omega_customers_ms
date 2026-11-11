@@ -11,16 +11,16 @@ Admin registry (`meta_lead_forms`) maps Meta Lead Ads **formId** / **formName** 
 
 If no enabled registry row matches: **hardcoded safety net** still runs for `datos_clientes*` / `formulario_asado*`. Other names skip assign (campaign saved with skip note). Legacy campaigns may omit `flowStrategy`; bot still keeps any existing `assignedTo`.
 
-## Ad → project registry
+## Campaign → project registry
 
-Collection `meta_lead_ad_campaigns` maps Meta **`adId`** → RAG `projectId` (optional `adName`, `campaignId`, `campaignName`, `projectTitle`, `enabled`).
+Collection `meta_lead_ad_campaigns` maps Meta **`campaignId`** → RAG `projectId` (required `campaignName`; optional `adId` / `adName` metadata; `projectTitle`, `enabled`).
 
-- Gateway Graph leadgen already returns `ad_id`; ad Graph fetch adds `adName` / `campaignId` onto the ingest envelope (`graph.adId`, `graph.adName`, `graph.campaignId`, `graph.campaignName`).
+- Gateway Graph leadgen returns `campaign_id`; ad Graph fetch can also supply `campaignId` / `adName`. Envelope uses `adMeta.campaignId` else lead `campaign_id` (`graph.campaignId`, `mappedFields.campaign_id`).
 - Campaign row stores `graphAdId`, `graphAdName`, `graphCampaignId`, `graphCampaignName`.
-- On customer upsert, enabled ad registry match seeds `customer.interestedProjects` and stamps `meta_lead_campaigns.resolvedProjectId`.
-- Instant Form WhatsApp inbound uses this mapping to send **project intro** instead of ask-project (see `lead-conversation.md`).
+- On customer upsert, enabled **campaign** registry match seeds `customer.interestedProjects` and stamps `meta_lead_campaigns.resolvedProjectId`.
+- Instant Form WhatsApp inbound uses this mapping to send **project intro** instead of ask-project (see `lead-conversation.md`). All ads under one campaign share the same project mapping.
 
-Admin: `admin/customer/meta-lead-forms/ad-campaigns` CRUD (static routes on the forms controller, above `:id`, so Nest does not treat `ad-campaigns` as a form ObjectId). Stats include `registeredAds` / `unregisteredAds` (distinct `graphAdId` not in registry).
+Admin: `admin/customer/meta-lead-forms/ad-campaigns` CRUD (static routes on the forms controller, above `:id`, so Nest does not treat `ad-campaigns` as a form ObjectId). Stats include `registeredCampaigns` / `unregisteredCampaigns` (distinct `graphCampaignId` not in registry, each with nested ads).
 
 ## Delay setting
 
@@ -54,8 +54,8 @@ Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`, `{
 
 `admin/customer/meta-lead-forms` — list / get / create / patch / delete (JWT admin).
 
-- `GET admin/customer/meta-lead-forms/stats` — form aggregates + `registeredAds` / `unregisteredAds`.
-- `admin/customer/meta-lead-forms/ad-campaigns` — ad→project CRUD.
+- `GET admin/customer/meta-lead-forms/stats` — form aggregates + `registeredCampaigns` / `unregisteredCampaigns` (nested ads).
+- `admin/customer/meta-lead-forms/ad-campaigns` — campaign→project CRUD.
 - `GET admin/customer/assignment-timeline` — ventor × time assignment events (`assignedAt` + `arrivedAt`, optional `flowStrategy`); UI on `/dashboard/leads`. See `assignment-timeline.md`.
 
 ## Gateway
@@ -64,4 +64,4 @@ Indexes: `{ formId: 1, createdAt: -1 }`, `{ graphFormId: 1, createdAt: -1 }`, `{
 
 ## UI
 
-crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly). Form registry + ad→project section (list, unregistered ads with one-click register, project Autocomplete).
+crm_lots_agents → `/dashboard/meta-lead-forms` (ClientesV2, crmAdminOnly). Form registry + campaign→project section (campaign list with nested ads, unregistered campaigns with **Create campaign**, project Autocomplete).
