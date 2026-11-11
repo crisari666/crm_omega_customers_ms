@@ -8,7 +8,7 @@ import {
 import type { MetaLeadAdCampaignMatch } from './types/meta-lead-ad-campaign-match.type';
 
 /**
- * Resolves an enabled Meta Ad → RAG project registry row by ad id.
+ * Resolves an enabled Meta Campaign → RAG project registry row by campaign id.
  */
 @Injectable()
 export class MetaLeadAdCampaignLookupService {
@@ -17,15 +17,15 @@ export class MetaLeadAdCampaignLookupService {
     private readonly adCampaignModel: Model<MetaLeadAdCampaignDocument>,
   ) {}
 
-  async executeFindEnabledByAdId(
-    adId: string,
+  async executeFindEnabledByCampaignId(
+    campaignId: string,
   ): Promise<MetaLeadAdCampaignMatch | null> {
-    const trimmed = adId.trim();
+    const trimmed = campaignId.trim();
     if (trimmed.length === 0) {
       return null;
     }
     const row = await this.adCampaignModel
-      .findOne({ adId: trimmed, enabled: true })
+      .findOne({ campaignId: trimmed, enabled: true })
       .lean()
       .exec();
     if (row == null) {
@@ -33,8 +33,8 @@ export class MetaLeadAdCampaignLookupService {
     }
     return {
       id: String(row._id),
-      adId: row.adId,
-      adName: row.adName,
+      campaignId: row.campaignId,
+      campaignName: row.campaignName,
       projectId: row.projectId,
       projectTitle: row.projectTitle ?? '',
     };

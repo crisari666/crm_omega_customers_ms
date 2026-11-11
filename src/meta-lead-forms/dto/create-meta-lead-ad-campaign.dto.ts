@@ -3,19 +3,11 @@ import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 export class CreateMetaLeadAdCampaignDto {
   @IsString()
   @MinLength(1)
-  adId: string;
+  campaignId: string;
 
   @IsString()
   @MinLength(1)
-  adName: string;
-
-  @IsOptional()
-  @IsString()
-  campaignId?: string;
-
-  @IsOptional()
-  @IsString()
-  campaignName?: string;
+  campaignName: string;
 
   @IsString()
   @MinLength(1)
@@ -24,6 +16,14 @@ export class CreateMetaLeadAdCampaignDto {
   @IsOptional()
   @IsString()
   projectTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  adId?: string;
+
+  @IsOptional()
+  @IsString()
+  adName?: string;
 
   @IsOptional()
   @IsBoolean()

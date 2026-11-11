@@ -19,6 +19,6 @@ export type MetaLeadFormRegisteredStat = {
 export type MetaLeadFormStatsResponse = {
   readonly registered: readonly MetaLeadFormRegisteredStat[];
   readonly unregisteredForms: readonly MetaLeadFormCampaignGroup[];
-  readonly registeredAds: readonly MetaLeadAdCampaignRegisteredStat[];
-  readonly unregisteredAds: readonly MetaLeadAdCampaignGroup[];
+  readonly registeredCampaigns: readonly MetaLeadAdCampaignRegisteredStat[];
+  readonly unregisteredCampaigns: readonly MetaLeadAdCampaignGroup[];
 };

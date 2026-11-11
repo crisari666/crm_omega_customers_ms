@@ -237,8 +237,8 @@ export class MetaLeadFormsService {
     return {
       registered,
       unregisteredForms,
-      registeredAds: adStats.registeredAds,
-      unregisteredAds: adStats.unregisteredAds,
+      registeredCampaigns: adStats.registeredCampaigns,
+      unregisteredCampaigns: adStats.unregisteredCampaigns,
     };
   }
 

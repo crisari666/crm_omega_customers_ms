@@ -4,19 +4,11 @@ export class UpdateMetaLeadAdCampaignDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
-  adId?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  adName?: string;
-
-  @IsOptional()
-  @IsString()
   campaignId?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   campaignName?: string;
 
   @IsOptional()
@@ -27,6 +19,14 @@ export class UpdateMetaLeadAdCampaignDto {
   @IsOptional()
   @IsString()
   projectTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  adId?: string;
+
+  @IsOptional()
+  @IsString()
+  adName?: string;
 
   @IsOptional()
   @IsBoolean()
