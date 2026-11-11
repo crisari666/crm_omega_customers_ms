@@ -230,16 +230,24 @@ export class MetaLeadAdCampaignsService {
         ads,
       });
     }
-    const registeredIds = new Set(
-      registryRows.map((row) => row.campaignId.trim()),
-    );
+    const registeredIds = new Set<string>();
+    for (const row of registryRows) {
+      const campaignId = (row.campaignId ?? '').trim();
+      if (campaignId.length > 0) {
+        registeredIds.add(campaignId);
+      }
+    }
     const registeredCampaigns: MetaLeadAdCampaignRegisteredStat[] =
       registryRows.map((row) => {
-        const match = groupsByCampaignId.get(row.campaignId.trim());
+        const campaignId = (row.campaignId ?? '').trim();
+        const match =
+          campaignId.length > 0
+            ? groupsByCampaignId.get(campaignId)
+            : undefined;
         return {
           id: String(row._id),
-          campaignId: row.campaignId,
-          campaignName: row.campaignName,
+          campaignId,
+          campaignName: (row.campaignName ?? '').trim(),
           projectId: row.projectId,
           projectTitle: row.projectTitle ?? '',
           leadCount: match?.leadCount ?? 0,
@@ -259,8 +267,8 @@ export class MetaLeadAdCampaignsService {
 
   private mapListItem(row: {
     readonly _id: { toString(): string };
-    readonly campaignId: string;
-    readonly campaignName: string;
+    readonly campaignId?: string;
+    readonly campaignName?: string;
     readonly projectId: string;
     readonly projectTitle?: string;
     readonly adId?: string;
@@ -273,8 +281,8 @@ export class MetaLeadAdCampaignsService {
   }): MetaLeadAdCampaignListItem {
     return {
       id: String(row._id),
-      campaignId: row.campaignId,
-      campaignName: row.campaignName,
+      campaignId: (row.campaignId ?? '').trim(),
+      campaignName: (row.campaignName ?? '').trim(),
       projectId: row.projectId,
       projectTitle: row.projectTitle ?? '',
       adId: row.adId,
