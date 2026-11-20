@@ -90,6 +90,8 @@ export default (): {
     redisUrl: string;
     ragUrl: string;
     ragPublicUrl: string;
+    /** When set (`external`|`internal`), appended as `distribution` on the omega_rag catalog fetch. */
+    ragProjectsDistribution: string;
     openAiApiKey: string;
     llmModel: string;
     brand: string;
@@ -257,6 +259,13 @@ export default (): {
       redisUrl: trimEnv(process.env.REDIS_URL) || 'redis://localhost:6379',
       ragUrl: trimEnv(process.env.RAG_URL) || 'http://localhost:3000',
       ragPublicUrl: trimEnv(process.env.RAG_PUBLIC_URL) || '',
+      ragProjectsDistribution: (() => {
+        const raw = trimEnv(process.env.RAG_PROJECTS_DISTRIBUTION).toLowerCase();
+        if (raw === 'external' || raw === 'internal') {
+          return raw;
+        }
+        return '';
+      })(),
       openAiApiKey: trimEnv(process.env.OPENAI_API_KEY),
       llmModel: trimEnv(process.env.LEAD_CONVERSATION_LLM_MODEL) || 'deepseek-chat',
       brand: trimEnv(process.env.LEAD_CONVERSATION_BRAND) || 'La Ceiba',

@@ -55,8 +55,17 @@ export class ProjectCatalogService {
   /** Empty results are not cached so the next call retries omega_rag. */
   private async executeRefresh(): Promise<void> {
     const base = this.configService.get<string>('leadConversation.ragUrl', '').replace(/\/$/, '');
+    const distribution = this.configService
+      .get<string>('leadConversation.ragProjectsDistribution', '')
+      .trim()
+      .toLowerCase();
+    const distributionQuery =
+      distribution === 'external' || distribution === 'internal'
+        ? `&distribution=${distribution}`
+        : '';
+    const catalogUrl = `${base}/rag/projects?enable=true${distributionQuery}`;
     try {
-      const response = await fetch(`${base}/rag/projects?enable=true`);
+      const response = await fetch(catalogUrl);
       if (!response.ok) {
         this.logger.warn(`omega_rag projects HTTP ${response.status}`);
         return;
@@ -64,7 +73,7 @@ export class ProjectCatalogService {
       const rows = (await response.json()) as RagProjectRow[];
       const projects = (Array.isArray(rows) ? rows : []).map(mapRagProject).filter((row) => row.id && row.title);
       if (projects.length === 0) {
-        this.logger.warn(`omega_rag returned 0 enabled projects (${base}/rag/projects?enable=true)`);
+        this.logger.warn(`omega_rag returned 0 enabled projects (${catalogUrl})`);
         return;
       }
       this.projects = projects;

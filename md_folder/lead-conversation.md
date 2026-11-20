@@ -34,7 +34,7 @@ Invalid reply: retry up to `MAX_QUESTION_RETRIES=2`, then `abandoned`. Retries i
 - Race guard: unique partial index `uniq_pending_call_slot` `{userId, scheduledAt, eventType}` for pending calls; duplicate key → next free user (unassigned only); all taken → "slot taken" notice + fresh list. No slots in the period → back to `ask_schedule` with `noCallSlots`.
 - answers: `horarioLlamada` (period), `fechaLlamada` (ISO slot start). Metadata `scheduledCallAt`.
 
-Project detection: fuzzy match against cached omega_rag titles (`GET {RAG_URL}/rag/projects?enable=true`, 10-minute TTL), then OpenAI fallback (`LEAD_CONVERSATION_LLM_MODEL`).
+Project detection: fuzzy match against cached omega_rag titles (`GET {RAG_URL}/rag/projects?enable=true` plus optional `&distribution=` from `RAG_PROJECTS_DISTRIBUTION`=`external`|`internal`; GTower uses `external` so only CRM-marked partner projects are offered), 10-minute TTL, then OpenAI fallback (`LEAD_CONVERSATION_LLM_MODEL`).
 Options: buttons when ≤3, list otherwise. Replies match by reply id, then title, number or keyword.
 
 ## Persistence
