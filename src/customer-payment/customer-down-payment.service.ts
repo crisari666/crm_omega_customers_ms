@@ -36,8 +36,13 @@ import {
 } from './schemas/customer-payment-fee.schema';
 import type {
   CustomerDownPaymentResponse,
+  CustomerDownPaymentSalesReportResult,
   CustomerPaymentFeeResponse,
   ListCustomerDownPaymentsResult,
+  SalesReportByAgentItem,
+  SalesReportByDayItem,
+  SalesReportByProjectItem,
+  SalesReportSummary,
 } from './types/customer-down-payment.type';
 
 const DEFAULT_LIMIT = 50;
@@ -266,6 +271,206 @@ export class CustomerDownPaymentService {
     ]);
     const data = docs.map((doc) => this.mapDownPaymentToResponse(doc));
     return { data, total };
+  }
+
+  /**
+   * Admin sales report: aggregates over the filtered set plus paginated rows.
+   */
+  async getSalesReport(
+    query: ListCustomerDownPaymentsQueryDto,
+  ): Promise<CustomerDownPaymentSalesReportResult> {
+    const filter = this.buildListFilter(query);
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const skip = query.skip ?? 0;
+    type FacetResult = {
+      summary: Array<{
+        salesCount: number;
+        completedCount: number;
+        pendingCount: number;
+        totalExpected: number;
+        totalPaid: number;
+      }>;
+      byAgent: Array<{
+        _id: string;
+        salesCount: number;
+        completedCount: number;
+        totalExpected: number;
+        totalPaid: number;
+      }>;
+      byProject: Array<{
+        _id: string;
+        projectName?: string;
+        salesCount: number;
+        totalExpected: number;
+        totalPaid: number;
+      }>;
+      byDay: Array<{
+        _id: string;
+        salesCount: number;
+        totalExpected: number;
+        totalPaid: number;
+      }>;
+    };
+    const [facetRows, docs, total] = await Promise.all([
+      this.downPaymentModel
+        .aggregate<FacetResult>([
+          { $match: filter },
+          {
+            $facet: {
+              summary: [
+                {
+                  $group: {
+                    _id: null,
+                    salesCount: { $sum: 1 },
+                    completedCount: {
+                      $sum: {
+                        $cond: [
+                          {
+                            $eq: [
+                              '$status',
+                              CustomerDownPaymentStatus.Completed,
+                            ],
+                          },
+                          1,
+                          0,
+                        ],
+                      },
+                    },
+                    pendingCount: {
+                      $sum: {
+                        $cond: [
+                          {
+                            $eq: [
+                              '$status',
+                              CustomerDownPaymentStatus.Pending,
+                            ],
+                          },
+                          1,
+                          0,
+                        ],
+                      },
+                    },
+                    totalExpected: { $sum: '$expectedValue' },
+                    totalPaid: { $sum: '$totalPaid' },
+                  },
+                },
+              ],
+              byAgent: [
+                {
+                  $group: {
+                    _id: '$recordedBy',
+                    salesCount: { $sum: 1 },
+                    completedCount: {
+                      $sum: {
+                        $cond: [
+                          {
+                            $eq: [
+                              '$status',
+                              CustomerDownPaymentStatus.Completed,
+                            ],
+                          },
+                          1,
+                          0,
+                        ],
+                      },
+                    },
+                    totalExpected: { $sum: '$expectedValue' },
+                    totalPaid: { $sum: '$totalPaid' },
+                  },
+                },
+                { $sort: { salesCount: -1, totalPaid: -1 } },
+              ],
+              byProject: [
+                {
+                  $group: {
+                    _id: '$projectId',
+                    projectName: { $first: '$projectName' },
+                    salesCount: { $sum: 1 },
+                    totalExpected: { $sum: '$expectedValue' },
+                    totalPaid: { $sum: '$totalPaid' },
+                  },
+                },
+                { $sort: { salesCount: -1, totalPaid: -1 } },
+              ],
+              byDay: [
+                {
+                  $group: {
+                    _id: {
+                      $dateToString: {
+                        format: '%Y-%m-%d',
+                        date: '$createdAt',
+                      },
+                    },
+                    salesCount: { $sum: 1 },
+                    totalExpected: { $sum: '$expectedValue' },
+                    totalPaid: { $sum: '$totalPaid' },
+                  },
+                },
+                { $sort: { _id: 1 } },
+              ],
+            },
+          },
+        ])
+        .exec(),
+      this.downPaymentModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.downPaymentModel.countDocuments(filter).exec(),
+    ]);
+    const facet = facetRows[0];
+    const rawSummary = facet?.summary?.[0];
+    const salesCount = rawSummary?.salesCount ?? 0;
+    const completedCount = rawSummary?.completedCount ?? 0;
+    const totalExpected = rawSummary?.totalExpected ?? 0;
+    const totalPaid = rawSummary?.totalPaid ?? 0;
+    const totalRemaining = Math.max(totalExpected - totalPaid, 0);
+    const summary: SalesReportSummary = {
+      salesCount,
+      completedCount,
+      pendingCount: rawSummary?.pendingCount ?? 0,
+      totalExpected,
+      totalPaid,
+      totalRemaining,
+      completionRate:
+        salesCount > 0
+          ? Math.round((completedCount / salesCount) * 10000) / 100
+          : 0,
+    };
+    const byAgent: SalesReportByAgentItem[] = (facet?.byAgent ?? []).map(
+      (row) => ({
+        recordedBy: row._id,
+        salesCount: row.salesCount,
+        completedCount: row.completedCount,
+        totalExpected: row.totalExpected,
+        totalPaid: row.totalPaid,
+      }),
+    );
+    const byProject: SalesReportByProjectItem[] = (facet?.byProject ?? []).map(
+      (row) => ({
+        projectId: row._id,
+        projectName: row.projectName || undefined,
+        salesCount: row.salesCount,
+        totalExpected: row.totalExpected,
+        totalPaid: row.totalPaid,
+      }),
+    );
+    const byDay: SalesReportByDayItem[] = (facet?.byDay ?? []).map((row) => ({
+      date: row._id,
+      salesCount: row.salesCount,
+      totalExpected: row.totalExpected,
+      totalPaid: row.totalPaid,
+    }));
+    return {
+      summary,
+      byAgent,
+      byProject,
+      byDay,
+      rows: docs.map((doc) => this.mapDownPaymentToResponse(doc)),
+      total,
+    };
   }
 
   async listFeesForDownPayment(

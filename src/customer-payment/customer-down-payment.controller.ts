@@ -99,6 +99,18 @@ export class CustomerDownPaymentController {
     return this.downPaymentService.listDownPayments(query);
   }
 
+  /**
+   * Admin sales report with KPI summary and breakdowns.
+   */
+  @Get('sales-report')
+  async getSalesReport(
+    @Query() query: ListCustomerDownPaymentsQueryDto,
+    @JwtUser() jwtUser: OfficeJwtPayload | undefined,
+  ) {
+    assertOfficeAdmin(jwtUser);
+    return this.downPaymentService.getSalesReport(query);
+  }
+
   @Get('by-customer/:customerId')
   async listByCustomer(
     @Param('customerId') customerId: string,

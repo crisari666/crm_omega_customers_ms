@@ -1,5 +1,13 @@
 import type { CustomerDownPaymentStatus } from '../schemas/customer-down-payment.schema';
 
+export type {
+  CustomerDownPaymentSalesReportResult,
+  SalesReportByAgentItem,
+  SalesReportByDayItem,
+  SalesReportByProjectItem,
+  SalesReportSummary,
+} from './customer-down-payment-sales-report.type';
+
 export type CustomerPaymentFeeResponse = {
   id: string;
   downPaymentId: string;
