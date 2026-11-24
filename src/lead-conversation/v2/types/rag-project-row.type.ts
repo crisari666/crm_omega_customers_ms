@@ -9,6 +9,8 @@ export type RagProjectRow = {
   readonly city?: string;
   readonly state?: string;
   readonly priceSell?: number;
+  readonly separation?: number;
+  readonly maxInstallments?: number;
   readonly lotOptions?: readonly { area?: number; price?: number }[];
   readonly amenities?: readonly unknown[];
   readonly amenitiesGroups?: readonly unknown[];

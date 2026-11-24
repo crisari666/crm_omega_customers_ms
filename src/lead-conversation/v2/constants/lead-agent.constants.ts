@@ -66,7 +66,13 @@ export const LEAD_AGENT_MEDIA_KINDS: readonly LeadAgentMediaKind[] = ['video', '
 export const LEAD_AGENT_MOTIVATIONS = ['build', 'invest', 'leisure', 'exploring'] as const;
 export const LEAD_AGENT_EXPERIENCES = ['first_property', 'has_property'] as const;
 export const LEAD_AGENT_PAYMENT_METHODS = ['financed', 'cash'] as const;
-export const LEAD_AGENT_TIMELINES = ['within_3_months', 'later'] as const;
+export const LEAD_AGENT_TIMELINES = [
+  'immediate',
+  'within_30_days',
+  'within_3_months',
+  'future',
+  'not_now',
+] as const;
 export const LEAD_AGENT_CALL_PERIODS = ['morning', 'afternoon', 'night'] as const;
 
 export const LEAD_AGENT_MAX_REPLIES = 3 as const;
@@ -74,7 +80,7 @@ export const LEAD_AGENT_MAX_REPLY_CHARS = 600 as const;
 export const LEAD_AGENT_MAX_PROFILE_TEXT_CHARS = 200 as const;
 export const LEAD_AGENT_MAX_UNANSWERED_CHARS = 300 as const;
 export const LEAD_AGENT_LLM_TEMPERATURE = 0.6 as const;
-export const LEAD_AGENT_LLM_MAX_TOKENS = 700 as const;
+export const LEAD_AGENT_LLM_MAX_TOKENS = 1200 as const;
 export const LEAD_AGENT_BRIEF_TEMPERATURE = 0.3 as const;
 export const LEAD_AGENT_BRIEF_MAX_TOKENS = 250 as const;
 /** First attempt plus one retry. */
@@ -88,14 +94,23 @@ export const LEAD_AGENT_PROJECT_DESCRIPTION_MAX_CHARS = 1500 as const;
 /** Cache lifetime of the public lot counts of a project. */
 export const PROJECT_LOTS_TTL_MS = 5 * 60 * 1000;
 
+/** Default max monthly installments when omega_rag omits `maxInstallments`. */
+export const LEAD_FINANCING_DEFAULT_INSTALLMENTS = 36 as const;
+/** Round monthly payments up to this COP step (attractive round figures). */
+export const LEAD_FINANCING_ROUNDING_COP = 1000 as const;
+
 export const LEAD_AGENT_FALLBACK_REPLY =
   'Gracias por escribirnos. Para darte la información exacta prefiero que te la confirme uno de nuestros asesores en una llamada corta.' as const;
+/** @deprecated Prefer the interactive picker alone on LLM-null; kept for docs/legacy references. */
 export const LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY =
   'Para orientarte bien, ¿qué proyecto te interesa? Puedes decirme el nombre y te ayudo con eso.' as const;
 export const LEAD_AGENT_FALLBACK_ASK_MOTIVATION_REPLY =
   'Para enviarte solo lo que te sirva: ¿lo estás mirando para construir, como inversión, o solo estás explorando?' as const;
 export const LEAD_AGENT_FALLBACK_EXPLORING_REPLY =
   'Perfecto, sin compromiso. Cuando quieras te cuento más del proyecto o de las formas de pago; dime qué te gustaría saber.' as const;
+/** LLM-null with buyer motivation: stay in chat; do not dump the call schedule. */
+export const LEAD_AGENT_FALLBACK_BUYER_CONTINUE_REPLY =
+  'Listo, gracias por contarme. ¿Qué te gustaría saber del proyecto? Puedo ayudarte con ubicación, planos o formas de pago.' as const;
 export const LEAD_AGENT_OPT_OUT_REPLY =
   'Entendido, no te escribiremos más. Si más adelante quieres retomar, aquí estaremos.' as const;
 export const LEAD_AGENT_LLM_CONTENT_LOG_CHARS = 200 as const;

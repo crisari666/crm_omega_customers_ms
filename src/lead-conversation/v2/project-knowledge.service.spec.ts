@@ -79,6 +79,15 @@ describe('ProjectKnowledgeService', () => {
         { area: 400, price: 95000000 },
         { area: 300, price: 85000000 },
       ],
+      financing: {
+        separation: 0,
+        installments: 36,
+        minMonthlyPayment: 2_362_000,
+        plans: [
+          { area: 300, price: 85_000_000, monthlyPayment: 2_362_000 },
+          { area: 400, price: 95_000_000, monthlyPayment: 2_639_000 },
+        ],
+      },
       amenitiesGroups: [{ title: 'Servicios', items: ['Agua', 'Luz'] }],
       planeUrl: 'https://rag.public/rag/uploads/projects/plane.pdf',
       brochureUrl: 'https://rag.public/rag/uploads/projects/brochure%20file.pdf',

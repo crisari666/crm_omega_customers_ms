@@ -1,5 +1,6 @@
 import type { LeadProjectLotOption } from '../../types/lead-project.type';
 import type { ProjectAmenityGroupKnowledge } from './project-amenity-group-knowledge.type';
+import type { ProjectFinancingKnowledge } from './project-financing-knowledge.type';
 import type { ProjectLotCountsKnowledge } from './project-lot-counts-knowledge.type';
 
 /**
@@ -17,6 +18,8 @@ export type ProjectKnowledge = {
   readonly priceSell?: number;
   readonly lotOptions: readonly LeadProjectLotOption[];
   readonly amenitiesGroups: readonly ProjectAmenityGroupKnowledge[];
+  /** Pre-computed monthly installments; absent when no lot qualifies. */
+  readonly financing?: ProjectFinancingKnowledge;
   /** Real lot counts; absent when omega_rag lots are unreachable (never invented). */
   readonly lotCounts?: ProjectLotCountsKnowledge;
   readonly planeUrl?: string;

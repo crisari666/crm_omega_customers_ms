@@ -1,6 +1,7 @@
 import type { LeadProjectLotOption } from '../../types/lead-project.type';
 import type { ProjectKnowledge } from '../types/project-knowledge.type';
 import type { RagProjectRow } from '../types/rag-project-row.type';
+import { buildProjectFinancing } from './build-project-financing.util';
 import { mapRagAmenities } from './map-rag-amenities.util';
 
 type RagProjectMedia = {
@@ -28,6 +29,12 @@ export function mapRagProject(row: RagProjectRow, media: RagProjectMedia): Proje
   const id = String(row._id ?? row.id ?? '').trim();
   const title = toText(row.title);
   if (id.length === 0 || title.length === 0) return null;
+  const lotOptions = mapLotOptions(row.lotOptions);
+  const financing = buildProjectFinancing({
+    lotOptions: row.lotOptions,
+    separation: typeof row.separation === 'number' ? row.separation : undefined,
+    maxInstallments: typeof row.maxInstallments === 'number' ? row.maxInstallments : undefined,
+  });
   return withDefined({
     id,
     title,
@@ -37,8 +44,9 @@ export function mapRagProject(row: RagProjectRow, media: RagProjectMedia): Proje
     city: toText(row.city),
     state: toText(row.state),
     priceSell: typeof row.priceSell === 'number' ? row.priceSell : undefined,
-    lotOptions: mapLotOptions(row.lotOptions),
+    lotOptions,
     amenitiesGroups: mapRagAmenities(row),
+    financing,
     planeUrl: media.planeUrl,
     brochureUrl: media.brochureUrl,
     videoUrl: media.videoUrl,
