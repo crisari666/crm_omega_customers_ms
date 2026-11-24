@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
+import { LeadAssistantSettingsService } from '../lead-assistant/lead-assistant-settings.service';
 import { LeadRecoveryScheduler } from '../lead-assistant/lead-recovery.scheduler';
 import { CUSTOMER_SERVICE_WINDOW_MS, MAX_SCORE, MAX_SCORE_V2 } from './constants/lead-conversation.constants';
 import type { ListLeadConversationsQueryDto } from './dto/list-lead-conversations-query.dto';
@@ -48,6 +49,7 @@ export class LeadConversationAdminService {
     private readonly transitions: LeadFlowTransitionsService,
     private readonly dispatcher: LeadMessageDispatcherService,
     private readonly recoveryScheduler: LeadRecoveryScheduler,
+    private readonly settingsService: LeadAssistantSettingsService,
   ) {}
 
   async listSessions(query: ListLeadConversationsQueryDto): Promise<LeadConversationAdminListPage> {
@@ -77,12 +79,15 @@ export class LeadConversationAdminService {
   }
 
   /**
-   * Resets answers/score and re-sends the welcome + project list when Meta's 24h window is open;
-   * otherwise only resets, so the flow restarts on the next customer message.
+   * When the lead assistant is enabled (or the session is already V2): reset to a clean V2 conversation
+   * and wait for the next customer message (no project list).
+   * When the assistant is disabled: V1 reset; re-sends welcome + project list inside Meta's 24h window.
    */
   async restartSession(sessionId: string): Promise<LeadConversationRestartResult> {
     const session = await this.findSessionOrThrow(sessionId);
     if (session.flowVersion === 'v2') return this.restartAgentSession(session);
+    const settings = await this.settingsService.executeGetOrCreate();
+    if (settings.enabled) return this.restartAgentSession(session);
     await this.reminderScheduler.executeCancel(sessionId);
     const canSend = isInsideCustomerServiceWindow(session.lastInboundAt);
     const transition = canSend ? await this.transitions.buildAskProject(session) : undefined;
@@ -104,7 +109,7 @@ export class LeadConversationAdminService {
     return { restarted: true, sent: true };
   }
 
-  /** V2 restart: clean agent conversation that waits for the customer (templates only work inside the 24h window). */
+  /** Clean V2 conversation that waits for the customer (no outbound; templates only work inside the 24h window). */
   private async restartAgentSession(session: LeadSessionSnapshot): Promise<LeadConversationRestartResult> {
     const sessionId = String(session._id);
     await this.reminderScheduler.executeCancel(sessionId);

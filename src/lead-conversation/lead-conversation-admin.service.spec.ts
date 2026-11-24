@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Customer } from '../customer/schemas/customer.schema';
+import { LeadAssistantSettingsService } from '../lead-assistant/lead-assistant-settings.service';
 import { LeadConversationAdminService } from './lead-conversation-admin.service';
 import { LeadFlowTransitionsService } from './lead-flow-transitions.service';
 import { LeadMessageDispatcherService } from './lead-message-dispatcher.service';
@@ -44,12 +45,16 @@ describe('LeadConversationAdminService', () => {
       expectsReply: true,
     } as StepTransition),
   };
+  const mockSettings = {
+    executeGetOrCreate: jest.fn().mockResolvedValue({ enabled: false, defaultInboundFlow: 'v1' }),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     mockSessionModel.updateOne.mockReturnValue(execResult({}));
     mockSessionModel.deleteOne.mockReturnValue(execResult({}));
     mockMessageModel.deleteMany.mockReturnValue(execResult({}));
+    mockSettings.executeGetOrCreate.mockResolvedValue({ enabled: false, defaultInboundFlow: 'v1' });
     const moduleRef = await Test.createTestingModule({
       providers: [
         LeadConversationAdminService,
@@ -60,6 +65,7 @@ describe('LeadConversationAdminService', () => {
         { provide: LeadRecoveryScheduler, useValue: mockRecovery },
         { provide: LeadFlowTransitionsService, useValue: mockTransitions },
         { provide: LeadMessageDispatcherService, useValue: mockDispatcher },
+        { provide: LeadAssistantSettingsService, useValue: mockSettings },
       ],
     }).compile();
     service = moduleRef.get(LeadConversationAdminService);
@@ -80,7 +86,7 @@ describe('LeadConversationAdminService', () => {
     await expect(service.deleteSession(String(mockSessionId))).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('Given a recent inbound, When restarted, Then answers reset to ask_project and the welcome list is sent', async () => {
+  it('Given a recent inbound and assistant disabled, When restarted, Then answers reset to ask_project and the welcome list is sent', async () => {
     mockSessionModel.findById.mockReturnValue(leanResult(mockSession));
     const actual = await service.restartSession(String(mockSessionId));
     expect(actual).toEqual({ restarted: true, sent: true });
@@ -92,13 +98,35 @@ describe('LeadConversationAdminService', () => {
     );
   });
 
-  it('Given the last inbound is older than 24h, When restarted, Then it only resets to initial without sending', async () => {
+  it('Given the last inbound is older than 24h and assistant disabled, When restarted, Then it only resets to initial without sending', async () => {
     const expectedStaleInbound = new Date(Date.now() - 25 * HOUR_MS);
     mockSessionModel.findById.mockReturnValue(leanResult({ ...mockSession, lastInboundAt: expectedStaleInbound }));
     const actual = await service.restartSession(String(mockSessionId));
     expect(actual).toEqual({ restarted: true, sent: false, reason: 'outside_customer_service_window' });
     expect(mockSessionModel.updateOne.mock.calls[0][1].$set.step).toBe(LeadConversationStep.Initial);
     expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
+  });
+
+  it('Given a V1 session and assistant enabled, When restarted, Then it converts to V2 without sending the project list', async () => {
+    mockSettings.executeGetOrCreate.mockResolvedValue({ enabled: true, defaultInboundFlow: 'v1' });
+    const mockLastInboundId = new Types.ObjectId();
+    mockSessionModel.findById.mockReturnValue(leanResult(mockSession));
+    mockMessageModel.findOne.mockReturnValue({
+      sort: () => ({ select: () => leanResult({ _id: mockLastInboundId }) }),
+    });
+    const actual = await service.restartSession(String(mockSessionId));
+    expect(actual).toEqual({ restarted: true, sent: false, reason: 'v2_waits_for_customer' });
+    expect(mockRecovery.executeCancel).toHaveBeenCalledWith(String(mockSessionId));
+    const [, update] = mockSessionModel.updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      flowVersion: 'v2',
+      step: LeadConversationStep.V2Conversation,
+      status: 'active',
+      score: 0,
+      lastTurnMessageId: String(mockLastInboundId),
+    });
+    expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskProject).not.toHaveBeenCalled();
   });
 
   it('Given a V2 session, When restarted, Then it resets to a clean V2 conversation, cancels recovery and sends nothing', async () => {
@@ -125,5 +153,6 @@ describe('LeadConversationAdminService', () => {
     expect(update.$unset).toHaveProperty('projectTitle');
     expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
     expect(mockTransitions.buildAskProject).not.toHaveBeenCalled();
+    expect(mockSettings.executeGetOrCreate).not.toHaveBeenCalled();
   });
 });
