@@ -12,6 +12,13 @@ export const LEAD_REPLY_DEBOUNCE_MIN_SECONDS = 0 as const;
 export const LEAD_REPLY_DEBOUNCE_MAX_SECONDS = 15 as const;
 /** Maximum number of FAQs handed to the agent per turn. */
 export const LEAD_FAQ_RESOLVE_CAP = 60 as const;
+/**
+ * Minimum {@link scoreLeadFaqMatch} score to answer a FAQ when the LLM fails
+ * (token/stem overlap band; full containment is >= 1000).
+ */
+export const LEAD_FAQ_FALLBACK_MIN_SCORE = 200 as const;
+/** Min shared prefix length for stem-style FAQ token hits (e.g. escrituras ~ escrituracion). */
+export const LEAD_FAQ_STEM_MIN_CHARS = 5 as const;
 /** In-memory cache lifetime of the approved templates list. */
 export const LEAD_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
 export const LEAD_RECOVERY_MIN_OFFSET_HOURS = 1 as const;
