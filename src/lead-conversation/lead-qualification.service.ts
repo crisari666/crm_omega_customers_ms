@@ -50,9 +50,23 @@ export class LeadQualificationService {
   private buildAgentValues(session: LeadSessionSnapshot): Record<string, string> {
     if (session.flowVersion !== 'v2') return {};
     const profile = session.leadProfile ?? {};
+    const buyMotive =
+      profile.motivation === 'build' || profile.motivation === 'leisure'
+        ? 'live'
+        : profile.motivation === 'invest'
+          ? 'invest'
+          : undefined;
+    const paymentMethod =
+      profile.paymentMethod === 'cash'
+        ? 'cash'
+        : profile.paymentMethod === 'financed'
+          ? 'financing'
+          : undefined;
     return {
       ...(profile.motivation ? { motivation: profile.motivation } : {}),
-      ...(profile.timeline ? { purchaseTimeline: profile.timeline } : {}),
+      ...(buyMotive ? { buyMotive } : {}),
+      ...(profile.timeline ? { purchaseTimeline: profile.timeline, timeToBuy: profile.timeline } : {}),
+      ...(paymentMethod ? { paymentMethod } : {}),
       ...(profile.budget ? { budget: profile.budget } : {}),
       ...(profile.mainObjection ? { mainObjection: profile.mainObjection } : {}),
       ...(session.temperature ? { leadTemperature: session.temperature } : {}),

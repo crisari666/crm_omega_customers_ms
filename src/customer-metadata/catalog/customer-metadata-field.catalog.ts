@@ -43,10 +43,10 @@ export const CUSTOMER_METADATA_FIELD_CATALOG: readonly CustomerMetadataFieldDefi
       required: true,
       optionCodes: [
         'immediate',
-        '1_3_months',
-        '3_6_months',
-        '6_12_months',
-        'over_1_year',
+        'within_30_days',
+        'within_3_months',
+        'future',
+        'not_now',
       ],
     },
     {

@@ -8,4 +8,5 @@ export type LeadAgentSideEffectsInput = {
   readonly transition: StepTransition;
   readonly usedFaqIds?: readonly string[];
   readonly unansweredQuestion?: string;
+  readonly capturePatch?: Readonly<Record<string, string>>;
 };

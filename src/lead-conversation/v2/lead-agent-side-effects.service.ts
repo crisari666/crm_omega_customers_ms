@@ -15,6 +15,7 @@ import { LeadCustomerService } from '../lead-customer.service';
 import { LeadMessageDispatcherService } from '../lead-message-dispatcher.service';
 import { LeadQualificationService } from '../lead-qualification.service';
 import { LeadAgentLlmService } from './lead-agent-llm.service';
+import { LeadCaptureSyncService } from './lead-capture-sync.service';
 import type { LeadAgentBriefInput } from './types/lead-agent-brief-input.type';
 import type { LeadAgentSideEffectsInput } from './types/lead-agent-side-effects-input.type';
 import { buildLeadAgentBriefFallback } from './utils/build-lead-agent-brief-fallback.util';
@@ -32,6 +33,7 @@ export class LeadAgentSideEffectsService {
     private readonly configService: ConfigService,
     private readonly leadCustomer: LeadCustomerService,
     private readonly qualification: LeadQualificationService,
+    private readonly captureSync: LeadCaptureSyncService,
     private readonly dispatcher: LeadMessageDispatcherService,
     private readonly faqResolver: LeadFaqResolverService,
     private readonly unansweredQuestions: LeadUnansweredQuestionsService,
@@ -53,6 +55,14 @@ export class LeadAgentSideEffectsService {
     }
     if (transition.shouldQualify) {
       await this.executeSafely('qualification', () => this.qualification.executeQualify(session));
+    }
+    if (input.capturePatch && Object.keys(input.capturePatch).length > 0) {
+      await this.executeSafely('capture sync', () =>
+        this.captureSync.executeUpsertPatch({
+          customerId: String(session.customerId),
+          patch: { ...input.capturePatch },
+        }),
+      );
     }
     await this.dispatcher.executeDispatch({
       sessionId: String(session._id),

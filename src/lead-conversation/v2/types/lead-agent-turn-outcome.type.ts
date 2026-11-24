@@ -6,4 +6,6 @@ export type LeadAgentTurnOutcome = {
   readonly transition: StepTransition;
   readonly usedFaqIds: readonly string[];
   readonly unansweredQuestion?: string;
+  /** Incremental Stage-3 capture values for side-effect upsert. */
+  readonly capturePatch?: Readonly<Record<string, string>>;
 };

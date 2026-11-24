@@ -21,8 +21,11 @@ export const LEAD_PAYMENT_LABELS: ProfileLabels<'paymentMethod'> = {
 };
 
 export const LEAD_TIMELINE_LABELS: ProfileLabels<'timeline'> = {
-  within_3_months: 'En los próximos 3 meses',
-  later: 'Más adelante',
+  immediate: 'Compra inmediata',
+  within_30_days: 'Compra en 30 días',
+  within_3_months: 'Compra en 3 meses',
+  future: 'Compra futura',
+  not_now: 'No comprar ahora',
 };
 
 export const LEAD_TEMPERATURE_LABELS: Readonly<Record<'hot' | 'warm' | 'cold', string>> = {
