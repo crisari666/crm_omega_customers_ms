@@ -83,39 +83,44 @@ describe('LeadFlowResolverService', () => {
     expect(update.$inc).toEqual({ version: 1 });
   });
 
-  it('Given a fresh session and a v1 campaign strategy, When resolved, Then it stays v1 even if v2 is the default', async () => {
+  it('Given a fresh session, enabled assistant and a v1 campaign, When resolved, Then it converts to v2', async () => {
     const inputSession = buildSession();
+    const mockConverted = buildSession({ ...inputSession, flowVersion: 'v2', step: LeadConversationStep.V2Conversation });
     const { resolver, mockSessionModel } = buildResolver({
-      campaign: { flowStrategy: 'lead_conversation' },
-      settings: { defaultInboundFlow: 'v2' },
+      campaign: { flowStrategy: 'lead_conversation', formId: 'form-v1' },
+      settings: { defaultInboundFlow: 'v1' },
+      converted: mockConverted,
     });
     const actual = await resolver.executeResolve(inputSession);
-    expect(actual.flowVersion).toBe('v1');
-    expect(mockSessionModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(actual).toEqual({ flowVersion: 'v2', session: mockConverted });
+    expect(mockSessionModel.findOneAndUpdate).toHaveBeenCalled();
+    expect(mockSessionModel.findOneAndUpdate.mock.calls[0][1].$set).toMatchObject({
+      flowVersion: 'v2',
+      formId: 'form-v1',
+    });
   });
 
-  it.each([
-    ['v2', 'v2'],
-    ['v1', 'v1'],
-  ])('Given no campaign row and default flow %s, When resolved, Then the flow is %s', async (defaultInboundFlow, expectedFlow) => {
+  it('Given no campaign row and the assistant enabled, When resolved, Then it converts to v2', async () => {
     const inputSession = buildSession();
+    const mockConverted = buildSession({ flowVersion: 'v2' });
     const { resolver } = buildResolver({
       campaign: null,
-      settings: { defaultInboundFlow },
-      converted: buildSession({ flowVersion: 'v2' }),
+      settings: { defaultInboundFlow: 'v1' },
+      converted: mockConverted,
     });
     const actual = await resolver.executeResolve(inputSession);
-    expect(actual.flowVersion).toBe(expectedFlow);
+    expect(actual.flowVersion).toBe('v2');
   });
 
-  it('Given a v2 target but the assistant disabled, When resolved, Then it falls back to v1 untouched', async () => {
+  it('Given a fresh session but the assistant disabled, When resolved, Then it stays v1 untouched', async () => {
     const inputSession = buildSession();
-    const { resolver, mockSessionModel } = buildResolver({
+    const { resolver, mockSessionModel, mockCampaignModel } = buildResolver({
       campaign: { flowStrategy: 'lead_conversation_v2' },
       settings: { enabled: false },
     });
     const actual = await resolver.executeResolve(inputSession);
     expect(actual).toEqual({ flowVersion: 'v1', session: inputSession });
+    expect(mockCampaignModel.findOne).not.toHaveBeenCalled();
     expect(mockSessionModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 

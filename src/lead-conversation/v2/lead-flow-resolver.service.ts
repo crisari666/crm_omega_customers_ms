@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { LeadAssistantSettingsService } from '../../lead-assistant/lead-assistant-settings.service';
-import type { LeadAssistantSettingsView } from '../../lead-assistant/types/lead-assistant-settings-view.type';
 import { MetaLeadCampaign, MetaLeadCampaignDocument } from '../../customer/schemas/meta-lead-campaign.schema';
 import { LeadConversationSessionService, type LeadSessionSnapshot } from '../lead-conversation-session.service';
 import {
@@ -10,15 +9,12 @@ import {
   LeadConversationSessionDocument,
 } from '../schemas/lead-conversation-session.schema';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
-import type { LeadFlowVersion } from '../types/lead-flow-version.type';
 import type { LeadFlowResolution } from './types/lead-flow-resolution.type';
-
-const V2_FLOW_STRATEGY = 'lead_conversation_v2' as const;
 
 /**
  * Decides which flow answers an inbound message. Sessions already on V2 stay on V2; only a brand-new session
- * (step `initial`, nothing asked yet) can be converted, driven by the newest campaign strategy of its customer.
- * Every other session keeps the V1 behavior untouched.
+ * (step `initial`, nothing asked yet) can be converted. When the lead assistant is enabled, fresh sessions
+ * always become V2 (including after admin delete). Mid-flight V1 sessions stay V1 until admin restart.
  */
 @Injectable()
 export class LeadFlowResolverService {
@@ -35,10 +31,9 @@ export class LeadFlowResolverService {
   async executeResolve(session: LeadSessionSnapshot): Promise<LeadFlowResolution> {
     if (session.flowVersion === 'v2') return { flowVersion: 'v2', session };
     if (!this.isFreshSession(session)) return { flowVersion: 'v1', session };
-    const campaign = await this.findNewestStrategyCampaign(session);
     const settings = await this.settingsService.executeGetOrCreate();
-    const target = this.resolveTargetFlow(campaign?.flowStrategy, settings);
-    if (target !== 'v2' || !settings.enabled) return { flowVersion: 'v1', session };
+    if (!settings.enabled) return { flowVersion: 'v1', session };
+    const campaign = await this.findNewestStrategyCampaign(session);
     return this.convertToV2(session, campaign?.formId ?? campaign?.graphFormId);
   }
 
@@ -55,14 +50,6 @@ export class LeadFlowResolverService {
       .select({ flowStrategy: 1, formId: 1, graphFormId: 1 })
       .lean()
       .exec();
-  }
-
-  private resolveTargetFlow(
-    flowStrategy: MetaLeadCampaign['flowStrategy'] | undefined,
-    settings: LeadAssistantSettingsView,
-  ): LeadFlowVersion {
-    if (flowStrategy === undefined || flowStrategy === null) return settings.defaultInboundFlow;
-    return flowStrategy === V2_FLOW_STRATEGY ? 'v2' : 'v1';
   }
 
   private async convertToV2(session: LeadSessionSnapshot, formId?: string): Promise<LeadFlowResolution> {
