@@ -1,10 +1,11 @@
 import { Types } from 'mongoose';
 import { LEAD_AGENT_REPLY_GAP_MS } from '../constants/lead-conversation.constants';
+import { LEAD_TEMPLATES } from '../templates/lead-conversation.templates';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
 import type { StepTransition } from '../types/step-transition.type';
 import {
   LEAD_AGENT_FALLBACK_ASK_MOTIVATION_REPLY,
-  LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY,
+  LEAD_AGENT_FALLBACK_BUYER_CONTINUE_REPLY,
   LEAD_AGENT_FALLBACK_EXPLORING_REPLY,
   LEAD_AGENT_FALLBACK_REPLY,
   LEAD_AGENT_OPT_OUT_REPLY,
@@ -21,16 +22,28 @@ import type { ProjectKnowledge } from './types/project-knowledge.type';
 const mockProject: ProjectKnowledge = {
   id: 'p1',
   title: 'Valle del Sol',
-  shortDescription: 'Lotes campestres',
+  shortDescription: 'Lotes campestres en Carmen de Apicalá con construcción libre.',
   description: 'Descripción',
   location: 'Tolima',
   city: 'Carmen',
   state: 'Tolima',
-  lotOptions: [],
+  lotOptions: [
+    { area: 300, price: 51_000_000 },
+    { area: 500, price: 68_000_000 },
+  ],
   amenitiesGroups: [],
   planeUrl: 'https://rag.test/plane.pdf',
   videoUrl: 'https://rag.test/video.mp4',
   brochureUrl: 'https://rag.test/brochure.pdf',
+  financing: {
+    separation: 500_000,
+    installments: 36,
+    minMonthlyPayment: 1_403_000,
+    plans: [
+      { area: 300, price: 51_000_000, monthlyPayment: 1_403_000 },
+      { area: 500, price: 68_000_000, monthlyPayment: 1_875_000 },
+    ],
+  },
 };
 
 const mockSettings = {
@@ -68,7 +81,7 @@ const buildSession = (overrides: Partial<LeadAgentSessionView> = {}): LeadAgentS
 
 const buildInput = (session: LeadAgentSessionView = buildSession()): LeadAgentTurnInput => ({
   session,
-  history: [],
+  history: [{ direction: 'inbound', body: 'Hola, ya habíamos escrito' }],
   pendingMessages: [{ text: 'Hola' }],
 });
 
@@ -90,7 +103,7 @@ const mockProjectPicker: StepTransition = {
   outbound: [
     {
       kind: 'list',
-      body: '¿Cuál proyecto te interesa?',
+      body: '¡Con mucho gusto te comparto información! Tenemos diferentes proyectos y quisiera orientarte sobre el que más te interese. ¿Cuál te gustaría conocer?',
       options: [
         { id: 'project:p1', title: '🏡 Valle del Sol' },
         { id: 'project:all', title: '✨ Me interesan todos' },
@@ -112,7 +125,10 @@ const buildAskMotivationTransition = (body: string): StepTransition => ({
   expectsReply: true,
 });
 
-const buildEngine = (turn: LeadAgentLlmTurn | null) => {
+const buildEngine = (
+  turn: LeadAgentLlmTurn | null,
+  settings: Partial<typeof mockSettings> = {},
+) => {
   const mockLlm = { executeTurn: jest.fn().mockResolvedValue(turn) };
   const mockKnowledge = {
     executeGetById: jest.fn().mockImplementation(async (id: string) => (id === 'p1' ? mockProject : undefined)),
@@ -125,6 +141,82 @@ const buildEngine = (turn: LeadAgentLlmTurn | null) => {
     buildAskMotivation: jest.fn().mockImplementation((body?: string) =>
       buildAskMotivationTransition(body ?? '¿Lo estás mirando para construir, como inversión, o solo explorando?'),
     ),
+    buildProjectTeaser: jest.fn().mockImplementation((project: { title: string; shortDescription: string }) => ({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [
+        {
+          kind: 'text',
+          body:
+            project.shortDescription.trim().length > 0
+              ? `Perfecto. 🌿 ${project.title}\n\n${project.shortDescription.trim()}`
+              : `Perfecto. 🌿 ${project.title}`,
+        },
+      ],
+      expectsReply: false,
+    })),
+    buildAskTimeToBuy: jest.fn().mockImplementation((body?: string) => ({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [
+        {
+          kind: 'list',
+          body: body ?? 'plazo',
+          options: [
+            { id: 'time:immediate', title: 'Compra inmediata' },
+            { id: 'time:within_30_days', title: 'Compra en 30 días' },
+            { id: 'time:within_3_months', title: 'Compra en 3 meses' },
+            { id: 'time:future', title: 'Compra futura' },
+            { id: 'time:not_now', title: 'No comprar ahora' },
+          ],
+        },
+      ],
+      expectsReply: true,
+    })),
+    buildAskPaymentCapture: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'buttons', body: 'pago', options: [] }],
+      expectsReply: true,
+    }),
+    buildFinancingOffer: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'text', body: 'cuotas desde $1.403.000' }],
+      expectsReply: false,
+    }),
+    buildFinancingLotPicker: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [
+        {
+          kind: 'buttons',
+          body:
+            'Perfecto, en Valle del Sol contamos con planes financiados para nuestros lotes con planes desde:\n' +
+            '- 300 m²: *$1.403.000* pesos mensuales\n\n- 500 m²: *$1.875.000* pesos mensuales\n\n¿Cuál te interesa?',
+          options: [
+            { id: 'lot:300', title: '300 m²', description: '$1.403.000/mes' },
+            { id: 'lot:500', title: '500 m²', description: '$1.875.000/mes' },
+          ],
+        },
+      ],
+      expectsReply: true,
+    }),
+    buildLotChoiceAck: jest.fn().mockImplementation((area: number) => ({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'text', body: `Excelente elección el de ${area} m².` }],
+      expectsReply: false,
+    })),
+    buildAskNextStep: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'buttons', body: 'siguiente', options: [] }],
+      expectsReply: true,
+    }),
+    buildAskUrgency: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'buttons', body: 'urgencia', options: [] }],
+      expectsReply: true,
+    }),
+    buildAskDecisionMaker: jest.fn().mockReturnValue({
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: [{ kind: 'list', body: 'decisión', options: [] }],
+      expectsReply: true,
+    }),
   };
   const mockAdResolver = { executeResolveForCustomer: jest.fn().mockResolvedValue(undefined) };
   const mockFaqResolver = {
@@ -132,8 +224,56 @@ const buildEngine = (turn: LeadAgentLlmTurn | null) => {
       { id: 'f1', question: '¿Precio?', answer: 'Desde 85M', category: 'price', alternativePhrasings: [] },
     ]),
   };
+  const mockCaptureSync = {
+    executeGetCaptureKnown: jest.fn().mockResolvedValue({
+      known: {},
+      missingCaptureFields: ['buyMotive', 'timeToBuy', 'paymentMethod', 'urgencyLevel', 'decisionMaker'],
+      nextCaptureField: 'buyMotive',
+      values: {},
+    }),
+    executeUpsertPatch: jest.fn().mockResolvedValue(undefined),
+    buildPatchFromProfileAndForm: jest.fn().mockImplementation(
+      (args: {
+        readonly profile: { readonly motivation?: string; readonly timeline?: string; readonly budget?: string };
+        readonly projectId?: string;
+        readonly form?: { readonly city?: string; readonly economicCapacity?: string };
+      }) => ({
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+        ...(args.form?.city ? { city: args.form.city } : {}),
+        ...(args.form?.economicCapacity ? { economicCapacity: args.form.economicCapacity } : {}),
+        ...(args.profile.timeline ? { timeToBuy: args.profile.timeline, purchaseTimeline: args.profile.timeline } : {}),
+        ...(args.profile.motivation ? { motivation: args.profile.motivation } : {}),
+        ...(args.profile.budget ? { budget: args.profile.budget } : {}),
+      }),
+    ),
+  };
+  const mockGuidedPath = {
+    buildOutbound: jest.fn().mockReturnValue({
+      financing: [],
+      nextStep: [],
+      cashAck: [],
+      sentFinancing: false,
+    }),
+    shouldForceOfferCallSlots: jest.fn(
+      (replyId: string | undefined, canOfferCall: boolean) =>
+        replyId === 'next:call' && canOfferCall,
+    ),
+    shouldForceScheduleAfterCash: jest.fn(
+      (input: {
+        readonly paymentMethod?: string;
+        readonly previousPaymentMethod?: string;
+        readonly adoptedCaptureField?: string;
+        readonly canOfferCall: boolean;
+      }) =>
+        input.canOfferCall &&
+        input.paymentMethod === 'cash' &&
+        input.previousPaymentMethod !== 'cash' &&
+        input.adoptedCaptureField === 'paymentMethod',
+    ),
+    isNextQuestionTap: jest.fn((replyId: string | undefined) => replyId === 'next:question'),
+  };
   const engine = new LeadAgentEngineService(
-    { executeGetOrCreate: jest.fn().mockResolvedValue(mockSettings) } as never,
+    { executeGetOrCreate: jest.fn().mockResolvedValue({ ...mockSettings, ...settings }) } as never,
     mockFaqResolver as never,
     mockAdResolver as never,
     mockTransitions as never,
@@ -142,8 +282,19 @@ const buildEngine = (turn: LeadAgentLlmTurn | null) => {
     new LeadAgentPromptBuilder(),
     new LeadAgentScoringService(),
     new LeadAgentStageService(),
+    mockCaptureSync as never,
+    mockGuidedPath as never,
   );
-  return { engine, mockLlm, mockKnowledge, mockTransitions, mockAdResolver, mockFaqResolver };
+  return {
+    engine,
+    mockLlm,
+    mockKnowledge,
+    mockTransitions,
+    mockAdResolver,
+    mockFaqResolver,
+    mockCaptureSync,
+    mockGuidedPath,
+  };
 };
 
 describe('LeadAgentEngineService.executeTurn', () => {
@@ -156,7 +307,9 @@ describe('LeadAgentEngineService.executeTurn', () => {
       unansweredQuestion: '¿Hay descuento?',
     });
     const { engine } = buildEngine(inputTurn);
-    const actualOutcome = await engine.executeTurn(buildInput());
+    const actualOutcome = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'invest', paymentMethod: 'financed' } })),
+    );
     const { transition } = actualOutcome;
     expect(transition.outbound).toEqual([
       { kind: 'text', body: 'Qué bien, es una buena zona.' },
@@ -195,18 +348,43 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
   });
 
-  it('parses Construir from pending text on LLM fail and offers the schedule', async () => {
+  it('parses Construir from pending text on LLM fail and asks payment with buttons', async () => {
     const { engine, mockTransitions } = buildEngine(null);
     const { transition } = await engine.executeTurn({
       ...buildInput(),
       pendingMessages: [{ text: 'Construir' }],
     });
-    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_REPLY });
-    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalled();
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons', body: 'pago' });
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
     expect(transition.sessionPatch?.leadProfile).toMatchObject({ motivation: 'build' });
     expect(transition.sessionPatch?.scoreSignals).toContain('motivation_known');
-    expect(transition.sessionPatch?.leadProfile?.stage).toBe('booking');
+    expect(transition.sessionPatch?.leadProfile?.stage).not.toBe('booking');
+  });
+
+  it('skips a construir/contado FAQ when Construir captures buyer motivation and asks payment', async () => {
+    const { engine, mockTransitions, mockFaqResolver } = buildEngine(null);
+    mockFaqResolver.executeResolve.mockResolvedValue([
+      {
+        id: 'faq-construir-contado',
+        question: 'Si pago de contado, ¿puedo construir de inmediato?',
+        alternativePhrasings: ['licencia para construir'],
+        answer:
+          'No, aunque pagues de contado. El lote debe estar desenglobado y entregado con servicios públicos.',
+        category: 'legal',
+      },
+    ]);
+    const { transition, usedFaqIds } = await engine.executeTurn({
+      ...buildInput(),
+      pendingMessages: [{ text: 'Construir' }],
+    });
+    expect(usedFaqIds).toEqual([]);
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalled();
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons', body: 'pago' });
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
+    expect(transition.sessionPatch?.leadProfile).toMatchObject({ motivation: 'build' });
   });
 
   it('answers a matching FAQ on LLM fail instead of offering the schedule', async () => {
@@ -221,7 +399,7 @@ describe('LeadAgentEngineService.executeTurn', () => {
       },
     ]);
     const { transition, usedFaqIds } = await engine.executeTurn({
-      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build', paymentMethod: 'cash' } })),
       pendingMessages: [{ text: '¿Lo entregan con escrituras?' }],
     });
     expect(transition.outbound).toEqual([
@@ -232,23 +410,28 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
   });
 
-  it('keeps the schedule fallback on LLM fail when no FAQ matches', async () => {
+  it('continues in chat on LLM fail when no FAQ matches and the lead is buyer-qualified', async () => {
     const { engine, mockTransitions } = buildEngine(null);
     const { transition } = await engine.executeTurn(
       buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
     );
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_REPLY });
-    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalledWith(LEAD_TEMPLATES.askPaymentCapturePicker);
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons', body: 'pago' });
+    expect(mockTransitions.buildAskTimeToBuy).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
   });
 
-  it('parses construi4 typo from pending text on LLM fail', async () => {
-    const { engine } = buildEngine(null);
+  it('parses construi4 typo from pending text on LLM fail and stays in chat', async () => {
+    const { engine, mockTransitions } = buildEngine(null);
     const { transition } = await engine.executeTurn({
       ...buildInput(),
       pendingMessages: [{ text: 'Construi4' }],
     });
     expect(transition.sessionPatch?.leadProfile?.motivation).toBe('build');
-    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
   });
 
   it('acknowledges exploring on LLM fail and appends short-body motivation buttons for re-qualify', async () => {
@@ -258,10 +441,10 @@ describe('LeadAgentEngineService.executeTurn', () => {
       pendingMessages: [{ text: 'solo explorando' }],
     });
     expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_EXPLORING_REPLY });
-    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith('Elige una opción');
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith('Para orientarte mejor, indícame el motivo de compra:');
     expect(transition.outbound[1]).toMatchObject({
       kind: 'buttons',
-      body: 'Elige una opción',
+      body: 'Para orientarte mejor, indícame el motivo de compra:',
       delayMs: LEAD_AGENT_REPLY_GAP_MS,
       options: expect.arrayContaining([expect.objectContaining({ id: 'mot:build' })]),
     });
@@ -271,26 +454,38 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
   });
 
-  it('falls back to the advisor call offer when the LLM fails and the lead is buyer-qualified', async () => {
-    const { engine } = buildEngine(null);
+  it('falls back to a chat continuation when the LLM fails and the lead is buyer-qualified', async () => {
+    const { engine, mockTransitions } = buildEngine(null);
     const { transition } = await engine.executeTurn(
       buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
     );
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_REPLY });
-    expect(transition.outbound[1]).toMatchObject({ kind: 'buttons', body: '¿Cuándo te llamamos?' });
-    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
-    expect(transition.sessionPatch?.leadProfile?.stage).toBe('booking');
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons', body: 'pago' });
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalled();
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
+    expect(transition.sessionPatch?.leadProfile?.stage).not.toBe('booking');
     expect(transition.expectsReply).toBe(true);
   });
 
-  it('falls back to asking for the project with the interactive picker when the LLM fails without a project', async () => {
+  it('keeps the schedule fallback on LLM fail when already choosing a call slot', async () => {
+    const { engine, mockTransitions } = buildEngine(null);
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ step: LeadConversationStep.AskSchedule, leadProfile: { motivation: 'build' } })),
+    );
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_REPLY });
+    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+  });
+
+  it('falls back to configured greeting plus the project picker when the LLM fails without a project', async () => {
     const { engine, mockTransitions } = buildEngine(null);
     const { transition } = await engine.executeTurn(buildInput(buildSession({ projectId: undefined, projectTitle: undefined })));
     expect(mockTransitions.buildProjectPicker).toHaveBeenCalled();
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY });
+    expect(transition.outbound[0]).toEqual({ kind: 'text', body: 'Hola Camila' });
     expect(transition.outbound[1]).toMatchObject({
       kind: 'list',
-      body: '¿Cuál proyecto te interesa?',
+      body: '¡Con mucho gusto te comparto información! Tenemos diferentes proyectos y quisiera orientarte sobre el que más te interese. ¿Cuál te gustaría conocer?',
       delayMs: LEAD_AGENT_REPLY_GAP_MS,
       options: expect.arrayContaining([
         expect.objectContaining({ id: 'project:p1' }),
@@ -317,7 +512,7 @@ describe('LeadAgentEngineService.executeTurn', () => {
     });
   });
 
-  it('adopts project:p1 from a tap, stamps the session, skips project picker, and asks motivation with buttons', async () => {
+  it('adopts project:p1 from a tap, sends shortDescription teaser then motivation buttons', async () => {
     const { engine, mockTransitions } = buildEngine(buildTurn({ replies: ['Perfecto, Valle del Sol.'] }));
     const { transition } = await engine.executeTurn({
       ...buildInput(buildSession({ projectId: undefined, projectTitle: undefined })),
@@ -329,11 +524,22 @@ describe('LeadAgentEngineService.executeTurn', () => {
       isAllProjects: false,
     });
     expect(mockTransitions.buildProjectPicker).not.toHaveBeenCalled();
-    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith('Elige una opción');
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: 'Perfecto, Valle del Sol.' });
+    expect(mockTransitions.buildProjectTeaser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Valle del Sol',
+        shortDescription: 'Lotes campestres en Carmen de Apicalá con construcción libre.',
+      }),
+    );
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith(LEAD_TEMPLATES.askMotivationChoice);
+    expect(transition.outbound).toHaveLength(2);
+    expect(transition.outbound[0]).toMatchObject({
+      kind: 'text',
+      body: expect.stringContaining('Lotes campestres en Carmen de Apicalá'),
+    });
     expect(transition.outbound[1]).toMatchObject({
       kind: 'buttons',
-      body: 'Elige una opción',
+      body: LEAD_TEMPLATES.askMotivationChoice,
+      delayMs: LEAD_AGENT_REPLY_GAP_MS,
       options: expect.arrayContaining([expect.objectContaining({ id: 'mot:build' })]),
     });
     expect(transition.sessionPatch?.leadProfile?.stage).not.toBe('opening');
@@ -372,14 +578,17 @@ describe('LeadAgentEngineService.executeTurn', () => {
     });
   });
 
-  it('appends short-body motivation buttons after LLM text when the lead has a project but no motivation', async () => {
-    const { engine, mockTransitions } = buildEngine(buildTurn({ replies: ['Para orientarte mejor:'] }));
+  it('sends only the motivation buttons when the project was already on the session', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['¿Qué te motiva a buscar lote: construir, invertir o descansar?'] }),
+    );
     const { transition } = await engine.executeTurn(buildInput());
-    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith('Elige una opción');
-    expect(transition.outbound[0]).toEqual({ kind: 'text', body: 'Para orientarte mejor:' });
-    expect(transition.outbound[1]).toMatchObject({
+    expect(mockTransitions.buildProjectTeaser).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith(LEAD_TEMPLATES.askMotivationPicker);
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({
       kind: 'buttons',
-      body: 'Elige una opción',
+      body: LEAD_TEMPLATES.askMotivationPicker,
       options: expect.arrayContaining([
         expect.objectContaining({ id: 'mot:build' }),
         expect.objectContaining({ id: 'mot:invest' }),
@@ -388,8 +597,12 @@ describe('LeadAgentEngineService.executeTurn', () => {
     });
   });
 
-  it('adopts mot:build from a tap, stamps motivation, and does not append buttons', async () => {
-    const { engine, mockTransitions } = buildEngine(buildTurn({ replies: ['Perfecto, para construir.'] }));
+  it('adopts mot:build from a tap and sends only Financiado / De contado buttons', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Excelente, ¿cómo te gustaría manejarlo, con financiación o de contado?'],
+      }),
+    );
     const { transition } = await engine.executeTurn({
       ...buildInput(),
       pendingMessages: [{ text: '🏗️ Construir', replyId: 'mot:build' }],
@@ -397,20 +610,43 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(transition.sessionPatch?.leadProfile?.motivation).toBe('build');
     expect(transition.sessionPatch?.scoreSignals).toContain('motivation_known');
     expect(mockTransitions.buildAskMotivation).not.toHaveBeenCalled();
-    expect(transition.outbound).toEqual([{ kind: 'text', body: 'Perfecto, para construir.' }]);
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalledWith(LEAD_TEMPLATES.askPaymentCapturePicker);
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons', body: 'pago' });
   });
 
-  it('still appends short-body motivation buttons when exploring is already on the session', async () => {
+  it('sends only motivation buttons when exploring is already on the session', async () => {
     const { engine, mockTransitions } = buildEngine(buildTurn({ replies: ['Sin problema, cuando quieras.'] }));
     const { transition } = await engine.executeTurn(
       buildInput(buildSession({ leadProfile: { motivation: 'exploring' } })),
     );
-    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith('Elige una opción');
-    expect(transition.outbound[1]).toMatchObject({
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith(LEAD_TEMPLATES.askMotivationPicker);
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({
       kind: 'buttons',
-      body: 'Elige una opción',
+      body: LEAD_TEMPLATES.askMotivationPicker,
       options: expect.arrayContaining([expect.objectContaining({ id: 'mot:build' })]),
     });
+  });
+
+  it('ignores LLM-invented motivation and sends teaser + motive buttons after a project tap', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Perfecto, Parque del Agua es un buen proyecto. Veo que te interesa como inversión.'],
+        profile: { motivation: 'invest' },
+        projectId: 'p1',
+      }),
+    );
+    const { transition } = await engine.executeTurn({
+      ...buildInput(buildSession({ projectId: undefined, projectTitle: undefined, leadProfile: {} })),
+      pendingMessages: [{ text: '🌿 Parque del Agua', replyId: 'project:p1' }],
+    });
+    expect(transition.sessionPatch?.leadProfile?.motivation).toBeUndefined();
+    expect(transition.sessionPatch?.scoreSignals ?? []).not.toContain('motivation_known');
+    expect(mockTransitions.buildProjectTeaser).toHaveBeenCalled();
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalledWith(LEAD_TEMPLATES.askMotivationChoice);
+    expect(transition.outbound[0]?.kind).toBe('text');
+    expect(transition.outbound.some((plan) => plan.kind === 'buttons')).toBe(true);
   });
 
   it('does not append motivation buttons after a mot:build tap even if LLM profile is empty', async () => {
@@ -421,6 +657,8 @@ describe('LeadAgentEngineService.executeTurn', () => {
     });
     expect(transition.sessionPatch?.leadProfile?.motivation).toBe('build');
     expect(mockTransitions.buildAskMotivation).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalled();
+    expect(transition.outbound[0]).toMatchObject({ kind: 'buttons' });
   });
 
   it('coerces offer_call_slots to continue when the lead has no project', async () => {
@@ -497,7 +735,7 @@ describe('LeadAgentEngineService.executeTurn', () => {
       }),
     );
     const { transition } = await engine.executeTurn(
-      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      buildInput(buildSession({ leadProfile: { motivation: 'build', paymentMethod: 'cash' } })),
     );
     expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
     expect(transition.outbound).toEqual([{ kind: 'text', body: 'Sí, se firma la escritura pública a tu nombre.' }]);
@@ -543,7 +781,7 @@ describe('LeadAgentEngineService.executeTurn', () => {
   });
 
   it('closes the conversation on opt-out with the farewell only', async () => {
-    const inputTurn = buildTurn({ action: 'opt_out', replies: ['Claro', 'Adiós'], profile: { motivation: 'invest', timeline: 'within_3_months' } });
+    const inputTurn = buildTurn({ action: 'opt_out', replies: ['Claro', 'Adiós'], profile: { motivation: 'invest', timeline: 'immediate' } });
     const { engine } = buildEngine(inputTurn);
     const { transition } = await engine.executeTurn(buildInput());
     expect(transition.outbound).toEqual([{ kind: 'text', body: LEAD_AGENT_OPT_OUT_REPLY }]);
@@ -597,14 +835,16 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(transition.sessionPatch).not.toHaveProperty('projectId');
   });
 
-  it('soft-suggests the ad project without persisting it until the LLM confirms', async () => {
+  it('soft-suggests the ad project without persisting it or appending the picker', async () => {
     const customerId = new Types.ObjectId();
-    const { engine, mockAdResolver, mockLlm } = buildEngine(buildTurn());
+    const { engine, mockAdResolver, mockLlm, mockTransitions } = buildEngine(buildTurn());
     mockAdResolver.executeResolveForCustomer.mockResolvedValue({ id: 'p1', title: 'Valle del Sol' });
     const input = buildInput(buildSession({ projectId: undefined, projectTitle: undefined, customerId }));
     const { transition } = await engine.executeTurn(input);
     expect(mockAdResolver.executeResolveForCustomer).toHaveBeenCalledWith(customerId);
     expect(transition.sessionPatch).not.toHaveProperty('projectId');
+    expect(mockTransitions.buildProjectPicker).not.toHaveBeenCalled();
+    expect(transition.outbound.every((plan) => plan.kind === 'text')).toBe(true);
     const contextJson = mockLlm.executeTurn.mock.calls[0][0][1].content as string;
     const context = JSON.parse(contextJson) as {
       needsProject: boolean;
@@ -614,12 +854,386 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(context.suggestedProject).toEqual({ id: 'p1', title: 'Valle del Sol' });
   });
 
-  it('persists projectId when the LLM confirms the soft-suggested ad project', async () => {
+  it('adopts the campaign project on Instant Form dump without location rejection', async () => {
+    const customerId = new Types.ObjectId();
+    const formBody = `¡Hola! He completado el formulario y me gustaría recibir más información sobre vuestro negocio.
+Full name: Freddy Martínez
+¿Cuánto tienes disponible para invertir?: Entre $15’000.000 COP y $35’000.000 COP
+City: Bogotá
+Phone number: +573219019806
+¿Tienes conocimiento de que nuestro proyecto está ubicado en Carmen de Apicalá, Tolima?: Si, y me gustaria conocerla
+Email: fdmg1097@gmail.com`;
+    const { engine, mockAdResolver, mockTransitions, mockCaptureSync } = buildEngine(
+      buildTurn({ replies: ['Hola Freddy, qué gusto saludarte.'] }),
+    );
+    mockAdResolver.executeResolveForCustomer.mockResolvedValue({ id: 'p1', title: 'Valle del Sol' });
+    mockCaptureSync.executeGetCaptureKnown.mockResolvedValue({
+      known: { city: 'Bogotá', economicCapacity: '20_30m', projectId: 'p1' },
+      missingCaptureFields: ['buyMotive', 'timeToBuy'],
+      nextCaptureField: 'buyMotive',
+      values: { city: 'Bogotá', economicCapacity: '20_30m' },
+    });
+    const { transition, capturePatch } = await engine.executeTurn({
+      session: buildSession({ projectId: undefined, projectTitle: undefined, customerId }),
+      history: [],
+      pendingMessages: [{ text: formBody, isInstantFormDump: true }],
+    });
+    expect(transition.sessionPatch).toMatchObject({ projectId: 'p1', projectTitle: 'Valle del Sol' });
+    expect(mockTransitions.buildProjectPicker).not.toHaveBeenCalled();
+    expect(capturePatch).toMatchObject({ city: 'Bogotá', economicCapacity: '20_30m', projectId: 'p1' });
+  });
+
+  it('keeps suggested project unconfirmed and skips picker when Instant Form rejects the location', async () => {
+    const customerId = new Types.ObjectId();
+    const formBody = `¡Hola! He completado el formulario.
+Full name: Carolina
+¿Cuánto tienes disponible para invertir?: Entre $15’000.000 COP y $35’000.000 COP
+City: Bogotá
+Phone number: +573214859261
+¿Tienes conocimiento de que nuestro proyecto está ubicado en Carmen de Apicalá, Tolima?: No, busco un lote en otra ciudad
+Email: carola@test.com`;
+    const { engine, mockAdResolver, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['Veo que buscas en otra ciudad.'] }),
+    );
+    mockAdResolver.executeResolveForCustomer.mockResolvedValue({ id: 'p1', title: 'Valle del Sol' });
+    const { transition } = await engine.executeTurn({
+      session: buildSession({ projectId: undefined, projectTitle: undefined, customerId }),
+      history: [],
+      pendingMessages: [{ text: formBody, isInstantFormDump: true }],
+    });
+    expect(transition.sessionPatch).not.toHaveProperty('projectId');
+    expect(mockTransitions.buildProjectPicker).not.toHaveBeenCalled();
+  });
+
+  it('sends only the payment buttons when metadata already has a payment and the chat has not chosen one', async () => {
+    const { engine, mockTransitions, mockCaptureSync } = buildEngine(
+      buildTurn({
+        replies: [
+          '¡Qué bueno! Construir a tu medida es una gran decisión.',
+          'Para orientarte con el pago, ¿prefieres financiado o de contado?',
+        ],
+        usedFaqIds: ['faq-legal'],
+        profile: { paymentMethod: 'financed' },
+      }),
+    );
+    mockCaptureSync.executeGetCaptureKnown.mockResolvedValue({
+      known: { paymentMethod: 'financing', buyMotive: 'build' },
+      missingCaptureFields: [],
+      nextCaptureField: undefined,
+      values: { paymentMethod: 'financing' },
+    });
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+    );
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalledWith(LEAD_TEMPLATES.askPaymentCapturePicker);
+    expect(transition.outbound).toEqual([{ kind: 'buttons', body: 'pago', options: [] }]);
+    expect(transition.sessionPatch?.leadProfile?.paymentMethod).toBeUndefined();
+  });
+
+  it('uses the predefined greeting without project and drops the AI Hola', async () => {
+    const turn = buildTurn({
+      replies: ['¡Hola! Qué gusto tenerte por aquí.'],
+      profile: { motivation: 'invest' },
+    });
+    const session = buildSession({
+      projectId: undefined,
+      projectTitle: undefined,
+      leadProfile: { motivation: 'invest', paymentMethod: 'cash' },
+    });
+    const { engine, mockTransitions } = buildEngine(turn);
+    const first = await engine.executeTurn({
+      session,
+      history: [{ direction: 'outbound', body: 'Plantilla de bienvenida' }],
+      pendingMessages: [{ text: 'Hola' }],
+    });
+    expect(first.transition.outbound[0]).toEqual({ kind: 'text', body: 'Hola Camila' });
+    expect(first.transition.outbound.some((plan) => plan.body?.includes('Qué gusto tenerte'))).toBe(false);
+    expect(first.transition.outbound.filter((plan) => plan.kind === 'text')).toHaveLength(1);
+    expect(mockTransitions.buildProjectPicker).toHaveBeenCalled();
+    const { engine: laterEngine } = buildEngine(
+      buildTurn({ replies: ['Te cuento de Valle del Sol.'], profile: { motivation: 'invest' } }),
+    );
+    const later = await laterEngine.executeTurn({
+      session: buildSession({ leadProfile: { motivation: 'invest', paymentMethod: 'cash' } }),
+      history: [
+        { direction: 'outbound', body: 'Hola Camila' },
+        { direction: 'inbound', body: 'Hola' },
+      ],
+      pendingMessages: [{ text: 'Construir' }],
+    });
+    expect(later.transition.outbound[0]).toMatchObject({ kind: 'text', body: 'Te cuento de Valle del Sol.' });
+  });
+
+  it('folds soft-suggested project into the predefined greeting and drops AI Hola', async () => {
+    const { engine, mockAdResolver, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Hola Devvoid, soy Verónica. Qué bueno tenerte por aquí.'],
+      }),
+    );
+    mockAdResolver.executeResolveForCustomer.mockResolvedValue({
+      id: 'p1',
+      title: 'Parque del Agua',
+    });
+    const { transition } = await engine.executeTurn({
+      session: buildSession({
+        projectId: undefined,
+        projectTitle: undefined,
+        customerId: new Types.ObjectId(),
+      }),
+      history: [{ direction: 'outbound', body: 'Plantilla de bienvenida' }],
+      pendingMessages: [{ text: 'Hola' }],
+    });
+    expect(transition.outbound[0]).toEqual({
+      kind: 'text',
+      body: 'Hola Camila\n\nVeo que te interesó Parque del Agua, ¿es así?',
+    });
+    expect(
+      transition.outbound.filter((plan) => plan.kind === 'text' && plan.body?.toLowerCase().startsWith('hola')),
+    ).toHaveLength(1);
+    expect(transition.outbound.some((plan) => plan.body?.includes('Qué bueno tenerte'))).toBe(false);
+    expect(mockTransitions.buildProjectPicker).not.toHaveBeenCalled();
+  });
+
+  it('lets the AI greet when the project is already confirmed on the first message', async () => {
+    const { engine } = buildEngine(
+      buildTurn({
+        replies: ['Hola Camila, qué gusto saludarte. Seguimos con Valle del Sol, ¿te parece?'],
+        profile: { motivation: 'build' },
+      }),
+    );
+    const { transition } = await engine.executeTurn({
+      session: buildSession({
+        projectId: 'p1',
+        projectTitle: 'Valle del Sol',
+        leadProfile: { motivation: 'build', paymentMethod: 'cash' },
+      }),
+      history: [],
+      pendingMessages: [{ text: 'Hola' }],
+    });
+    expect(transition.outbound[0]).toMatchObject({
+      kind: 'text',
+      body: 'Hola Camila, qué gusto saludarte. Seguimos con Valle del Sol, ¿te parece?',
+    });
+    expect(transition.outbound.filter((plan) => plan.kind === 'text')).toHaveLength(1);
+  });
+
+  it('keeps greeting + project teaser + motive when the first inbound names a project', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        projectId: 'p1',
+        replies: ['¡Hola! Parque del Agua es genial, ¿construyes o inviertes?'],
+      }),
+    );
+    const { transition } = await engine.executeTurn({
+      session: buildSession({ projectId: undefined, projectTitle: undefined }),
+      history: [],
+      pendingMessages: [{ text: 'Hola estoy interesado en parque del agua' }],
+    });
+    expect(mockTransitions.buildProjectTeaser).toHaveBeenCalled();
+    expect(mockTransitions.buildAskMotivation).toHaveBeenCalled();
+    expect(transition.outbound).toHaveLength(3);
+    expect(transition.outbound[0]).toEqual({ kind: 'text', body: 'Hola Camila' });
+    expect(transition.outbound[1]).toMatchObject({
+      kind: 'text',
+      body: expect.stringContaining('Perfecto. 🌿 Valle del Sol'),
+    });
+    expect(transition.outbound[2]).toMatchObject({ kind: 'buttons' });
+    expect(transition.outbound.some((plan) => plan.body?.includes('¿construyes o inviertes'))).toBe(false);
+  });
+
+  it('sends only the payment buttons when motivation is known and payment is missing', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['Excelente, ¿financiación o de contado?'] }),
+    );
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+    );
+    expect(mockTransitions.buildAskPaymentCapture).toHaveBeenCalledWith(LEAD_TEMPLATES.askPaymentCapturePicker);
+    expect(mockTransitions.buildAskTimeToBuy).not.toHaveBeenCalled();
+    expect(transition.outbound).toHaveLength(1);
+    expect(transition.outbound[0]).toMatchObject({
+      kind: 'buttons',
+      body: 'pago',
+    });
+  });
+
+  it('adopts pay:financed and sends only the monthly lot picker', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Excelente, la financiación te da mucha flexibilidad.'],
+        intents: ['asked_financing'],
+      }),
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      pendingMessages: [{ text: 'Financiado', replyId: 'pay:financed' }],
+    });
+    expect(outcome.transition.sessionPatch?.leadProfile?.paymentMethod).toBe('financed');
+    expect(outcome.capturePatch).toMatchObject({ paymentMethod: 'financing' });
+    expect(mockTransitions.buildAskPaymentCapture).not.toHaveBeenCalled();
+    expect(mockTransitions.buildFinancingLotPicker).toHaveBeenCalled();
+    expect(outcome.transition.outbound).toHaveLength(1);
+    expect(outcome.transition.outbound[0]).toMatchObject({
+      kind: 'buttons',
+      options: expect.arrayContaining([expect.objectContaining({ id: 'lot:300' })]),
+    });
+  });
+
+  it('opens schedule on pay:financed when pricePolicy is defer_to_advisor', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Perfecto, te comparto las opciones de lotes con sus cuotas mensuales.'],
+        intents: ['asked_financing'],
+        profile: { paymentMethod: 'financed' },
+      }),
+      { pricePolicy: 'defer_to_advisor' },
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      pendingMessages: [{ text: 'Financiado', replyId: 'pay:financed' }],
+    });
+    expect(mockTransitions.buildFinancingLotPicker).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(outcome.transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(outcome.transition.outbound[0]).toMatchObject({
+      kind: 'text',
+      body: LEAD_TEMPLATES.scheduleLeadFinanced,
+    });
+  });
+
+  it('sends the monthly lot picker when Financiado is written without a reply id', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Excelente, la financiación te da mucha flexibilidad.'],
+        profile: { paymentMethod: 'financed' },
+        intents: ['asked_financing'],
+      }),
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      pendingMessages: [{ text: '💰 Financiado' }],
+    });
+    expect(outcome.transition.sessionPatch?.leadProfile?.paymentMethod).toBe('financed');
+    expect(mockTransitions.buildFinancingLotPicker).toHaveBeenCalled();
+    expect(outcome.transition.outbound[0]).toMatchObject({
+      kind: 'buttons',
+      options: expect.arrayContaining([expect.objectContaining({ id: 'lot:300' })]),
+    });
+  });
+
+  it('adopts lot:300, acks the choice and opens the schedule', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['¿Algo más?'] }),
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(
+        buildSession({ leadProfile: { motivation: 'build', paymentMethod: 'financed' } }),
+      ),
+      pendingMessages: [{ text: '300 m²', replyId: 'lot:300' }],
+    });
+    expect(outcome.transition.sessionPatch?.leadProfile?.lotPreference).toBe('300 m2');
+    expect(mockTransitions.buildLotChoiceAck).toHaveBeenCalledWith(300);
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(outcome.transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(outcome.transition.outbound[0]).toMatchObject({
+      kind: 'text',
+      body: 'Excelente elección el de 300 m².',
+    });
+    expect(outcome.transition.outbound[1]).toMatchObject({ kind: 'buttons' });
+  });
+
+  it('adopts pay:cash and opens the schedule without next-step buttons', async () => {
+    const { engine, mockTransitions, mockGuidedPath } = buildEngine(
+      buildTurn({ replies: ['Perfecto de contado.'] }),
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      pendingMessages: [{ text: 'De contado', replyId: 'pay:cash' }],
+    });
+    expect(outcome.transition.sessionPatch?.leadProfile?.paymentMethod).toBe('cash');
+    expect(mockGuidedPath.shouldForceScheduleAfterCash).toHaveBeenCalled();
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(outcome.transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(outcome.transition.outbound[0]).toMatchObject({
+      kind: 'text',
+      body: LEAD_TEMPLATES.scheduleLeadCash,
+    });
+    expect(mockTransitions.buildAskNextStep).not.toHaveBeenCalled();
+  });
+
+  it('forces offer_call_slots when the lead taps next:call and is qualified', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['Listo, te agendo.'], action: 'continue' }),
+    );
+    const { transition } = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build', paymentMethod: 'financed' } })),
+      pendingMessages: [{ text: 'Hablar con asesor', replyId: 'next:call' }],
+    });
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(transition.sessionPatch?.scoreSignals ?? []).toContain('accepted_call');
+  });
+
+  it('asks for the free-text question when next:question is tapped and the LLM fails', async () => {
+    const { engine, mockTransitions } = buildEngine(null);
+    const { transition } = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build', paymentMethod: 'financed' } })),
+      pendingMessages: [{ text: 'Tengo otra duda', replyId: 'next:question' }],
+    });
+    expect(transition.outbound).toEqual([{ kind: 'text', body: LEAD_TEMPLATES.askYourQuestion }]);
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+  });
+
+  it('adopts time:immediate after booking into profile and capture patch', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({ replies: ['Perfecto, vamos con plazo inmediato.'] }),
+    );
+    const outcome = await engine.executeTurn({
+      ...buildInput(
+        buildSession({
+          step: LeadConversationStep.Scheduled,
+          status: 'scheduled',
+          leadProfile: { motivation: 'build', paymentMethod: 'financed', stage: 'booked' },
+        }),
+      ),
+      pendingMessages: [{ text: 'Compra inmediata', replyId: 'time:immediate' }],
+    });
+    expect(outcome.transition.sessionPatch?.leadProfile?.timeline).toBe('immediate');
+    expect(outcome.capturePatch).toMatchObject({ timeToBuy: 'immediate' });
+    expect(mockTransitions.buildAskTimeToBuy).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt the soft-suggested project when the LLM invents projectId on Hola', async () => {
+    const customerId = new Types.ObjectId();
+    const { engine, mockAdResolver, mockTransitions } = buildEngine(
+      buildTurn({
+        projectId: 'p1',
+        replies: ['Perfecto. 🌿 Parque del Agua es un gran proyecto.'],
+      }),
+    );
+    mockAdResolver.executeResolveForCustomer.mockResolvedValue({ id: 'p1', title: 'Parque del Agua' });
+    const { transition } = await engine.executeTurn({
+      session: buildSession({ projectId: undefined, projectTitle: undefined, customerId }),
+      history: [{ direction: 'outbound', body: 'Plantilla' }],
+      pendingMessages: [{ text: 'Hola' }],
+    });
+    expect(transition.sessionPatch).not.toHaveProperty('projectId');
+    expect(mockTransitions.buildProjectTeaser).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskMotivation).not.toHaveBeenCalled();
+  });
+
+  it('persists projectId when the customer affirms the soft-suggested ad project', async () => {
     const customerId = new Types.ObjectId();
     const { engine, mockAdResolver } = buildEngine(buildTurn({ projectId: 'p1' }));
     mockAdResolver.executeResolveForCustomer.mockResolvedValue({ id: 'p1', title: 'Valle del Sol' });
-    const input = buildInput(buildSession({ projectId: undefined, projectTitle: undefined, customerId }));
-    const { transition } = await engine.executeTurn(input);
+    const { transition } = await engine.executeTurn({
+      session: buildSession({ projectId: undefined, projectTitle: undefined, customerId }),
+      history: [
+        { direction: 'outbound', body: 'Hola Camila\n\nVeo que te interesó Valle del Sol, ¿es así?' },
+        { direction: 'inbound', body: 'Hola' },
+      ],
+      pendingMessages: [{ text: 'Sí' }],
+    });
     expect(transition.sessionPatch).toMatchObject({ projectId: 'p1', projectTitle: 'Valle del Sol' });
   });
 

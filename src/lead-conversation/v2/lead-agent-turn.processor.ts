@@ -60,6 +60,7 @@ export class LeadAgentTurnProcessor extends WorkerHost {
           transition: outcome.transition,
           usedFaqIds: outcome.usedFaqIds,
           ...(outcome.unansweredQuestion !== undefined ? { unansweredQuestion: outcome.unansweredQuestion } : {}),
+          ...(outcome.capturePatch !== undefined ? { capturePatch: outcome.capturePatch } : {}),
         });
         return;
       }

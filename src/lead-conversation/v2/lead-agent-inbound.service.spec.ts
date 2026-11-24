@@ -41,6 +41,7 @@ const buildService = (settings: Record<string, unknown> = {}) => {
   const mockSessionService = {
     applyTransition: jest.fn(),
     findById: jest.fn(),
+    reenterDiscoveryAfterRecovery: jest.fn().mockResolvedValue(undefined),
   };
   const mockMessageLog = { findLatestInbound: jest.fn().mockResolvedValue({ _id: mockStoredId, wamid: mockMessage.wamid }) };
   const mockSideEffects = { executeRun: jest.fn().mockResolvedValue(undefined) };
