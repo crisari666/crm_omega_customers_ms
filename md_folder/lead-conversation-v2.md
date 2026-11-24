@@ -14,8 +14,9 @@ Agent hand-off (project/buyer gates + recent changes): [`lead-conversation-v2-ag
 Goal: book a call with an advisor, never sell the lot in chat.
 
 ## Flow selection
-- Meta form `flowStrategy = lead_conversation_v2` (see `meta-lead-forms.md`). Other strategies stay V1.
-- Session `flowVersion: 'v1'|'v2'` (default v1). `LeadFlowResolverService`: v2 session stays v2; else only an untouched `initial` session may switch, using newest `meta_lead_campaigns.flowStrategy`, else `settings.defaultInboundFlow`. Needs `settings.enabled`.
+- Meta form `flowStrategy = lead_conversation_v2` (see `meta-lead-forms.md`). Other strategies stay V1 for mid-flight sessions.
+- Session `flowVersion: 'v1'|'v2'` (default v1). `LeadFlowResolverService`: v2 session stays v2; else only an untouched `initial` session may switch. When `settings.enabled`, that fresh inbound **always** converts to V2 (campaign strategy ignored — covers post-admin-delete). When disabled, stays V1.
+- Admin Restart (`POST .../sessions/:id/restart`): if assistant enabled (or session already v2) → `buildLeadAgentSessionReset` (clean V2, no project list, `v2_waits_for_customer`). If disabled → legacy V1 ask_project send inside 24h window.
 - Ingest: V2 form → `LeadAgentSessionAdoptionService` (convert pending V1 session) → delayed welcome template → V2 session created on `{waId, phoneNumberId}`.
 
 ## Session contract
@@ -48,7 +49,7 @@ Each segment has `GET <segment>/test`.
 - `readiness` GET (connection, identity, knowledge, recovery, activation)
 - `simulate` POST (no Mongo writes, no sends, no booking)
 Never register a single-segment `admin/customer/lead-assistant` (clashes with `admin/customer/:customerId`). Creating/updating a form as V2 without `welcomeTemplate` → 409.
-Existing endpoints gain: summary `flowVersion/temperature/stage/advisorBrief/scoreSegments`; session list `flow` filter + `flowVersion/temperature/stage`; transcript `deliveryStatus/templateName`. V2 restart sends nothing (`reason: 'v2_waits_for_customer'`).
+Existing endpoints gain: summary `flowVersion/temperature/stage/advisorBrief/scoreSegments`; session list `flow` filter + `flowVersion/temperature/stage`; transcript `deliveryStatus/templateName`. Restart with assistant enabled (any V1 or V2 session) sends nothing (`reason: 'v2_waits_for_customer'`).
 UI: crm_lots_agents `/dashboard/lead-assistant` — Knowledge step **Diccionario** (default) shows question + general answer + project exception chips; **Cobertura** matrix and unanswered inbox remain. referrals-boost score meter + advisor brief.
 
 ## Env vars

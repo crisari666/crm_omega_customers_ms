@@ -156,14 +156,14 @@ Signals recomputed each turn (not incremented): motivation_known 10, payment_kno
 ## Manual test
 
 1. Restart customers-ms after code/env changes.
-2. Admin: restart/delete V2 session (`/dashboard/lead-conversations`).
+2. Admin: restart/delete session (`/dashboard/lead-conversations`). With assistant **enabled**, Restart converts V1→V2 clean (no project list); Delete + next inbound also forces V2 on a fresh session.
 3. Inbound: greet → confirm project → answer construir → expect discovery/value or schedule **only after** motivation saved; never repeat the same ask-motivation line.
 4. Watch logs: `LeadAgentLlmService` (null / content snippet) and outbound sends.
 
 ## Recent change set (this context)
 
 1. **Ad registry soft-suggests** project (prompt `suggestedProject`); do **not** auto-confirm or stamp on V2 welcome.
-2. **V2 restart clears** `projectId` / `projectTitle` so greeting-only turns ask catalog options again.
+2. **V2 restart clears** `projectId` / `projectTitle` so greeting-only turns ask catalog options again. Admin Restart with assistant enabled forces that V2 reset even from a V1 session.
 3. **Qualify before call** — `canOfferCall` gate in engine / stage / prompts; LLM-fail no longer dumps schedule without buyer motivation.
 4. **Parse motivation on fallback** — stop ask-motivation loop; exploring acknowledge path; LLM diagnostic logs.
 5. **FAQ on LLM fail** — dictionary stem match answers before schedule dump; Nest logs each LLM request/response.

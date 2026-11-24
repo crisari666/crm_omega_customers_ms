@@ -57,7 +57,7 @@ Priority: score ≥5 → 3, ≥2 → 2, else 1. `MAX_SCORE=6`.
 - `GET /admin/customer/lead-conversations/sessions?status&step&search&page(0-based)&limit` → `{items[{sessionId, customerId, customerName, phone, projectTitle, isAllProjects, step, status, score, maxScore, priority, lastInboundAt, startedAt}], total, page, limit}`. `search` = waId / profileName / projectTitle.
 - `GET .../sessions/:sessionId/messages?limit&before` → transcript page.
 - `DELETE .../sessions/:sessionId` → cancel reminder, delete session + messages. Next inbound starts fresh. Queued outbound jobs of a deleted session are dropped by the processor.
-- `POST .../sessions/:sessionId/restart` → cancel reminder, reset answers/score/project. If `lastInboundAt` < 24h (Meta window): step `ask_project` + welcome list sent → `{restarted, sent:true}`. Else step `initial`, nothing sent → `{sent:false, reason:'outside_customer_service_window'}`.
+- `POST .../sessions/:sessionId/restart` → cancel reminder, reset answers/score/project. If lead assistant **enabled** (or session already V2): convert/reset to clean V2, send nothing → `{restarted, sent:false, reason:'v2_waits_for_customer'}`. If assistant **disabled**: V1 path — if `lastInboundAt` < 24h: step `ask_project` + welcome list → `{sent:true}`; else step `initial` → `{sent:false, reason:'outside_customer_service_window'}`.
 
 UI: crm_lots_agents `/dashboard/lead-conversations` (`src/features/lead-conversations/`, menu "Conversaciones IA leads", crmAdminOnly).
 
