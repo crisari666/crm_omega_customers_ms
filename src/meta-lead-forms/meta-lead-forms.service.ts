@@ -13,6 +13,7 @@ import {
   DEFAULT_OUTBOUND_DELAY_MINUTES,
   META_LEAD_FORM_SETTINGS_KEY,
 } from './constants/meta-lead-form.constants';
+import { LeadAssistantSettingsService } from '../lead-assistant/lead-assistant-settings.service';
 import { CreateMetaLeadFormDto } from './dto/create-meta-lead-form.dto';
 import { UpdateMetaLeadFormDto } from './dto/update-meta-lead-form.dto';
 import { UpdateMetaLeadFormSettingsDto } from './dto/update-meta-lead-form-settings.dto';
@@ -24,6 +25,7 @@ import {
   MetaLeadFormSettings,
   MetaLeadFormSettingsDocument,
 } from './schemas/meta-lead-form-settings.schema';
+import type { MetaLeadFormFlowStrategy } from './types/meta-lead-form-flow-strategy.type';
 import type {
   MetaLeadFormListItem,
   MetaLeadFormSettingsView,
@@ -33,6 +35,9 @@ import type {
   MetaLeadFormCampaignGroup,
   MetaLeadFormStatsResponse,
 } from './types/meta-lead-form-stats.type';
+
+const V2_WELCOME_TEMPLATE_REQUIRED_MESSAGE =
+  'Configura la plantilla de bienvenida del asistente antes de activar el flujo V2';
 
 type CampaignFormAggRow = {
   readonly _id: string;
@@ -53,6 +58,7 @@ export class MetaLeadFormsService {
     @InjectModel(MetaLeadCampaign.name)
     private readonly metaLeadCampaignModel: Model<MetaLeadCampaignDocument>,
     private readonly metaLeadAdCampaignsService: MetaLeadAdCampaignsService,
+    private readonly leadAssistantSettingsService: LeadAssistantSettingsService,
   ) {}
 
   async executeList(): Promise<MetaLeadFormListItem[]> {
@@ -78,6 +84,7 @@ export class MetaLeadFormsService {
   ): Promise<MetaLeadFormListItem> {
     const formId = dto.formId.trim();
     const formName = dto.formName.trim();
+    await this.assertV2WelcomeTemplate(dto.flowStrategy);
     const existing = await this.metaLeadFormModel.findOne({ formId }).lean().exec();
     if (existing != null) {
       throw new ConflictException(`Form id ${formId} is already registered`);
@@ -96,6 +103,7 @@ export class MetaLeadFormsService {
   }
 
   async executeUpdate(id: string, dto: UpdateMetaLeadFormDto): Promise<MetaLeadFormListItem> {
+    await this.assertV2WelcomeTemplate(await this.resolveResultingFlowStrategy(id, dto));
     const setFields: Record<string, unknown> = {};
     if (dto.formId != null) {
       const formId = dto.formId.trim();
@@ -240,6 +248,30 @@ export class MetaLeadFormsService {
       registeredCampaigns: adStats.registeredCampaigns,
       unregisteredCampaigns: adStats.unregisteredCampaigns,
     };
+  }
+
+  private async resolveResultingFlowStrategy(
+    id: string,
+    dto: UpdateMetaLeadFormDto,
+  ): Promise<MetaLeadFormFlowStrategy> {
+    if (dto.flowStrategy != null) {
+      return dto.flowStrategy;
+    }
+    const existing = await this.metaLeadFormModel.findById(id).select({ flowStrategy: 1 }).lean().exec();
+    if (existing == null) {
+      throw new NotFoundException(`Meta lead form ${id} was not found`);
+    }
+    return existing.flowStrategy;
+  }
+
+  /** V2 forms send the assistant welcome template, so it must be configured first. */
+  private async assertV2WelcomeTemplate(flowStrategy: MetaLeadFormFlowStrategy): Promise<void> {
+    if (flowStrategy !== 'lead_conversation_v2') {
+      return;
+    }
+    if (!(await this.leadAssistantSettingsService.executeHasWelcomeTemplate())) {
+      throw new ConflictException(V2_WELCOME_TEMPLATE_REQUIRED_MESSAGE);
+    }
   }
 
   private async executeEnsureSettings(): Promise<{

@@ -7,13 +7,19 @@ import {
   MetaLeadCampaign,
   MetaLeadCampaignSchema,
 } from '../customer/schemas/meta-lead-campaign.schema';
+import { LeadAssistantModule } from '../lead-assistant/lead-assistant.module';
 import { LEAD_WS_MS_CLIENT } from '../lead-conversation/constants/lead-conversation.constants';
+import {
+  LeadConversationMessage,
+  LeadConversationMessageSchema,
+} from '../lead-conversation/schemas/lead-conversation-message.schema';
 import {
   LeadConversationSession,
   LeadConversationSessionSchema,
 } from '../lead-conversation/schemas/lead-conversation-session.schema';
 import { parseRedisUrl } from '../lead-conversation/utils/parse-redis-url.util';
 import { META_LEAD_FORM_QUALIFICATION_QUEUE } from './constants/meta-lead-form.constants';
+import { LeadAgentSessionAdoptionService } from './lead-agent-session-adoption.service';
 import { MetaLeadAdCampaignLookupService } from './meta-lead-ad-campaign-lookup.service';
 import { MetaLeadAdCampaignsService } from './meta-lead-ad-campaigns.service';
 import { MetaLeadFormLookupService } from './meta-lead-form-lookup.service';
@@ -36,12 +42,14 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
  */
 @Module({
   imports: [
+    LeadAssistantModule,
     MongooseModule.forFeature([
       { name: MetaLeadForm.name, schema: MetaLeadFormSchema },
       { name: MetaLeadAdCampaign.name, schema: MetaLeadAdCampaignSchema },
       { name: MetaLeadFormSettings.name, schema: MetaLeadFormSettingsSchema },
       { name: MetaLeadCampaign.name, schema: MetaLeadCampaignSchema },
       { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
+      { name: LeadConversationMessage.name, schema: LeadConversationMessageSchema },
     ]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -79,6 +87,7 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
     MetaLeadFormQualificationScheduler,
     MetaLeadFormQualificationService,
     MetaLeadFormQualificationProcessor,
+    LeadAgentSessionAdoptionService,
   ],
   exports: [
     MetaLeadFormsService,
@@ -86,6 +95,7 @@ import { MetaLeadForm, MetaLeadFormSchema } from './schemas/meta-lead-form.schem
     MetaLeadAdCampaignsService,
     MetaLeadAdCampaignLookupService,
     MetaLeadFormQualificationScheduler,
+    LeadAgentSessionAdoptionService,
   ],
 })
 export class MetaLeadFormsModule {}

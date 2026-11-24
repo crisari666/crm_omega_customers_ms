@@ -8,6 +8,7 @@ Admin registry (`meta_lead_forms`) maps Meta Lead Ads **formId** / **formName** 
 |---|---|
 | `immediate_assign` | Upsert customer + ventor assign (no BBQ template). Strategy is stamped on `meta_lead_campaigns.flowStrategy`. Lead-conversation bot **must not** reassign `assignedTo` (admin reassign still allowed). **Assign pool (physical only):** office users with `level=ventor`, `physical=true`, `enable=true`, and `autoCustomerAssignmentDisabled ≠ true` (`GET internal/ventors/physical-assignment-candidates`). **`assignAdvanceLeads` is ignored** for form assign — that flag is only for AI-qualified call slots. Staff with only “Asignar Leads Calificados” and auto-assign OFF do not receive Instant Form leads (by design). |
 | `lead_conversation` | Upsert customer **without** assign; schedule delayed WhatsApp template on leads line. Bot may assign when a call is booked. |
+| `lead_conversation_v2` | Same ingest as `lead_conversation` (upsert **without** assign, delayed welcome on leads line, bot may assign on booking) but the conversation runs the V2 AI assistant (`lead-conversation-v2.md`). Creating/updating a form with this strategy returns 409 until the assistant `welcomeTemplate` is configured (`/dashboard/lead-assistant`). |
 
 If no enabled registry row matches: **hardcoded safety net** still runs for `datos_clientes*` / `formulario_asado*`. Other names skip assign (campaign saved with skip note). Legacy campaigns may omit `flowStrategy`; bot still keeps any existing `assignedTo`.
 
@@ -30,6 +31,12 @@ Singleton `meta_lead_form_settings` (`key: default`):
 - Admin: `GET/PATCH admin/customer/meta-lead-forms/settings`
 
 On lead_conversation ingest → BullMQ job `meta-lead-form-qualification` delayed by that value. Inbound on leads line cancels job by phone/waId. On fire: skip if session already has inbound; else send welcome **template** via `lead_conversation.send.v1` (`kind: template`).
+
+### V2 welcome and session adoption (`lead_conversation_v2`)
+
+The delayed job carries `flowStrategy` + `formId`. Before scheduling it, `LeadAgentSessionAdoptionService.executeAdopt({phone, formId})` converts the newest session for that phone to V2 when it is `active` in `initial`/`ask_project` with score 0, or `disqualified`/`abandoned` (then fully reset). `scheduled` and already-V2 sessions are left alone; any other V1 session stays V1.
+
+On fire the welcome is `settings.welcomeTemplate` (e.g. `lead_v2_welcome`, variables from customer first name, assistant name, business name, project title via campaign registry) rendered by the template renderer; if missing or assistant disabled it falls back to the V1 template below. After a successful send, and only if `WHATSAPP_CLOUD_LEADS_PHONE_NUMBER_ID` is set, a V2 session is upserted on `{waId, phoneNumberId}` (`step: v2_conversation`, stage `opening`), the transcript row is written with `templateName`, and the first recovery step is scheduled. The customer's first reply (e.g. quick-reply button text) is then handled by the V2 engine. Without a V1 session the resolver also picks V2 on first inbound from the newest `meta_lead_campaigns.flowStrategy`.
 
 ## Ceiba leadgen + CTWA WhatsApp redirect
 
