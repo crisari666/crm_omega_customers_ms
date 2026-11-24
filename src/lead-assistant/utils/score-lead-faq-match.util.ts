@@ -1,5 +1,10 @@
 import { normalizeLeadText } from '../../lead-conversation/utils/normalize-lead-text.util';
-import { LEAD_FAQ_FALLBACK_MIN_SCORE, LEAD_FAQ_STEM_MIN_CHARS } from '../constants/lead-assistant.constants';
+import {
+  LEAD_FAQ_FALLBACK_MIN_SCORE,
+  LEAD_FAQ_REVERSE_CONTAINMENT_MIN_LENGTH_RATIO,
+  LEAD_FAQ_REVERSE_CONTAINMENT_MIN_TOKENS,
+  LEAD_FAQ_STEM_MIN_CHARS,
+} from '../constants/lead-assistant.constants';
 import type { LeadResolvedFaq } from '../types/lead-resolved-faq.type';
 
 const MIN_TOKEN_LENGTH = 3;
@@ -40,21 +45,47 @@ function countTokenHits(customerTokens: ReadonlySet<string>, phraseTokens: reado
   return hits;
 }
 
+function significantTokens(text: string): string[] {
+  return text.split(' ').filter((token) => token.length >= MIN_TOKEN_LENGTH);
+}
+
+/**
+ * True when the customer text is long/dense enough to treat as a paraphrase
+ * of the FAQ phrase (`phrase.includes(customer)`), not a short keyword reply.
+ */
+function allowsReverseContainment(customerText: string, phrase: string): boolean {
+  const tokens = significantTokens(customerText);
+  if (tokens.length < LEAD_FAQ_REVERSE_CONTAINMENT_MIN_TOKENS) {
+    return false;
+  }
+  if (phrase.length === 0) {
+    return false;
+  }
+  return customerText.length / phrase.length >= LEAD_FAQ_REVERSE_CONTAINMENT_MIN_LENGTH_RATIO;
+}
+
 function scorePhraseAgainstCustomer(customerText: string, phrase: string): number {
   const normalizedPhrase = normalizeLeadText(phrase);
   if (normalizedPhrase.length === 0) {
     return 0;
   }
-  if (customerText.includes(normalizedPhrase) || normalizedPhrase.includes(customerText)) {
+  if (customerText.includes(normalizedPhrase)) {
     return CONTAINMENT_SCORE_BASE + normalizedPhrase.length;
   }
-  const customerTokens = new Set(
-    customerText.split(' ').filter((token) => token.length >= MIN_TOKEN_LENGTH),
-  );
-  const phraseTokens = normalizedPhrase
-    .split(' ')
-    .filter((token) => token.length >= MIN_TOKEN_LENGTH);
+  if (
+    normalizedPhrase.includes(customerText) &&
+    allowsReverseContainment(customerText, normalizedPhrase)
+  ) {
+    return CONTAINMENT_SCORE_BASE + normalizedPhrase.length;
+  }
+  const customerTokens = new Set(significantTokens(customerText));
+  const phraseTokens = significantTokens(normalizedPhrase);
   if (phraseTokens.length === 0 || customerTokens.size === 0) {
+    return 0;
+  }
+  // One-word replies (e.g. "Construir") must not beat the FAQ fallback threshold via
+  // a single shared stem on a long question — require multi-token customer text.
+  if (customerTokens.size < LEAD_FAQ_REVERSE_CONTAINMENT_MIN_TOKENS) {
     return 0;
   }
   const hits = countTokenHits(customerTokens, phraseTokens);

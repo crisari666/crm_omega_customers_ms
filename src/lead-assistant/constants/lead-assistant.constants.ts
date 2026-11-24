@@ -19,6 +19,17 @@ export const LEAD_FAQ_RESOLVE_CAP = 60 as const;
 export const LEAD_FAQ_FALLBACK_MIN_SCORE = 200 as const;
 /** Min shared prefix length for stem-style FAQ token hits (e.g. escrituras ~ escrituracion). */
 export const LEAD_FAQ_STEM_MIN_CHARS = 5 as const;
+/**
+ * Reverse containment (`phrase.includes(customer)`) only when the customer text
+ * has at least this many tokens of length ≥ 3 — blocks short replies like
+ * "Construir" from matching long FAQs that merely contain that word.
+ */
+export const LEAD_FAQ_REVERSE_CONTAINMENT_MIN_TOKENS = 2 as const;
+/**
+ * Reverse containment also requires customer length ≥ this fraction of the phrase
+ * (avoids one long token matching a much longer FAQ question).
+ */
+export const LEAD_FAQ_REVERSE_CONTAINMENT_MIN_LENGTH_RATIO = 0.4 as const;
 /** In-memory cache lifetime of the approved templates list. */
 export const LEAD_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
 export const LEAD_RECOVERY_MIN_OFFSET_HOURS = 1 as const;

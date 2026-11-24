@@ -41,7 +41,7 @@ describe('LeadAgentStageService', () => {
   });
 
   it('moves discovery to value when motivation and timeline are known', () => {
-    const inputProfile = { stage: 'discovery', stageTurns: 0, motivation: 'build', timeline: 'later' } as const;
+    const inputProfile = { stage: 'discovery', stageTurns: 0, motivation: 'build', timeline: 'future' } as const;
     expect(service.applyStage(buildInput({ profile: inputProfile })).stage).toBe('value');
   });
 

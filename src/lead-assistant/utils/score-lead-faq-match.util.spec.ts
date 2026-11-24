@@ -25,6 +25,22 @@ describe('scoreLeadFaqMatch', () => {
     });
     expect(score).toBeGreaterThanOrEqual(LEAD_FAQ_FALLBACK_MIN_SCORE);
   });
+
+  it('does not reverse-contain short motivation replies like Construir', () => {
+    const score = scoreLeadFaqMatch('Construir', {
+      question: 'Si pago de contado, ¿puedo construir de inmediato?',
+      alternativePhrasings: ['puedo construir si pago de contado'],
+    });
+    expect(score).toBeLessThan(LEAD_FAQ_FALLBACK_MIN_SCORE);
+  });
+
+  it('still matches a multi-token question about construir and contado', () => {
+    const score = scoreLeadFaqMatch('puedo construir si pago de contado', {
+      question: 'Si pago de contado, ¿puedo construir de inmediato?',
+      alternativePhrasings: ['puedo construir si pago de contado'],
+    });
+    expect(score).toBeGreaterThanOrEqual(LEAD_FAQ_FALLBACK_MIN_SCORE);
+  });
 });
 
 describe('pickBestLeadFaqMatch', () => {
@@ -42,6 +58,14 @@ describe('pickBestLeadFaqMatch', () => {
     answer: 'Desde 85M',
     category: 'price',
   };
+  const construirFaq: LeadResolvedFaq = {
+    id: 'faq-construir-contado',
+    question: 'Si pago de contado, ¿puedo construir de inmediato?',
+    alternativePhrasings: ['licencia para construir'],
+    answer:
+      'No, aunque pagues de contado. El lote debe estar desenglobado y entregado con servicios públicos.',
+    category: 'legal',
+  };
 
   it('returns the best FAQ above the min score', () => {
     const actual = pickBestLeadFaqMatch('¿Lo entregan con escrituras?', [priceFaq, legalFaq]);
@@ -51,5 +75,9 @@ describe('pickBestLeadFaqMatch', () => {
 
   it('returns undefined when nothing clears the threshold', () => {
     expect(pickBestLeadFaqMatch('hola', [legalFaq, priceFaq])).toBeUndefined();
+  });
+
+  it('returns undefined for Construir against a construir/contado FAQ', () => {
+    expect(pickBestLeadFaqMatch('Construir', [construirFaq, legalFaq])).toBeUndefined();
   });
 });

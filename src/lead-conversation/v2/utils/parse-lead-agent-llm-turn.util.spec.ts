@@ -1,4 +1,4 @@
-import { parseLeadAgentLlmTurn } from './parse-lead-agent-llm-turn.util';
+import { diagnoseLeadAgentLlmParseReject, parseLeadAgentLlmTurn } from './parse-lead-agent-llm-turn.util';
 
 const validation = { allowedProjectIds: new Set(['p1']), allowedFaqIds: new Set(['f1', 'f2']) };
 
@@ -13,6 +13,13 @@ describe('parseLeadAgentLlmTurn', () => {
     expect(parse({})).toBeNull();
   });
 
+  it('diagnoses invalid_json vs empty_replies', () => {
+    expect(diagnoseLeadAgentLlmParseReject('not json')).toBe('invalid_json');
+    expect(diagnoseLeadAgentLlmParseReject('[]')).toBe('invalid_json');
+    expect(diagnoseLeadAgentLlmParseReject('{"replies":[]}')).toBe('empty_replies');
+    expect(diagnoseLeadAgentLlmParseReject('{}')).toBe('empty_replies');
+  });
+
   it('trims replies, cuts them to 600 characters and keeps at most three', () => {
     const actualTurn = parse({ replies: ['  hola  ', 'a'.repeat(700), '', 'tres', 'cuatro'] });
     expect(actualTurn?.replies).toHaveLength(3);
@@ -23,14 +30,14 @@ describe('parseLeadAgentLlmTurn', () => {
   it('drops unknown enum values and applies the defaults', () => {
     const actualTurn = parse({
       replies: ['hola'],
-      profile: { motivation: 'invest', paymentMethod: 'bitcoin', timeline: 'later', budget: ' 80M ', bogus: 1 },
+      profile: { motivation: 'invest', paymentMethod: 'bitcoin', timeline: 'future', budget: ' 80M ', bogus: 1 },
       intents: ['asked_price', 'flirting', 'asked_price'],
       action: 'explode',
       media: ['video', 'hologram'],
       callPeriod: 'midnight',
     });
     expect(actualTurn).toMatchObject({
-      profile: { motivation: 'invest', timeline: 'later', budget: '80M' },
+      profile: { motivation: 'invest', timeline: 'future', budget: '80M' },
       intents: ['asked_price'],
       action: 'continue',
       media: ['video'],

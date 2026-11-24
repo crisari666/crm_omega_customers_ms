@@ -20,9 +20,12 @@ describe('LeadAgentScoringService', () => {
       expect(actualSignals).toEqual(['payment_known']);
     });
 
-    it('earns timeline_soon for within_3_months and timeline_later for later', () => {
+    it('earns timeline_soon for near-term timelines and timeline_later for future/not_now', () => {
+      expect(service.deriveSignals({ timeline: 'immediate' }, [], [])).toEqual(['timeline_soon']);
+      expect(service.deriveSignals({ timeline: 'within_30_days' }, [], [])).toEqual(['timeline_soon']);
       expect(service.deriveSignals({ timeline: 'within_3_months' }, [], [])).toEqual(['timeline_soon']);
-      expect(service.deriveSignals({ timeline: 'later' }, [], [])).toEqual(['timeline_later']);
+      expect(service.deriveSignals({ timeline: 'future' }, [], [])).toEqual(['timeline_later']);
+      expect(service.deriveSignals({ timeline: 'not_now' }, [], [])).toEqual(['timeline_later']);
     });
 
     it('earns budget_known from budget or lotPreference', () => {

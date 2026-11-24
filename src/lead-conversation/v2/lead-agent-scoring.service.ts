@@ -36,8 +36,16 @@ export class LeadAgentScoringService {
     const derived: LeadScoreSignal[] = [];
     if (profile.motivation != null && profile.motivation !== 'exploring') derived.push('motivation_known');
     if (profile.paymentMethod != null) derived.push('payment_known');
-    if (profile.timeline === 'within_3_months') derived.push('timeline_soon');
-    if (profile.timeline === 'later') derived.push('timeline_later');
+    if (
+      profile.timeline === 'immediate' ||
+      profile.timeline === 'within_30_days' ||
+      profile.timeline === 'within_3_months'
+    ) {
+      derived.push('timeline_soon');
+    }
+    if (profile.timeline === 'future' || profile.timeline === 'not_now') {
+      derived.push('timeline_later');
+    }
     if (hasText(profile.budget) || hasText(profile.lotPreference)) derived.push('budget_known');
     if (intents.some((intent) => LEAD_HIGH_INTENT_INTENTS.includes(intent))) derived.push('high_intent_question');
     return [...new Set<LeadScoreSignal>([...existing.filter(isKnownSignal), ...derived])];

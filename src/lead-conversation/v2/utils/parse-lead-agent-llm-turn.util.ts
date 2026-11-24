@@ -61,6 +61,24 @@ const parseProfile = (value: unknown): LeadAgentLlmTurn['profile'] => {
 const parseProjectId = (value: unknown, allowed: ReadonlySet<string>): string | null =>
   typeof value === 'string' && allowed.has(value) ? value : null;
 
+/** Why {@link parseLeadAgentLlmTurn} rejected the model body. */
+export type LeadAgentLlmParseRejectReason = 'invalid_json' | 'empty_replies';
+
+/**
+ * Classifies a parse failure without throwing: bad JSON vs an object with no usable replies.
+ */
+export function diagnoseLeadAgentLlmParseReject(content: string): LeadAgentLlmParseRejectReason {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return 'invalid_json';
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return 'invalid_json';
+  const replies = parseReplies((parsed as RawTurn).replies);
+  return replies.length === 0 ? 'empty_replies' : 'invalid_json';
+}
+
 /**
  * Validates the JSON the agent LLM returned: 1 to 3 trimmed replies (max 600 characters each),
  * unknown enum values dropped, `projectId` and `usedFaqIds` kept only when they were in the prompt.

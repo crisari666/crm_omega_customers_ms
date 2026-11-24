@@ -19,8 +19,16 @@ export type LeadAgentPromptInput = {
   readonly pendingMessages: readonly LeadAgentPendingMessage[];
   /** Confirmed project knowledge; when absent the prompt carries `catalog` instead. */
   readonly project?: ProjectKnowledge;
-  /** Soft Meta-ad hint — does not clear `needsProject`. */
+  /** Soft Meta-ad hint — does not clear `needsProject` until Instant Form adopt or confirm. */
   readonly suggestedProject?: SuggestedLeadProject;
   readonly catalog: readonly ProjectCatalogSummaryItem[];
   readonly faqs: readonly LeadResolvedFaq[];
+  /** Stage-3 capture already known (form + prior answers). */
+  readonly captureKnown?: Readonly<Record<string, string>>;
+  readonly missingCaptureFields?: readonly string[];
+  readonly nextCaptureField?: string;
+  /** When true the system sends the monthly-installment offer; the LLM must not invent figures. */
+  readonly systemSendsFinancing?: boolean;
+  /** When true the system already sends the configured greeting as the first outbound. */
+  readonly systemSendsGreeting?: boolean;
 };

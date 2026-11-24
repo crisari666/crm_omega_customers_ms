@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { LeadPricePolicy } from '../../lead-assistant/types/lead-price-policy.type';
 import { LEAD_AGENT_HISTORY_LIMIT } from '../constants/lead-conversation.constants';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
 import { interpolateTemplate } from '../utils/interpolate-template.util';
@@ -51,6 +52,8 @@ export class LeadAgentPromptBuilder {
     const hasSuggestedProject = suggestedProject !== undefined;
     const motivation = session.leadProfile.motivation;
     const needsMotivation = !needsProject && (motivation === undefined || motivation === 'exploring');
+    const nextCaptureField = needsProject || needsMotivation ? undefined : input.nextCaptureField;
+    const needsTimeToBuy = nextCaptureField === 'timeToBuy';
     const canOfferCall = isLeadQualifiedToOfferCall({
       projectId,
       motivation,
@@ -61,11 +64,21 @@ export class LeadAgentPromptBuilder {
       stageGoal: resolveLeadAgentStageGoal(stage, !needsProject, hasSuggestedProject),
       needsProject,
       needsMotivation,
+      needsTimeToBuy,
+      ...(nextCaptureField !== undefined ? { nextCaptureField } : {}),
+      ...(input.missingCaptureFields !== undefined
+        ? { missingCaptureFields: input.missingCaptureFields }
+        : {}),
+      ...(input.captureKnown !== undefined ? { captureKnown: input.captureKnown } : {}),
       canOfferCall,
       profile: session.leadProfile,
       pricePolicy: input.pricePolicy,
+      systemSendsFinancing: input.systemSendsFinancing === true,
+      systemSendsGreeting: input.systemSendsGreeting === true,
       greeting: this.buildGreeting(input),
-      ...(input.project !== undefined ? { project: this.buildProjectContext(input.project) } : {}),
+      ...(input.project !== undefined
+        ? { project: this.buildProjectContext(input.project, input.pricePolicy, input.systemSendsFinancing === true) }
+        : {}),
       ...(suggestedProject !== undefined
         ? {
             suggestedProject: {
@@ -95,8 +108,16 @@ export class LeadAgentPromptBuilder {
     });
   }
 
-  /** Explicit whitelist: nothing outside it (commission, ventor, holders) can reach the prompt. */
-  private buildProjectContext(project: ProjectKnowledge): Record<string, unknown> {
+  /**
+   * Explicit whitelist: nothing outside it (commission, ventor, holders) can reach the prompt.
+   * Under entry_ticket_first with financing, lot totals are hidden so the model cannot invent prices.
+   */
+  private buildProjectContext(
+    project: ProjectKnowledge,
+    pricePolicy: LeadPricePolicy,
+    systemSendsFinancing: boolean,
+  ): Record<string, unknown> {
+    const hideTotals = systemSendsFinancing && pricePolicy === 'entry_ticket_first';
     return {
       id: project.id,
       title: project.title,
@@ -105,8 +126,24 @@ export class LeadAgentPromptBuilder {
       location: project.location,
       city: project.city,
       state: project.state,
-      priceSell: project.priceSell,
-      lotOptions: project.lotOptions,
+      ...(hideTotals ? {} : { priceSell: project.priceSell }),
+      lotOptions: hideTotals
+        ? project.lotOptions.map((lot) => ({ area: lot.area }))
+        : project.lotOptions,
+      ...(project.financing !== undefined
+        ? {
+            financing: {
+              separation: project.financing.separation,
+              installments: project.financing.installments,
+              minMonthlyPayment: project.financing.minMonthlyPayment,
+              plans: project.financing.plans.map((plan) => ({
+                area: plan.area,
+                monthlyPayment: plan.monthlyPayment,
+                ...(hideTotals ? {} : { price: plan.price }),
+              })),
+            },
+          }
+        : {}),
       amenitiesGroups: project.amenitiesGroups,
       lotCounts: project.lotCounts,
       availableMedia: {

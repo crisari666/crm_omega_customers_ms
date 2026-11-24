@@ -50,7 +50,7 @@ describe('LeadAgentPromptBuilder', () => {
     expect(systemPrompt).toContain('offer_projects');
     expect(systemPrompt).toContain('selector de WhatsApp');
     expect(systemPrompt).toContain('needsMotivation');
-    expect(systemPrompt).toContain('no escribas la pregunta de motivación');
+    expect(systemPrompt).toContain('ÚNICAMENTE los botones de motivación');
     expect(systemPrompt).toContain('botones de WhatsApp');
   });
 
@@ -82,7 +82,7 @@ describe('LeadAgentPromptBuilder', () => {
       isAfterBooking: false,
       isFirstMessageFormDump: true,
     });
-    expect(actualContext.stageGoal).toEqual(expect.stringContaining('construir'));
+    expect(actualContext.stageGoal).toEqual(expect.stringContaining('paymentMethod'));
   });
 
   it('sets needsProject false and the confirm-opening goal when a project is known', () => {

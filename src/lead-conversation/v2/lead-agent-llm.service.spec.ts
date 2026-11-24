@@ -8,9 +8,12 @@ jest.mock('openai', () => ({
 }));
 
 const validation = { allowedProjectIds: new Set(['p1']), allowedFaqIds: new Set(['f1']) };
-const inputMessages = [{ role: 'system', content: 'sys' }] as const;
+const inputMessages = [{ role: 'system' as const, content: 'sys' }];
 
-const completion = (content: string) => ({ choices: [{ message: { content } }] });
+const completion = (content: string, model = 'deepseek-chat') => ({
+  model,
+  choices: [{ message: { content }, finish_reason: 'stop' }],
+});
 
 const buildService = (apiKey = 'key') => {
   const values: Record<string, unknown> = {
@@ -26,7 +29,7 @@ const buildService = (apiKey = 'key') => {
 describe('LeadAgentLlmService', () => {
   beforeEach(() => mockCreate.mockReset());
 
-  it('calls the model with the agent parameters and returns the validated turn', async () => {
+  it('calls the model with JSON format and without thinking, and returns the validated turn', async () => {
     mockCreate.mockResolvedValue(completion(JSON.stringify({ replies: ['Hola'], projectId: 'p1' })));
     const actualTurn = await buildService().executeTurn(inputMessages, validation);
     expect(actualTurn).toMatchObject({ replies: ['Hola'], projectId: 'p1', action: 'continue' });
@@ -34,10 +37,48 @@ describe('LeadAgentLlmService', () => {
     expect(body).toMatchObject({
       model: 'deepseek-chat',
       temperature: 0.6,
-      max_tokens: 700,
+      max_tokens: 1200,
       response_format: { type: 'json_object' },
     });
+    expect(body).not.toHaveProperty('thinking');
     expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('retries with json_object, a reminder system message, and lower temperature after empty content', async () => {
+    mockCreate
+      .mockResolvedValueOnce(completion('          \n\n     ', 'deepseek-flash'))
+      .mockResolvedValueOnce(completion('{"replies":["Hola"]}', 'deepseek-flash'));
+    const actualTurn = await buildService().executeTurn(inputMessages, validation);
+    expect(actualTurn?.replies).toEqual(['Hola']);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(mockCreate.mock.calls[0][0]).toMatchObject({
+      response_format: { type: 'json_object' },
+      temperature: 0.6,
+    });
+    expect(mockCreate.mock.calls[1][0]).toMatchObject({
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+    });
+    const retryMessages = mockCreate.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
+    expect(retryMessages[retryMessages.length - 1]).toEqual({
+      role: 'system',
+      content: 'Recuerda: responde SOLO con el objeto JSON del contrato. Sin texto plano ni markdown.',
+    });
+  });
+
+  it('salvages fenced JSON before parsing', async () => {
+    mockCreate.mockResolvedValue(completion('```json\n{"replies":["Hola"]}\n```'));
+    const actualTurn = await buildService().executeTurn(inputMessages, validation);
+    expect(actualTurn?.replies).toEqual(['Hola']);
+  });
+
+  it('uses reasoning_content when message content is empty', async () => {
+    mockCreate.mockResolvedValue({
+      model: 'deepseek-flash',
+      choices: [{ message: { content: '', reasoning_content: '{"replies":["Desde reasoning"]}' }, finish_reason: 'stop' }],
+    });
+    const actualTurn = await buildService().executeTurn(inputMessages, validation);
+    expect(actualTurn?.replies).toEqual(['Desde reasoning']);
   });
 
   it('retries once on an error and then succeeds', async () => {
