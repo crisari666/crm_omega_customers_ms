@@ -209,6 +209,38 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(transition.sessionPatch?.leadProfile?.stage).toBe('booking');
   });
 
+  it('answers a matching FAQ on LLM fail instead of offering the schedule', async () => {
+    const { engine, mockTransitions, mockFaqResolver } = buildEngine(null);
+    mockFaqResolver.executeResolve.mockResolvedValue([
+      {
+        id: 'faq-legal',
+        question: '¿Cómo es la escrituración?',
+        alternativePhrasings: ['Se entrega escricturado?'],
+        answer: 'Se firma la escritura pública y recibes la matrícula a tu nombre.',
+        category: 'legal',
+      },
+    ]);
+    const { transition, usedFaqIds } = await engine.executeTurn({
+      ...buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+      pendingMessages: [{ text: '¿Lo entregan con escrituras?' }],
+    });
+    expect(transition.outbound).toEqual([
+      { kind: 'text', body: 'Se firma la escritura pública y recibes la matrícula a tu nombre.' },
+    ]);
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
+    expect(usedFaqIds).toEqual(['faq-legal']);
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+  });
+
+  it('keeps the schedule fallback on LLM fail when no FAQ matches', async () => {
+    const { engine, mockTransitions } = buildEngine(null);
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+    );
+    expect(transition.outbound[0]).toEqual({ kind: 'text', body: LEAD_AGENT_FALLBACK_REPLY });
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+  });
+
   it('parses construi4 typo from pending text on LLM fail', async () => {
     const { engine } = buildEngine(null);
     const { transition } = await engine.executeTurn({

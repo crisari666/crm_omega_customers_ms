@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { LeadAssistantSettingsService } from '../../lead-assistant/lead-assistant-settings.service';
 import { LeadFaqResolverService } from '../../lead-assistant/lead-faq-resolver.service';
+import type { LeadResolvedFaq } from '../../lead-assistant/types/lead-resolved-faq.type';
+import { pickBestLeadFaqMatch } from '../../lead-assistant/utils/score-lead-faq-match.util';
 import { LEAD_AGENT_REPLY_GAP_MS, REPLY_ID } from '../constants/lead-conversation.constants';
 import { LeadAdProjectResolverService } from '../lead-ad-project-resolver.service';
 import { LeadFlowTransitionsService } from '../lead-flow-transitions.service';
@@ -112,7 +114,7 @@ export class LeadAgentEngineService {
       allowedFaqIds: new Set(faqs.map((faq) => faq.id)),
     });
     if (turn === null) {
-      return this.buildFallbackOutcome(session, resolved, input.pendingMessages, tappedMotivation);
+      return this.buildFallbackOutcome(session, resolved, input.pendingMessages, faqs, tappedMotivation);
     }
     return this.buildTurnOutcome(
       session,
@@ -230,12 +232,27 @@ export class LeadAgentEngineService {
     session: LeadAgentSessionView,
     resolved: ResolvedLeadProject,
     pendingMessages: readonly LeadAgentPendingMessage[],
+    faqs: readonly LeadResolvedFaq[],
     tappedMotivation?: NonNullable<LeadProfile['motivation']>,
   ): Promise<LeadAgentTurnOutcome> {
     const adoptedMotivationFromTap = tappedMotivation !== undefined;
+    const profile = this.mergeFallbackMotivation(session, pendingMessages, tappedMotivation);
+    const signals = this.scoring.deriveSignals(profile, [], session.scoreSignals);
+    const customerText = pendingMessages.map((message) => message.text).join('\n');
+    const bestFaq = pickBestLeadFaqMatch(customerText, faqs);
+    if (bestFaq !== undefined) {
+      return {
+        transition: this.buildTransition(
+          session,
+          resolved,
+          this.buildContinueFallbackDraft(session, bestFaq.faq.answer, profile, signals),
+        ),
+        usedFaqIds: [bestFaq.faq.id],
+      };
+    }
     if (!hasConfirmedProjectGate(resolved)) {
       const picker = await this.transitions.buildProjectPicker();
-      const draft = this.buildContinueFallbackDraft(session, LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY);
+      const draft = this.buildContinueFallbackDraft(session, LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY, profile, signals);
       return {
         transition: this.buildTransition(session, resolved, {
           ...draft,
@@ -244,8 +261,6 @@ export class LeadAgentEngineService {
         usedFaqIds: [],
       };
     }
-    const profile = this.mergeFallbackMotivation(session, pendingMessages, tappedMotivation);
-    const signals = this.scoring.deriveSignals(profile, [], session.scoreSignals);
     const canOfferCall = isLeadQualifiedToOfferCall({
       projectId: resolved.projectId,
       motivation: profile.motivation,
