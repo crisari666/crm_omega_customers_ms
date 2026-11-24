@@ -487,6 +487,43 @@ describe('LeadAgentEngineService.executeTurn', () => {
     expect(transition.sessionPatch?.leadProfile?.stage).toBe('booking');
   });
 
+  it('coerces offer_call_slots to continue when the turn answers a FAQ without wants_call', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Sí, se firma la escritura pública a tu nombre.'],
+        action: 'offer_call_slots',
+        profile: { motivation: 'build' },
+        usedFaqIds: ['faq-legal'],
+      }),
+    );
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+    );
+    expect(mockTransitions.buildAskSchedule).not.toHaveBeenCalled();
+    expect(transition.outbound).toEqual([{ kind: 'text', body: 'Sí, se firma la escritura pública a tu nombre.' }]);
+    expect(transition.nextStep).toBe(LeadConversationStep.V2Conversation);
+    expect(transition.sessionPatch?.scoreSignals ?? []).not.toContain('accepted_call');
+    expect(transition.sessionPatch?.leadProfile?.stage).not.toBe('booking');
+  });
+
+  it('keeps offer_call_slots when a FAQ turn also has wants_call', async () => {
+    const { engine, mockTransitions } = buildEngine(
+      buildTurn({
+        replies: ['Te cuento eso en la llamada.'],
+        action: 'offer_call_slots',
+        profile: { motivation: 'build' },
+        intents: ['wants_call'],
+        usedFaqIds: ['faq-legal'],
+      }),
+    );
+    const { transition } = await engine.executeTurn(
+      buildInput(buildSession({ leadProfile: { motivation: 'build' } })),
+    );
+    expect(mockTransitions.buildAskSchedule).toHaveBeenCalled();
+    expect(transition.nextStep).toBe(LeadConversationStep.AskSchedule);
+    expect(transition.sessionPatch?.scoreSignals).toContain('accepted_call');
+  });
+
   it('offers the call slot list of the period and takes its answers patch', async () => {
     const customerId = new Types.ObjectId();
     const inputTurn = buildTurn({

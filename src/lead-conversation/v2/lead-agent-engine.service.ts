@@ -400,7 +400,7 @@ export class LeadAgentEngineService {
     turn: LeadAgentLlmTurn,
     adoptedMotivationFromTap = false,
   ): Promise<LeadAgentTurnDraft> {
-    const action = this.coerceAction(session, resolved, profile, turn.action);
+    const action = this.coerceAction(session, resolved, profile, turn);
     const isOfferingSlots = action === 'offer_call_slots';
     const media = this.buildMedia(resolved, profile, { ...turn, action });
     const slots = isOfferingSlots ? await this.buildSlotTransition(session, turn) : undefined;
@@ -463,18 +463,23 @@ export class LeadAgentEngineService {
   /**
    * Without a project gate: no media or slots.
    * Without buyer motivation: no slots (media still allowed once a project exists).
+   * FAQ knowledge turns: no slots unless the customer asked for a call (`wants_call`).
    */
   private coerceAction(
     session: LeadAgentSessionView,
     resolved: ResolvedLeadProject,
     profile: LeadProfile,
-    action: LeadAgentLlmTurn['action'],
+    turn: LeadAgentLlmTurn,
   ): LeadAgentLlmTurn['action'] {
+    const { action } = turn;
     if (!hasConfirmedProjectGate(resolved)) {
       if (action === 'offer_call_slots' || action === 'send_media') return 'continue';
       return action;
     }
     if (action !== 'offer_call_slots') return action;
+    if (turn.usedFaqIds.length > 0 && !turn.intents.includes('wants_call')) {
+      return 'continue';
+    }
     const canOfferCall = isLeadQualifiedToOfferCall({
       projectId: resolved.projectId,
       motivation: profile.motivation,

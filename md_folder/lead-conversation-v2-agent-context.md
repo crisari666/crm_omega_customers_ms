@@ -67,14 +67,17 @@ When `LeadAgentLlmService.executeTurn` returns `null`:
 
 | State | Fallback |
 |---|---|
+| Best FAQ match score >= `LEAD_FAQ_FALLBACK_MIN_SCORE` (200) | Send FAQ `answer` text, stay `v2_conversation`, `usedFaqIds: [id]` — **before** project/motivation/schedule |
 | No project | Ask project text + interactive picker (`LEAD_AGENT_FALLBACK_ASK_PROJECT_REPLY` + `buildProjectPicker`) |
 | Project, motivation still unknown | Parse pending text / `mot:*` tap; if still unknown → ask motivation text + buttons |
 | Parsed `build`/`invest`/`leisure` | Treat as buyer-qualified → schedule fallback |
 | Parsed / stored `exploring` | Acknowledge (`LEAD_AGENT_FALLBACK_EXPLORING_REPLY`) + motivation buttons (re-qualify); stay chat |
 
+FAQ match: `pickBestLeadFaqMatch` / `scoreLeadFaqMatch` (`lead-assistant/utils/score-lead-faq-match.util.ts`) — containment, token overlap, and stem prefixes (e.g. `escrituras` ~ `escrituracion`).
+
 Parser stems: construir / construi* / inversión / invertir / explorando / solo mirando / ocio / vacacion* (typos like `Construi4` → build).
 
-**Bug that shipped then fixed:** ask-motivation fallback ignored inbound “Construir” → infinite same question while LLM kept returning null.
+**Bugs that shipped then fixed:** ask-motivation fallback ignored inbound “Construir” → loop; LLM-null + buyer dumped schedule instead of dictionary FAQ (e.g. escrituras).
 
 ## Predefined messages (not LLM)
 
@@ -111,7 +114,13 @@ Triggered by `transitions.buildAskSchedule()` / `buildAskCallSlot()` when `offer
 
 `askSchedule` body (abbrev.): advisor will call ~5 min; windows 9–12 / 2–5 / 6–9; “¿En qué horario te queda mejor que te llamemos?”
 
-V2 LLM-fail buyer path outbound order: **`LEAD_AGENT_FALLBACK_REPLY`** (text) → gap → **`askSchedule`** (buttons). Screenshot of that pair = fallback schedule dump, not discovery LLM copy.
+V2 LLM-fail buyer path (no FAQ hit): **`LEAD_AGENT_FALLBACK_REPLY`** (text) → gap → **`askSchedule`** (buttons). That pair = schedule dump. If a dictionary FAQ matches first, outbound is only the FAQ answer (no slots).
+
+### FAQ dictionary (admin)
+
+Stored in `lead_faqs`; resolved per turn into the LLM prompt. On LLM fail, a strong match answers with `defaultAnswer` / project answer directly. Fix weak alts in admin (e.g. typo `escricturado`) still helps ranking.
+
+On a **successful** LLM turn that cites FAQs (`usedFaqIds`): reply is the knowledge answer only (`continue`). Do **not** append schedule buttons unless the customer asked to be called (`wants_call`). Booking stage goal no longer pushes “elige de la lista”.
 
 ### Welcome / recovery (Meta templates, admin-configured)
 
@@ -128,10 +137,11 @@ Not the engine constants. Sent as WhatsApp **marketing templates** on the leads 
 
 ## LLM
 
-- Client: DeepSeek via OpenAI SDK (`DEEPSEEK_API_KEY`, `deepseek.baseUrl`, model `LEAD_AGENT_LLM_MODEL` default `deepseek-chat`).
-- Null after 2 attempts → engine fallback.
-- Logs: warn once if API key empty; on parse reject, warn with truncated content snippet (`LEAD_AGENT_LLM_CONTENT_LOG_CHARS`).
-- Symptom `Agent turn attempt N/2 produced no valid answer` = turn null (fallback path), not “LLM unset”.
+- Code: `src/lead-conversation/v2/lead-agent-llm.service.ts` (DeepSeek / OpenAI SDK). Orchestration: `lead-agent-engine.service.ts`.
+- Config: `DEEPSEEK_API_KEY`, `deepseek.baseUrl`, model `LEAD_AGENT_LLM_MODEL` (default `deepseek-chat`).
+- Null after 2 attempts → engine fallback (FAQ → project → motivation → schedule).
+- Nest logs (`LeadAgentLlmService`): turn start (model, message count, last user snippet); each request attempt; response char length; turn ok / null after N; warn on missing key, request fail, parse-reject content snippet (`LEAD_AGENT_LLM_CONTENT_LOG_CHARS`).
+- Symptom `Agent LLM turn null after 2 attempts` = fallback path, not “LLM unset”.
 
 ## Scoring (V2)
 
@@ -156,6 +166,8 @@ Signals recomputed each turn (not incremented): motivation_known 10, payment_kno
 2. **V2 restart clears** `projectId` / `projectTitle` so greeting-only turns ask catalog options again.
 3. **Qualify before call** — `canOfferCall` gate in engine / stage / prompts; LLM-fail no longer dumps schedule without buyer motivation.
 4. **Parse motivation on fallback** — stop ask-motivation loop; exploring acknowledge path; LLM diagnostic logs.
+5. **FAQ on LLM fail** — dictionary stem match answers before schedule dump; Nest logs each LLM request/response.
+6. **Friendlier FAQ turns** — answering a FAQ uses `continue` (no “elige de la lista”); engine coerces `offer_call_slots` away unless intent `wants_call`.
 
 ## Do not
 

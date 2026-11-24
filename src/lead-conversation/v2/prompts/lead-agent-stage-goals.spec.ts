@@ -29,7 +29,18 @@ describe('resolveLeadAgentStageGoal', () => {
     expect(goal).toContain('offer_call_slots');
   });
 
-  it('gates bridge call offer on canOfferCall', () => {
-    expect(resolveLeadAgentStageGoal('bridge', true)).toContain('canOfferCall');
+  it('gates bridge call offer on canOfferCall without pushy list wording', () => {
+    const goal = resolveLeadAgentStageGoal('bridge', true);
+    expect(goal).toContain('canOfferCall');
+    expect(goal).toContain('sin presión');
+    expect(goal).toContain('No digas "elige de la lista"');
+  });
+
+  it('asks booking to answer FAQ doubts warmly without pushing the slot list', () => {
+    const goal = resolveLeadAgentStageGoal('booking', true);
+    expect(goal).toContain('calidez');
+    expect(goal).toContain('continue');
+    expect(goal).toContain('solo elige una opción de la lista');
+    expect(goal).not.toContain('recuérdale elegir una opción de la lista');
   });
 });

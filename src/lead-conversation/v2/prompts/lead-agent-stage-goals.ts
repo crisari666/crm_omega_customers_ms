@@ -15,11 +15,11 @@ const STAGE_GOALS: Readonly<Record<Exclude<LeadProfileStage, 'opening'>, string>
   value:
     'Muestra los beneficios del proyecto que encajan con su perfil. Puedes enviar un video corto o el plano. No ofrezcas llamada si canOfferCall es false.',
   bridge:
-    'Si canOfferCall es true, propón una llamada corta con un asesor, sin presión, y pregunta si le queda mejor en la mañana, la tarde o la noche. Si canOfferCall es false (solo explorando o sin motivación), no ofrezcas llamada: aporta valor y vuelve a preguntar si quiere construir o invertir.',
+    'Si canOfferCall es true, propón con calidez una llamada corta con un asesor (sin presión) y pregunta si le queda mejor mañana, tarde o noche. No digas "elige de la lista". Si canOfferCall es false (solo explorando o sin motivación), no ofrezcas llamada: aporta valor y vuelve a preguntar si quiere construir o invertir.',
   booking:
-    'El cliente está eligiendo horario. Responde su duda en breve y recuérdale elegir una opción de la lista.',
+    'El cliente puede estar eligiendo horario. Si pregunta algo de contenido o una faq, responde con calidez y hechos primero; action continue. No uses frases tipo "solo elige una opción de la lista". Solo si ya tenía la lista y sigue sin elegir, un recordatorio suave opcional. No vuelvas a offer_call_slots por una duda de conocimiento.',
   booked:
-    'La llamada ya está agendada. Responde dudas en breve con las faqs. Los cambios de horario los gestiona el asesor.',
+    'La llamada ya está agendada. Responde dudas en breve con las faqs, con tono cercano. Los cambios de horario los gestiona el asesor.',
 };
 
 /**
