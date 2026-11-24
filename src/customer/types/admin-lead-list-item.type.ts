@@ -7,6 +7,11 @@ export type AdminLeadSessionSummary = {
   readonly score?: number;
   readonly priority?: number;
   readonly step?: string;
+  /** 6 for the V1 scripted flow, 100 for the V2 agent flow. */
+  readonly maxScore: number;
+  readonly flowVersion: 'v1' | 'v2';
+  /** V2 only. */
+  readonly temperature?: string;
 };
 
 /** Next upcoming pending call for this customer (leads inbox / chat drawer). */

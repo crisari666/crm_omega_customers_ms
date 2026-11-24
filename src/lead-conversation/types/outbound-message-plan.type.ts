@@ -1,6 +1,6 @@
 import type { OutboundContact } from './outbound-contact.type';
 
-export type OutboundMessageKind = 'text' | 'image' | 'document' | 'buttons' | 'list' | 'contacts';
+export type OutboundMessageKind = 'text' | 'image' | 'document' | 'buttons' | 'list' | 'contacts' | 'template' | 'video';
 
 export type OutboundOption = {
   readonly id: string;
@@ -18,4 +18,7 @@ export type OutboundMessagePlan = {
   readonly listButtonLabel?: string;
   readonly contact?: OutboundContact;
   readonly delayMs?: number;
+  readonly templateName?: string;
+  readonly languageCode?: string;
+  readonly templateComponents?: readonly Record<string, unknown>[];
 };

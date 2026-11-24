@@ -41,8 +41,22 @@ export class LeadQualificationService {
         ...(answers.formaPago ? { paymentMethod: PAYMENT_METADATA_CODES[answers.formaPago] } : {}),
         ...(answers.horarioLlamada ? { preferredCallTime: answers.horarioLlamada } : {}),
         ...(answers.fechaLlamada ? { scheduledCallAt: answers.fechaLlamada } : {}),
+        ...this.buildAgentValues(session),
       },
     });
+  }
+
+  /** Extra V2 facts learned by the agent; empty for V1 sessions so their metadata stays untouched. */
+  private buildAgentValues(session: LeadSessionSnapshot): Record<string, string> {
+    if (session.flowVersion !== 'v2') return {};
+    const profile = session.leadProfile ?? {};
+    return {
+      ...(profile.motivation ? { motivation: profile.motivation } : {}),
+      ...(profile.timeline ? { purchaseTimeline: profile.timeline } : {}),
+      ...(profile.budget ? { budget: profile.budget } : {}),
+      ...(profile.mainObjection ? { mainObjection: profile.mainObjection } : {}),
+      ...(session.temperature ? { leadTemperature: session.temperature } : {}),
+    };
   }
 
   /** The booked call slot already assigned the customer to its advance-leads user; mirror it on the session. */

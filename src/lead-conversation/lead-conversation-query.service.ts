@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PAYMENT_LABELS, SLOT_LABELS } from './constants/answer-mappings.constants';
 import { formatCallSlotDate } from './utils/format-call-slot-date.util';
-import { MAX_SCORE } from './constants/lead-conversation.constants';
+import { MAX_SCORE, MAX_SCORE_V2 } from './constants/lead-conversation.constants';
 import { LeadConversationSessionService, type LeadSessionSnapshot } from './lead-conversation-session.service';
 import {
   LeadConversationMessage,
@@ -11,6 +11,9 @@ import {
 } from './schemas/lead-conversation-message.schema';
 import type { LeadConversationMessagesPage } from './types/lead-conversation-messages-page.type';
 import type { LeadConversationSummary, LeadConversationSummaryItem } from './types/lead-conversation-summary.type';
+import type { LeadTemperature } from './types/lead-temperature.type';
+import { LeadAgentScoringService } from './v2/lead-agent-scoring.service';
+import { buildLeadAgentSummaryItems } from './v2/utils/build-lead-agent-summary-items.util';
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -25,13 +28,15 @@ export class LeadConversationQueryService {
     private readonly sessionService: LeadConversationSessionService,
     @InjectModel(LeadConversationMessage.name)
     private readonly messageModel: Model<LeadConversationMessageDocument>,
+    private readonly agentScoring: LeadAgentScoringService,
   ) {}
 
   async getSummary(customerId: string): Promise<LeadConversationSummary> {
     const session = await this.sessionService.findLatestByCustomerId(customerId);
     if (!session) {
-      return { customerId, hasSession: false, score: 0, maxScore: MAX_SCORE, priority: 0, isAllProjects: false, answers: {}, items: [] };
+      return { customerId, hasSession: false, score: 0, maxScore: MAX_SCORE, priority: 0, isAllProjects: false, flowVersion: 'v1', answers: {}, items: [] };
     }
+    const isAgentFlow = session.flowVersion === 'v2';
     return {
       customerId,
       hasSession: true,
@@ -39,17 +44,30 @@ export class LeadConversationQueryService {
       step: session.step,
       status: session.status,
       score: session.score,
-      maxScore: MAX_SCORE,
+      maxScore: isAgentFlow ? MAX_SCORE_V2 : MAX_SCORE,
       priority: session.priority,
       projectId: session.projectId,
       projectTitle: session.projectTitle,
       isAllProjects: session.isAllProjects,
+      flowVersion: isAgentFlow ? 'v2' : 'v1',
+      ...this.buildAgentFields(session),
       answers: session.answers ?? {},
-      items: buildSummaryItems(session),
+      items: isAgentFlow ? buildLeadAgentSummaryItems(session) : buildSummaryItems(session),
       assignedVentorId: session.assignedVentorId,
       scheduledAt: toIso(session.scheduledAt),
       lastInboundAt: toIso(session.lastInboundAt),
       startedAt: toIso((session as LeadSessionSnapshot & { createdAt?: Date }).createdAt),
+    };
+  }
+
+  /** V2-only summary fields; empty for V1 sessions so their payload keeps its shape. */
+  private buildAgentFields(session: LeadSessionSnapshot): Partial<LeadConversationSummary> {
+    if (session.flowVersion !== 'v2') return {};
+    return {
+      ...(session.temperature ? { temperature: session.temperature as LeadTemperature } : {}),
+      ...(session.leadProfile?.stage ? { stage: session.leadProfile.stage } : {}),
+      ...(session.advisorBrief ? { advisorBrief: session.advisorBrief } : {}),
+      scoreSegments: this.agentScoring.buildScoreSegments(session.scoreSignals ?? []),
     };
   }
 

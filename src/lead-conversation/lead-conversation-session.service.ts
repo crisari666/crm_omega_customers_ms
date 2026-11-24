@@ -141,6 +141,47 @@ export class LeadConversationSessionService {
     await this.sessionModel.updateOne({ _id: sessionId }, { $set: { assignedVentorId: ventorId } }).exec();
   }
 
+  /** Stores the advisor brief written when the lead booked a call. */
+  async setAdvisorBrief(sessionId: Types.ObjectId, advisorBrief: string): Promise<void> {
+    await this.sessionModel.updateOne({ _id: sessionId }, { $set: { advisorBrief } }).exec();
+  }
+
+  /** Closes an unanswered V2 conversation as cold; no-op unless the session is still active. */
+  async markAbandoned(sessionId: Types.ObjectId): Promise<void> {
+    await this.sessionModel
+      .updateOne(
+        { _id: sessionId, status: 'active' },
+        { $set: { status: 'abandoned', temperature: 'cold', priority: 1 }, $inc: { version: 1 } },
+      )
+      .exec();
+  }
+
+  /** Records that a recovery step was sent to the lead. */
+  async addRecoverySentStep(sessionId: Types.ObjectId, stepId: string): Promise<void> {
+    await this.sessionModel.updateOne({ _id: sessionId }, { $push: { 'recovery.sentStepIds': stepId } }).exec();
+  }
+
+  /**
+   * After a recovery reply, re-anchor the V2 stage to discovery (keeps the rest of leadProfile).
+   * Skips booked / scheduled sessions.
+   */
+  async reenterDiscoveryAfterRecovery(sessionId: Types.ObjectId): Promise<void> {
+    await this.sessionModel
+      .updateOne(
+        {
+          _id: sessionId,
+          flowVersion: 'v2',
+          status: { $nin: ['scheduled', 'disqualified'] },
+          step: { $ne: LeadConversationStep.Scheduled },
+        },
+        {
+          $set: { 'leadProfile.stage': 'discovery', 'leadProfile.stageTurns': 0 },
+          $inc: { version: 1 },
+        },
+      )
+      .exec();
+  }
+
   /** Syncs booked call answers after an admin reschedule. */
   async patchScheduledCallAnswers(
     sessionId: Types.ObjectId,
@@ -162,6 +203,7 @@ export class LeadConversationSessionService {
   private isReminderDue(session: LeadSessionSnapshot, questionAt: Date): boolean {
     return (
       session.status === 'active' &&
+      session.flowVersion !== 'v2' &&
       !session.reminderSentAt &&
       QUESTION_STEPS.includes(session.step) &&
       session.lastQuestionAt?.getTime() === questionAt.getTime()

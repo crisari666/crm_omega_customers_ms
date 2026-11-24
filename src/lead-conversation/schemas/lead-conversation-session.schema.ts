@@ -1,5 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
+import type { LeadProfile } from '../types/lead-profile.type';
+import type { LeadRecoveryState } from '../types/lead-recovery-state.type';
 import type { LeadConversationAnswers } from '../types/lead-conversation-answers.type';
 import { LEAD_CONVERSATION_STATUSES, LeadConversationStatus } from '../types/lead-conversation-status.type';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
@@ -102,6 +104,35 @@ export class LeadConversationSession {
 
   @Prop({ type: Number, default: 0 })
   version: number;
+
+  /** `v1` = scripted flow, `v2` = AI agent flow. */
+  @Prop({ type: String, default: 'v1' })
+  flowVersion: string;
+
+  @Prop({ required: false })
+  formId?: string;
+
+  @Prop({ type: MongooseSchema.Types.Mixed, default: {} })
+  leadProfile: LeadProfile;
+
+  @Prop({ type: [String], default: [] })
+  scoreSignals: string[];
+
+  @Prop({ required: false })
+  temperature?: string;
+
+  @Prop({ required: false })
+  advisorBrief?: string;
+
+  /** Last inbound message id handled by the agent (debounce / dedupe of agent turns). */
+  @Prop({ required: false })
+  lastTurnMessageId?: string;
+
+  @Prop({ type: MongooseSchema.Types.Mixed, default: () => ({ sentStepIds: [] }) })
+  recovery: LeadRecoveryState;
+
+  @Prop({ type: Date, required: false })
+  optedOutAt?: Date;
 }
 
 export const LeadConversationSessionSchema = SchemaFactory.createForClass(LeadConversationSession);

@@ -41,6 +41,16 @@ export class LeadConversationMessage {
   @Prop({ type: Boolean, default: true })
   delivered: boolean;
 
+  /** Latest Meta delivery status (sent < delivered < read; failed is final). */
+  @Prop({ required: false })
+  deliveryStatus?: string;
+
+  @Prop({ required: false })
+  errorCode?: number;
+
+  @Prop({ required: false })
+  templateName?: string;
+
   @Prop({ type: Date, required: true })
   timestamp: Date;
 }

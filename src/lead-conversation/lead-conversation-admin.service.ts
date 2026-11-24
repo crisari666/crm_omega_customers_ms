@@ -2,7 +2,8 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
-import { CUSTOMER_SERVICE_WINDOW_MS, MAX_SCORE } from './constants/lead-conversation.constants';
+import { LeadRecoveryScheduler } from '../lead-assistant/lead-recovery.scheduler';
+import { CUSTOMER_SERVICE_WINDOW_MS, MAX_SCORE, MAX_SCORE_V2 } from './constants/lead-conversation.constants';
 import type { ListLeadConversationsQueryDto } from './dto/list-lead-conversations-query.dto';
 import type { LeadSessionSnapshot } from './lead-conversation-session.service';
 import { LeadFlowTransitionsService } from './lead-flow-transitions.service';
@@ -19,6 +20,8 @@ import {
 import type { LeadConversationAdminListItem } from './types/lead-conversation-admin-list-item.type';
 import type { LeadConversationAdminListPage } from './types/lead-conversation-admin-list-page.type';
 import type { LeadConversationRestartResult } from './types/lead-conversation-restart-result.type';
+import type { LeadTemperature } from './types/lead-temperature.type';
+import { buildLeadAgentSessionReset } from './utils/build-lead-agent-session-reset.util';
 import { buildLeadSessionReset } from './utils/build-lead-session-reset.util';
 import { escapeRegex } from './utils/escape-regex.util';
 
@@ -44,6 +47,7 @@ export class LeadConversationAdminService {
     private readonly reminderScheduler: LeadReminderScheduler,
     private readonly transitions: LeadFlowTransitionsService,
     private readonly dispatcher: LeadMessageDispatcherService,
+    private readonly recoveryScheduler: LeadRecoveryScheduler,
   ) {}
 
   async listSessions(query: ListLeadConversationsQueryDto): Promise<LeadConversationAdminListPage> {
@@ -65,6 +69,7 @@ export class LeadConversationAdminService {
   async deleteSession(sessionId: string): Promise<{ deleted: true }> {
     const session = await this.findSessionOrThrow(sessionId);
     await this.reminderScheduler.executeCancel(sessionId);
+    await this.recoveryScheduler.executeCancel(sessionId);
     await this.messageModel.deleteMany({ sessionId: session._id }).exec();
     await this.sessionModel.deleteOne({ _id: session._id }).exec();
     this.logger.log(`Lead conversation ${sessionId} deleted`);
@@ -77,6 +82,7 @@ export class LeadConversationAdminService {
    */
   async restartSession(sessionId: string): Promise<LeadConversationRestartResult> {
     const session = await this.findSessionOrThrow(sessionId);
+    if (session.flowVersion === 'v2') return this.restartAgentSession(session);
     await this.reminderScheduler.executeCancel(sessionId);
     const canSend = isInsideCustomerServiceWindow(session.lastInboundAt);
     const transition = canSend ? await this.transitions.buildAskProject(session) : undefined;
@@ -96,6 +102,25 @@ export class LeadConversationAdminService {
     });
     this.logger.log(`Lead conversation ${sessionId} restarted`);
     return { restarted: true, sent: true };
+  }
+
+  /** V2 restart: clean agent conversation that waits for the customer (templates only work inside the 24h window). */
+  private async restartAgentSession(session: LeadSessionSnapshot): Promise<LeadConversationRestartResult> {
+    const sessionId = String(session._id);
+    await this.reminderScheduler.executeCancel(sessionId);
+    await this.recoveryScheduler.executeCancel(sessionId);
+    const lastInbound = await this.messageModel
+      .findOne({ sessionId: session._id, direction: 'inbound' })
+      .sort({ _id: -1 })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    const { $set, $unset } = buildLeadAgentSessionReset({
+      ...(lastInbound ? { lastTurnMessageId: String(lastInbound._id) } : {}),
+    });
+    await this.sessionModel.updateOne({ _id: session._id }, { $set, $unset, $inc: { version: 1 } }).exec();
+    this.logger.log(`Lead conversation ${sessionId} (v2) restarted; waiting for the customer`);
+    return { restarted: true, sent: false, reason: 'v2_waits_for_customer' };
   }
 
   private async findSessionOrThrow(sessionId: string): Promise<LeadSessionSnapshot> {
@@ -123,6 +148,8 @@ function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<Lead
   const filter: QueryFilter<LeadConversationSessionDocument> = {};
   if (query.status) filter.status = query.status;
   if (query.step) filter.step = query.step;
+  if (query.flow === 'v2') filter.flowVersion = 'v2';
+  if (query.flow === 'v1') filter.flowVersion = { $ne: 'v2' };
   if (query.search) {
     const pattern = new RegExp(escapeRegex(query.search), 'i');
     filter.$or = [{ waId: pattern }, { profileName: pattern }, { projectTitle: pattern }];
@@ -132,6 +159,7 @@ function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<Lead
 
 function toListItem(session: SessionWithTimestamps, contact?: CustomerContact): LeadConversationAdminListItem {
   const fullName = [contact?.name, contact?.lastName].filter(Boolean).join(' ').trim();
+  const isAgentFlow = session.flowVersion === 'v2';
   return {
     sessionId: String(session._id),
     customerId: String(session.customerId),
@@ -142,8 +170,11 @@ function toListItem(session: SessionWithTimestamps, contact?: CustomerContact): 
     step: session.step,
     status: session.status,
     score: session.score,
-    maxScore: MAX_SCORE,
+    maxScore: isAgentFlow ? MAX_SCORE_V2 : MAX_SCORE,
     priority: session.priority,
+    flowVersion: isAgentFlow ? 'v2' : 'v1',
+    ...(isAgentFlow && session.temperature ? { temperature: session.temperature as LeadTemperature } : {}),
+    ...(isAgentFlow && session.leadProfile?.stage ? { stage: session.leadProfile.stage } : {}),
     lastInboundAt: toIso(session.lastInboundAt),
     startedAt: toIso(session.createdAt),
   };

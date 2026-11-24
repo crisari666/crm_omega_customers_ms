@@ -45,19 +45,42 @@ export class LeadMessageComposerService {
 
   /** Welcome + project list ("Me interesan todos" appended). */
   async composeAskProject(firstName: string): Promise<OutboundMessagePlan[]> {
+    const options = await this.buildProjectPickerOptions();
+    const body = this.render(LEAD_TEMPLATES.askProject, firstName);
+    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.askProjectListButton)];
+  }
+
+  /**
+   * Short project picker for V2 (same option ids as V1).
+   * Default body avoids re-sending the full welcome mid-chat.
+   */
+  async composeProjectPicker(body: string = LEAD_TEMPLATES.askProjectPicker): Promise<OutboundMessagePlan[]> {
+    const options = await this.buildProjectPickerOptions();
+    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.askProjectListButton)];
+  }
+
+  /** V2 motivation reply buttons (construir / inversión / explorando). */
+  composeAskMotivation(body: string = LEAD_TEMPLATES.askMotivationPicker): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.motivationBuild, title: LEAD_TEMPLATES.motivationBuildOption },
+      { id: REPLY_ID.motivationInvest, title: LEAD_TEMPLATES.motivationInvestOption },
+      { id: REPLY_ID.motivationExploring, title: LEAD_TEMPLATES.motivationExploringOption },
+    ];
+    return [this.buildChoiceMessage(body, options)];
+  }
+
+  private async buildProjectPickerOptions(): Promise<OutboundOption[]> {
     const projects = await this.projectCatalog.getProjects();
     if (projects.length === 0) {
       this.logger.error('Project catalog is empty; ask_project list will only offer "Me interesan todos"');
     }
-    const options: OutboundOption[] = [
+    return [
       ...projects.map((project, index) => ({
         id: `${REPLY_ID.projectPrefix}${project.id}`,
         title: `${PROJECT_LIST_EMOJIS[index % PROJECT_LIST_EMOJIS.length]} ${project.title}`,
       })),
       { id: REPLY_ID.allProjects, title: LEAD_TEMPLATES.allProjectsOption },
     ];
-    const body = this.render(LEAD_TEMPLATES.askProject, firstName);
-    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.askProjectListButton)];
   }
 
   /** Intro text → (3s) plan media → (4s) lot ranges question. Lot question omitted when the project has no lots. */

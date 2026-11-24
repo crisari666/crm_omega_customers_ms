@@ -94,6 +94,32 @@ export const CUSTOMER_METADATA_FIELD_CATALOG: readonly CustomerMetadataFieldDefi
       type: 'text',
       required: false,
     },
+    // Lead Scoring V2: facts learned by the WhatsApp agent (optional, not part of completeness).
+    {
+      key: 'motivation',
+      type: 'text',
+      required: false,
+    },
+    {
+      key: 'purchaseTimeline',
+      type: 'text',
+      required: false,
+    },
+    {
+      key: 'budget',
+      type: 'text',
+      required: false,
+    },
+    {
+      key: 'mainObjection',
+      type: 'text',
+      required: false,
+    },
+    {
+      key: 'leadTemperature',
+      type: 'text',
+      required: false,
+    },
   ] as const;
 
 export const CUSTOMER_METADATA_FIELD_KEYS: readonly string[] =

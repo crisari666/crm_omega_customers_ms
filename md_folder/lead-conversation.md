@@ -2,6 +2,8 @@
 
 Module: `src/lead-conversation/`. Scores Meta WhatsApp leads, saves answers, assigns a ventor once a call is scheduled.
 
+> **V2 exists:** a conversational LLM flow (`flowVersion: 'v2'`, score 0-100) selected per Meta form via `flowStrategy: lead_conversation_v2`. See [lead-conversation-v2.md](lead-conversation-v2.md). **This document describes V1, which is unchanged**; sessions with `flowVersion` other than `v2` follow the flow below. V2 reuses the call-slot booking, outbound queue and send RPC described here.
+
 ## Flow
 1. Meta → `omega_gateway` `POST /webhooks/lead_conversation` (no signature validation). The gateway emits `customers.lead_conversation.inbound.v1` on `crm.customers.whatsapp_integration`.
 2. `LeadConversationInboundService`: parse → find/create customer (+ interestedProjects) → find/create session → dedupe by `wamid` → cancel reminder (+ cancel delayed meta-lead-form welcome by waId) → state machine (optimistic `version` lock, 3 retries) → side effects → dispatch outbound.

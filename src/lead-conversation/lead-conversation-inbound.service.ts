@@ -10,7 +10,10 @@ import { LeadQualificationService } from './lead-qualification.service';
 import { LeadReminderScheduler } from './lead-reminder.scheduler';
 import type { InboundLeadMessage } from './types/inbound-lead-message.type';
 import type { StepTransition } from './types/step-transition.type';
+import { parseMetaLeadStatuses } from './utils/parse-meta-lead-statuses.util';
 import { parseMetaLeadMessages } from './utils/parse-meta-lead-messages.util';
+import { LeadAgentInboundService } from './v2/lead-agent-inbound.service';
+import { LeadFlowResolverService } from './v2/lead-flow-resolver.service';
 
 const MAX_TRANSITION_ATTEMPTS = 3 as const;
 
@@ -34,11 +37,18 @@ export class LeadConversationInboundService {
     private readonly qualification: LeadQualificationService,
     private readonly dispatcher: LeadMessageDispatcherService,
     private readonly metaLeadFormQualificationScheduler: MetaLeadFormQualificationScheduler,
+    private readonly flowResolver: LeadFlowResolverService,
+    private readonly agentInbound: LeadAgentInboundService,
   ) {}
 
   async executeProcessIngress(payload: unknown): Promise<void> {
     for (const message of parseMetaLeadMessages(payload)) {
       await this.executeProcessMessage(message);
+    }
+    for (const status of parseMetaLeadStatuses(payload)) {
+      await this.messageLog
+        .applyDeliveryStatus({ wamid: status.wamid, status: status.status, errorCode: status.errorCode })
+        .catch((err: unknown) => this.logger.warn(`Delivery status ${status.wamid} failed: ${String(err)}`));
     }
   }
 
@@ -68,6 +78,11 @@ export class LeadConversationInboundService {
     }
     await this.reminderScheduler.executeCancel(String(session._id));
     await this.metaLeadFormQualificationScheduler.executeCancelByWaId(message.waId);
+    const resolved = await this.flowResolver.executeResolve(session);
+    if (resolved.flowVersion === 'v2') {
+      await this.agentInbound.executeHandle(resolved.session, message);
+      return;
+    }
     const applied = await this.executeApplyTransition(session, message);
     if (!applied) return;
     await this.executeSideEffects(applied, actorUserId);

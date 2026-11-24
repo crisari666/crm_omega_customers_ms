@@ -9,4 +9,5 @@ export enum LeadConversationStep {
   ReminderSent = 'reminder_sent',
   Scheduled = 'scheduled',
   Closed = 'closed',
+  V2Conversation = 'v2_conversation',
 }

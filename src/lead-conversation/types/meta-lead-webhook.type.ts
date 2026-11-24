@@ -30,10 +30,19 @@ export type MetaLeadWebhookContact = {
   readonly profile?: { readonly name?: string; readonly username?: string };
 };
 
+export type MetaLeadWebhookStatus = {
+  readonly id?: string;
+  readonly status?: string;
+  readonly timestamp?: string;
+  readonly recipient_id?: string;
+  readonly errors?: readonly { readonly code?: number; readonly title?: string }[];
+};
+
 export type MetaLeadWebhookValue = {
   readonly metadata?: { readonly phone_number_id?: string };
   readonly contacts?: readonly MetaLeadWebhookContact[];
   readonly messages?: readonly MetaLeadWebhookMessage[];
+  readonly statuses?: readonly MetaLeadWebhookStatus[];
 };
 
 export type MetaLeadWebhookBody = {

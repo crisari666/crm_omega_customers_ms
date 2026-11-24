@@ -25,7 +25,9 @@ import { isBbqAsadoFormName } from './utils/is-bbq-asado-form-name.util';
 import type { MarketingCampaignMsEvent } from '../whatsapp-marketing/types/marketing-campaign-ms-event.type';
 import { MetaLeadAdCampaignLookupService } from '../meta-lead-forms/meta-lead-ad-campaign-lookup.service';
 import { MetaLeadFormLookupService } from '../meta-lead-forms/meta-lead-form-lookup.service';
+import { LeadAgentSessionAdoptionService } from '../meta-lead-forms/lead-agent-session-adoption.service';
 import { MetaLeadFormQualificationScheduler } from '../meta-lead-forms/meta-lead-form-qualification.scheduler';
+import type { MetaLeadFormFlowStrategy } from '../meta-lead-forms/types/meta-lead-form-flow-strategy.type';
 
 const META_LEADGEN_ACTOR_ID = 'meta-leadgen-ingest';
 
@@ -54,6 +56,7 @@ export class CustomerMetaLeadgenService {
     private readonly metaLeadFormLookup: MetaLeadFormLookupService,
     private readonly metaLeadAdCampaignLookup: MetaLeadAdCampaignLookupService,
     private readonly qualificationScheduler: MetaLeadFormQualificationScheduler,
+    private readonly sessionAdoption: LeadAgentSessionAdoptionService,
   ) {}
 
   /**
@@ -172,14 +175,18 @@ export class CustomerMetaLeadgenService {
       campaignId:
         envelope.graph.campaignId ?? envelope.mappedFields.campaign_id,
     });
-    if (registryForm?.flowStrategy === 'lead_conversation') {
+    if (
+      registryForm?.flowStrategy === 'lead_conversation' ||
+      registryForm?.flowStrategy === 'lead_conversation_v2'
+    ) {
       await this.executeLeadConversationFormPath({
         leadgenId,
         customer,
         phone: canonicalPhone,
         contactName: envelope.contact.name,
         mappedFields: envelope.mappedFields,
-        flowStrategy: 'lead_conversation',
+        flowStrategy: registryForm.flowStrategy,
+        formId: registryForm.formId,
       });
       return;
     }
@@ -211,7 +218,8 @@ export class CustomerMetaLeadgenService {
     readonly phone: string;
     readonly contactName: string;
     readonly mappedFields: Record<string, string>;
-    readonly flowStrategy: 'lead_conversation';
+    readonly flowStrategy: Extract<MetaLeadFormFlowStrategy, 'lead_conversation' | 'lead_conversation_v2'>;
+    readonly formId: string;
   }): Promise<void> {
     await this.metaLeadCampaignModel.updateOne(
       { leadgenId: input.leadgenId },
@@ -229,14 +237,19 @@ export class CustomerMetaLeadgenService {
       input.leadgenId,
       input.mappedFields,
     );
+    if (input.flowStrategy === 'lead_conversation_v2') {
+      await this.sessionAdoption.executeAdopt({ phone: input.phone, formId: input.formId });
+    }
     await this.qualificationScheduler.executeSchedule({
       leadgenId: input.leadgenId,
       customerId: String(input.customer._id),
       phone: input.phone,
       contactName: input.contactName,
+      flowStrategy: input.flowStrategy,
+      formId: input.formId,
     });
     this.logger.log(
-      `Registry lead_conversation: saved customer ${String(input.customer._id)} leadgenId=${input.leadgenId}; delayed outbound scheduled`,
+      `Registry ${input.flowStrategy}: saved customer ${String(input.customer._id)} leadgenId=${input.leadgenId}; delayed outbound scheduled`,
     );
   }
 

@@ -26,6 +26,24 @@ export class LeadFlowTransitionsService {
     };
   }
 
+  /** V2 mid-chat project selector (same option ids as V1 ask_project). */
+  async buildProjectPicker(body?: string): Promise<StepTransition> {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: await this.composer.composeProjectPicker(body),
+      expectsReply: true,
+    };
+  }
+
+  /** V2 motivation reply buttons (construir / inversión / explorando). */
+  buildAskMotivation(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskMotivation(body),
+      expectsReply: true,
+    };
+  }
+
   /** Project intro sequence; skips straight to the payment question when the project has no lot options. */
   buildProjectIntro(session: Readonly<LeadConversationSession>, project: LeadProject): StepTransition {
     const sessionPatch = { projectId: project.id, projectTitle: project.title, isAllProjects: false };

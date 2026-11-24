@@ -200,7 +200,7 @@ export class CustomerVentorAssignmentService {
     const baseUrl = (this.configService.get<string>('officeBackInternal.baseUrl', '') ?? '').trim();
     const apiKey = (this.configService.get<string>('officeBackInternal.apiKey', '') ?? '').trim();
     if (baseUrl === '' || apiKey === '') {
-      this.logger.warn('officeBackInternal baseUrl or apiKey missing; cannot load ventors');
+      // this.logger.warn('officeBackInternal baseUrl or apiKey missing; cannot load ventors');
       return [];
     }
     const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;

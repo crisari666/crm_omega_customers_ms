@@ -6,6 +6,7 @@ import { Customer } from '../customer/schemas/customer.schema';
 import { LeadConversationAdminService } from './lead-conversation-admin.service';
 import { LeadFlowTransitionsService } from './lead-flow-transitions.service';
 import { LeadMessageDispatcherService } from './lead-message-dispatcher.service';
+import { LeadRecoveryScheduler } from '../lead-assistant/lead-recovery.scheduler';
 import { LeadReminderScheduler } from './lead-reminder.scheduler';
 import { LeadConversationMessage } from './schemas/lead-conversation-message.schema';
 import { LeadConversationSession } from './schemas/lead-conversation-session.schema';
@@ -31,8 +32,9 @@ describe('LeadConversationAdminService', () => {
     lastInboundAt: new Date(),
   };
   const mockSessionModel = { findById: jest.fn(), updateOne: jest.fn(), deleteOne: jest.fn() };
-  const mockMessageModel = { deleteMany: jest.fn() };
+  const mockMessageModel = { deleteMany: jest.fn(), findOne: jest.fn() };
   const mockReminder = { executeCancel: jest.fn() };
+  const mockRecovery = { executeCancel: jest.fn() };
   const mockDispatcher = { executeDispatch: jest.fn() };
   const mockQuestion = { kind: 'list', body: 'Cuál proyecto?', options: [{ id: 'project:all', title: 'Todos' }] };
   const mockTransitions = {
@@ -55,6 +57,7 @@ describe('LeadConversationAdminService', () => {
         { provide: getModelToken(LeadConversationMessage.name), useValue: mockMessageModel },
         { provide: getModelToken(Customer.name), useValue: {} },
         { provide: LeadReminderScheduler, useValue: mockReminder },
+        { provide: LeadRecoveryScheduler, useValue: mockRecovery },
         { provide: LeadFlowTransitionsService, useValue: mockTransitions },
         { provide: LeadMessageDispatcherService, useValue: mockDispatcher },
       ],
@@ -67,6 +70,7 @@ describe('LeadConversationAdminService', () => {
     const actual = await service.deleteSession(String(mockSessionId));
     expect(actual).toEqual({ deleted: true });
     expect(mockReminder.executeCancel).toHaveBeenCalledWith(String(mockSessionId));
+    expect(mockRecovery.executeCancel).toHaveBeenCalledWith(String(mockSessionId));
     expect(mockMessageModel.deleteMany).toHaveBeenCalledWith({ sessionId: mockSessionId });
     expect(mockSessionModel.deleteOne).toHaveBeenCalledWith({ _id: mockSessionId });
   });
@@ -95,5 +99,31 @@ describe('LeadConversationAdminService', () => {
     expect(actual).toEqual({ restarted: true, sent: false, reason: 'outside_customer_service_window' });
     expect(mockSessionModel.updateOne.mock.calls[0][1].$set.step).toBe(LeadConversationStep.Initial);
     expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
+  });
+
+  it('Given a V2 session, When restarted, Then it resets to a clean V2 conversation, cancels recovery and sends nothing', async () => {
+    const mockLastInboundId = new Types.ObjectId();
+    mockSessionModel.findById.mockReturnValue(leanResult({ ...mockSession, flowVersion: 'v2' }));
+    mockMessageModel.findOne.mockReturnValue({
+      sort: () => ({ select: () => leanResult({ _id: mockLastInboundId }) }),
+    });
+    const actual = await service.restartSession(String(mockSessionId));
+    expect(actual).toEqual({ restarted: true, sent: false, reason: 'v2_waits_for_customer' });
+    expect(mockRecovery.executeCancel).toHaveBeenCalledWith(String(mockSessionId));
+    const [, update] = mockSessionModel.updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      flowVersion: 'v2',
+      step: LeadConversationStep.V2Conversation,
+      status: 'active',
+      score: 0,
+      priority: 1,
+      scoreSignals: [],
+      lastTurnMessageId: String(mockLastInboundId),
+    });
+    expect(update.$unset).toHaveProperty('optedOutAt');
+    expect(update.$unset).toHaveProperty('projectId');
+    expect(update.$unset).toHaveProperty('projectTitle');
+    expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
+    expect(mockTransitions.buildAskProject).not.toHaveBeenCalled();
   });
 });

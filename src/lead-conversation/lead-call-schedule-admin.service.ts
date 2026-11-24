@@ -16,7 +16,7 @@ import {
   DAY_MS,
   MONGO_DUPLICATE_KEY_CODE,
 } from './constants/lead-call-slots.constants';
-import { MAX_SCORE } from './constants/lead-conversation.constants';
+import { MAX_SCORE, MAX_SCORE_V2 } from './constants/lead-conversation.constants';
 import type { ListLeadCallsQueryDto } from './dto/list-lead-calls-query.dto';
 import { LeadCallSlotService } from './lead-call-slot.service';
 import { LeadConversationSessionService } from './lead-conversation-session.service';
@@ -45,7 +45,7 @@ type CallEventRow = {
 };
 
 type CustomerContact = { readonly _id: Types.ObjectId; readonly name?: string; readonly lastName?: string; readonly phone?: string };
-type SessionScore = Pick<LeadConversationSession, 'score' | 'priority' | 'projectTitle' | 'isAllProjects'> & {
+type SessionScore = Pick<LeadConversationSession, 'score' | 'priority' | 'projectTitle' | 'isAllProjects' | 'flowVersion'> & {
   readonly _id: Types.ObjectId;
 };
 
@@ -285,7 +285,7 @@ export class LeadCallScheduleAdminService {
     if (ids.length === 0) return new Map();
     const rows = await this.sessionModel
       .find({ _id: { $in: ids } })
-      .select({ score: 1, priority: 1, projectTitle: 1, isAllProjects: 1 })
+      .select({ score: 1, priority: 1, projectTitle: 1, isAllProjects: 1, flowVersion: 1 })
       .lean<SessionScore[]>()
       .exec();
     return new Map(rows.map((row) => [String(row._id), row]));
@@ -313,7 +313,7 @@ function toItem(
     phone: contact?.phone ?? '',
     sessionId: event.leadConversationSessionId ? String(event.leadConversationSessionId) : undefined,
     score: session?.score,
-    maxScore: MAX_SCORE,
+    maxScore: session?.flowVersion === 'v2' ? MAX_SCORE_V2 : MAX_SCORE,
     priority: session?.priority,
     projectTitle: session?.isAllProjects ? 'Todos los proyectos' : session?.projectTitle,
     note: event.note,

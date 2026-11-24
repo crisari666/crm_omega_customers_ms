@@ -10,7 +10,16 @@ export const LEAD_TEMPLATES = {
     'encontrar el lote ideal para ti en {{location}}.\n\n' +
     '¿Cuál proyecto te interesa?',
   askProjectListButton: 'Ver proyectos',
+  /** Short body for V2 mid-chat project picker (no full welcome). */
+  askProjectPicker: '¿Cuál proyecto te interesa?',
   allProjectsOption: '✨ Me interesan todos',
+  /** Full ask when motivation buttons are the sole outbound. */
+  askMotivationPicker: '¿Lo estás mirando para construir, como inversión, o solo explorando?',
+  /** Short body when a text reply already asked / acknowledged before the buttons. */
+  askMotivationChoice: 'Elige una opción',
+  motivationBuildOption: '🏗️ Construir',
+  motivationInvestOption: '📈 Inversión',
+  motivationExploringOption: '👀 Solo explorando',
   projectIntro: '¡Hola{{name_suffix}}! 👋 Bienvenido a {{brand}}.\n\n🌿 {{project_name}}\n\n{{project_short_description}}',
   planCaption: 'Aquí tienes el plano del condominio 👇\nAsí puedes ver cómo está distribuido.',
   lotRanges:

@@ -79,6 +79,13 @@ import { WhatsappMarketingModule } from '../whatsapp-marketing/whatsapp-marketin
 import { MetaConversionsApiService } from './meta-conversions/meta-conversions-api.service';
 import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
 import { MetaLeadFormsController } from '../meta-lead-forms/meta-lead-forms.controller';
+import { LeadAssistantModule } from '../lead-assistant/lead-assistant.module';
+import { LeadAssistantSettingsController } from '../lead-assistant/lead-assistant-settings.controller';
+import { LeadFaqsController } from '../lead-assistant/lead-faqs.controller';
+import { LeadReadinessController } from '../lead-assistant/lead-readiness.controller';
+import { LeadRecoverySequenceController } from '../lead-assistant/lead-recovery-sequence.controller';
+import { LeadTemplatesController } from '../lead-assistant/lead-templates.controller';
+import { LeadUnansweredQuestionsController } from '../lead-assistant/lead-unanswered-questions.controller';
 import {
   LeadConversationSession,
   LeadConversationSessionSchema,
@@ -90,6 +97,7 @@ import { CustomerLeadsAdminService } from './customer-leads-admin.service';
   imports: [
     forwardRef(() => WhatsappMarketingModule),
     forwardRef(() => MetaLeadFormsModule),
+    LeadAssistantModule,
     CustomerConversationsModule,
     ClientsModule.registerAsync([
       {
@@ -142,6 +150,12 @@ import { CustomerLeadsAdminService } from './customer-leads-admin.service';
     // Before CustomerAdminController so static paths are not captured by `:customerId`.
     CustomerLeadsAdminController,
     MetaLeadFormsController,
+    LeadAssistantSettingsController,
+    LeadFaqsController,
+    LeadUnansweredQuestionsController,
+    LeadRecoverySequenceController,
+    LeadTemplatesController,
+    LeadReadinessController,
     CustomerAdminController,
     VoiceCallRmqController,
     CustomerWhatsappRmqController,

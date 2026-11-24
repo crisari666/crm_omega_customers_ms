@@ -1,6 +1,10 @@
 import type { LeadConversationAnswers } from './lead-conversation-answers.type';
 import type { LeadConversationStatus } from './lead-conversation-status.type';
 import type { LeadConversationStep } from './lead-conversation-step.enum';
+import type { LeadFlowVersion } from './lead-flow-version.type';
+import type { LeadProfile } from './lead-profile.type';
+import type { LeadRecoveryState } from './lead-recovery-state.type';
+import type { LeadTemperature } from './lead-temperature.type';
 import type { OutboundMessagePlan } from './outbound-message-plan.type';
 import type { LeadScoreEvent } from './score-event.type';
 
@@ -11,6 +15,17 @@ export type StepSessionPatch = {
   readonly stepBeforeReminder?: LeadConversationStep;
   /** Set when the first inbound was a Meta Instant Form dump used only for identity. */
   readonly identityBootstrappedFromForm?: boolean;
+  readonly flowVersion?: LeadFlowVersion;
+  readonly formId?: string;
+  readonly leadProfile?: LeadProfile;
+  readonly scoreSignals?: readonly string[];
+  readonly temperature?: LeadTemperature;
+  readonly advisorBrief?: string;
+  readonly lastTurnMessageId?: string;
+  readonly recovery?: LeadRecoveryState;
+  readonly optedOutAt?: Date;
+  readonly score?: number;
+  readonly priority?: number;
 };
 
 /**

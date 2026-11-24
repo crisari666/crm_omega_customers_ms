@@ -3,6 +3,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { MongooseModule } from '@nestjs/mongoose';
+import { LeadAssistantModule } from '../lead-assistant/lead-assistant.module';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
 import { CustomerMetadataModule } from '../customer-metadata/customer-metadata.module';
 import { CustomerModule } from '../customer/customer.module';
@@ -12,7 +13,13 @@ import {
   MetaLeadCampaignSchema,
 } from '../customer/schemas/meta-lead-campaign.schema';
 import { MetaLeadFormsModule } from '../meta-lead-forms/meta-lead-forms.module';
-import { LEAD_OUTBOUND_QUEUE, LEAD_REMINDER_QUEUE, LEAD_WS_MS_CLIENT } from './constants/lead-conversation.constants';
+import {
+  LEAD_AGENT_RECOVERY_QUEUE,
+  LEAD_AGENT_TURN_QUEUE,
+  LEAD_OUTBOUND_QUEUE,
+  LEAD_REMINDER_QUEUE,
+  LEAD_WS_MS_CLIENT,
+} from './constants/lead-conversation.constants';
 import {
   VentorScheduleEvent,
   VentorScheduleEventSchema,
@@ -61,6 +68,20 @@ import {
 } from './schemas/lead-conversation-session.schema';
 import { LEAD_STEP_HANDLERS, type LeadStepHandler } from './types/lead-step-handler.interface';
 import { parseRedisUrl } from './utils/parse-redis-url.util';
+import { LeadAgentEngineService } from './v2/lead-agent-engine.service';
+import { LeadAgentInboundService } from './v2/lead-agent-inbound.service';
+import { LeadAgentLlmService } from './v2/lead-agent-llm.service';
+import { LeadAgentPromptBuilder } from './v2/lead-agent-prompt.builder';
+import { LeadAgentRecoveryProcessor } from './v2/lead-agent-recovery.processor';
+import { LeadAgentScoringService } from './v2/lead-agent-scoring.service';
+import { LeadAgentSideEffectsService } from './v2/lead-agent-side-effects.service';
+import { LeadAgentSimulatorController } from './v2/lead-agent-simulator.controller';
+import { LeadAgentSimulatorService } from './v2/lead-agent-simulator.service';
+import { LeadAgentSlotBridgeService } from './v2/lead-agent-slot-bridge.service';
+import { LeadAgentStageService } from './v2/lead-agent-stage.service';
+import { LeadAgentTurnProcessor } from './v2/lead-agent-turn.processor';
+import { LeadFlowResolverService } from './v2/lead-flow-resolver.service';
+import { ProjectKnowledgeService } from './v2/project-knowledge.service';
 
 const STEP_HANDLERS = [
   InitialHandler,
@@ -81,6 +102,7 @@ const STEP_HANDLERS = [
   imports: [
     CustomerModule,
     CustomerMetadataModule,
+    LeadAssistantModule,
     forwardRef(() => MetaLeadFormsModule),
     MongooseModule.forFeature([
       { name: LeadConversationSession.name, schema: LeadConversationSessionSchema },
@@ -96,7 +118,12 @@ const STEP_HANDLERS = [
         connection: parseRedisUrl(configService.get<string>('leadConversation.redisUrl', 'redis://localhost:6379')),
       }),
     }),
-    BullModule.registerQueue({ name: LEAD_OUTBOUND_QUEUE }, { name: LEAD_REMINDER_QUEUE }),
+    BullModule.registerQueue(
+      { name: LEAD_OUTBOUND_QUEUE },
+      { name: LEAD_REMINDER_QUEUE },
+      { name: LEAD_AGENT_TURN_QUEUE },
+      { name: LEAD_AGENT_RECOVERY_QUEUE },
+    ),
     ClientsModule.registerAsync([
       {
         name: LEAD_WS_MS_CLIENT,
@@ -118,6 +145,7 @@ const STEP_HANDLERS = [
     LeadConversationAdminController,
     LeadCallScheduleAdminController,
     LeadConversationInboundRmqController,
+    LeadAgentSimulatorController,
   ],
   providers: [
     ParseHexObjectIdPipe,
@@ -149,6 +177,19 @@ const STEP_HANDLERS = [
     ProjectCatalogService,
     ProjectClassifierLlmService,
     ProjectMatcherService,
+    ProjectKnowledgeService,
+    LeadAgentScoringService,
+    LeadAgentStageService,
+    LeadAgentLlmService,
+    LeadAgentPromptBuilder,
+    LeadAgentEngineService,
+    LeadAgentSimulatorService,
+    LeadFlowResolverService,
+    LeadAgentInboundService,
+    LeadAgentSlotBridgeService,
+    LeadAgentSideEffectsService,
+    LeadAgentTurnProcessor,
+    LeadAgentRecoveryProcessor,
   ],
 })
 export class LeadConversationModule {}

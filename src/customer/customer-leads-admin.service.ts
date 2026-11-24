@@ -11,6 +11,7 @@ import {
   VentorScheduleEventStatus,
   VentorScheduleEventType,
 } from '../ventor-schedule/schemas/ventor-schedule-event.schema';
+import { MAX_SCORE, MAX_SCORE_V2 } from '../lead-conversation/constants/lead-conversation.constants';
 import { CustomerService } from './customer.service';
 import type { ConvertAdminLeadDto } from './dto/convert-admin-lead.dto';
 import type { ListAdminLeadsQueryDto } from './dto/list-admin-leads.query.dto';
@@ -49,6 +50,8 @@ type SessionLean = {
   readonly score?: number;
   readonly priority?: number;
   readonly step?: string;
+  readonly flowVersion?: string;
+  readonly temperature?: string;
   readonly lastInboundAt?: Date;
 };
 
@@ -334,7 +337,16 @@ export class CustomerLeadsAdminService {
     }
     const rows = await this.sessionModel
       .find({ customerId: { $in: customerIds } })
-      .select({ customerId: 1, status: 1, score: 1, priority: 1, step: 1, lastInboundAt: 1 })
+      .select({
+        customerId: 1,
+        status: 1,
+        score: 1,
+        priority: 1,
+        step: 1,
+        flowVersion: 1,
+        temperature: 1,
+        lastInboundAt: 1,
+      })
       .sort({ lastInboundAt: -1 })
       .lean<SessionLean[]>()
       .exec();
@@ -415,6 +427,9 @@ export class CustomerLeadsAdminService {
               ...(session.score !== undefined ? { score: session.score } : {}),
               ...(session.priority !== undefined ? { priority: session.priority } : {}),
               ...(session.step ? { step: session.step } : {}),
+              maxScore: session.flowVersion === 'v2' ? MAX_SCORE_V2 : MAX_SCORE,
+              flowVersion: session.flowVersion === 'v2' ? 'v2' : 'v1',
+              ...(session.flowVersion === 'v2' && session.temperature ? { temperature: session.temperature } : {}),
             },
           }
         : {}),

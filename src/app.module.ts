@@ -17,6 +17,7 @@ import { WhatsappMarketingModule } from './whatsapp-marketing/whatsapp-marketing
 import { WebinarModule } from './webinar/webinar.module';
 import { LeadConversationModule } from './lead-conversation/lead-conversation.module';
 import { MetaLeadFormsModule } from './meta-lead-forms/meta-lead-forms.module';
+import { LeadAssistantModule } from './lead-assistant/lead-assistant.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { MetaLeadFormsModule } from './meta-lead-forms/meta-lead-forms.module';
     // Before CustomerModule so `admin/customer/meta-lead-forms` registers ahead of `:customerId`
     // if the controller is ever mounted from this module again.
     MetaLeadFormsModule,
+    LeadAssistantModule,
     CustomerModule,
     CustomerConversationsModule,
     CustomerMetadataModule,

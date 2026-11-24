@@ -2,7 +2,9 @@ import { Transform, Type } from 'class-transformer';
 import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { LEAD_CONVERSATION_STATUSES, type LeadConversationStatus } from '../types/lead-conversation-status.type';
 import { LeadConversationStep } from '../types/lead-conversation-step.enum';
+import type { LeadFlowVersion } from '../types/lead-flow-version.type';
 
+const LEAD_FLOW_FILTERS = ['v1', 'v2'] as const;
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LENGTH = 80;
 
@@ -15,6 +17,11 @@ export class ListLeadConversationsQueryDto {
   @IsOptional()
   @IsEnum(LeadConversationStep)
   step?: LeadConversationStep;
+
+  /** Restricts the list to one flow generation (V1 scripted / V2 agent). */
+  @IsOptional()
+  @IsIn(LEAD_FLOW_FILTERS)
+  flow?: LeadFlowVersion;
 
   /** Matches phone (waId), WhatsApp profile name or project title. */
   @IsOptional()

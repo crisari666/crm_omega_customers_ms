@@ -43,6 +43,7 @@ export class LeadOutboundProcessor extends WorkerHost {
       plan,
       wamid: result.wamid,
       delivered: result.success,
+      errorCode: result.errorCode,
     });
     await this.executeContinue(data);
   }

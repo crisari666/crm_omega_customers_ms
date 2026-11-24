@@ -94,11 +94,16 @@ export default (): {
     ragProjectsDistribution: string;
     openAiApiKey: string;
     llmModel: string;
+    phoneNumberId: string;
     brand: string;
     location: string;
     reminderMs: number;
     actorUserId: string;
     callSlotLookaheadDays: number;
+  };
+  leadAgent: {
+    llmModel: string;
+    llmTimeoutMs: number;
   };
   metaLeadForms: {
     welcomeTemplateName: string;
@@ -268,6 +273,7 @@ export default (): {
       })(),
       openAiApiKey: trimEnv(process.env.OPENAI_API_KEY),
       llmModel: trimEnv(process.env.LEAD_CONVERSATION_LLM_MODEL) || 'deepseek-chat',
+      phoneNumberId: trimEnv(process.env.WHATSAPP_CLOUD_LEADS_PHONE_NUMBER_ID) || '',
       brand: trimEnv(process.env.LEAD_CONVERSATION_BRAND) || 'La Ceiba',
       location: trimEnv(process.env.LEAD_CONVERSATION_LOCATION) || 'Carmen de Apicalá',
       reminderMs: (() => {
@@ -278,6 +284,13 @@ export default (): {
       callSlotLookaheadDays: (() => {
         const raw = Number.parseInt(trimEnv(process.env.LEAD_CALL_SLOT_LOOKAHEAD_DAYS) || '7', 10);
         return Number.isFinite(raw) && raw > 0 ? raw : 7;
+      })(),
+    },
+    leadAgent: {
+      llmModel: trimEnv(process.env.LEAD_AGENT_LLM_MODEL) || 'deepseek-chat',
+      llmTimeoutMs: (() => {
+        const raw = Number.parseInt(trimEnv(process.env.LEAD_AGENT_LLM_TIMEOUT_MS) || '20000', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 20000;
       })(),
     },
     metaLeadForms: {
