@@ -69,9 +69,11 @@ import {
 import { LEAD_STEP_HANDLERS, type LeadStepHandler } from './types/lead-step-handler.interface';
 import { parseRedisUrl } from './utils/parse-redis-url.util';
 import { LeadAgentEngineService } from './v2/lead-agent-engine.service';
+import { LeadAgentGuidedPathService } from './v2/lead-agent-guided-path.service';
 import { LeadAgentInboundService } from './v2/lead-agent-inbound.service';
 import { LeadAgentLlmService } from './v2/lead-agent-llm.service';
 import { LeadAgentPromptBuilder } from './v2/lead-agent-prompt.builder';
+import { LeadCaptureSyncService } from './v2/lead-capture-sync.service';
 import { LeadAgentRecoveryProcessor } from './v2/lead-agent-recovery.processor';
 import { LeadAgentScoringService } from './v2/lead-agent-scoring.service';
 import { LeadAgentSideEffectsService } from './v2/lead-agent-side-effects.service';
@@ -182,6 +184,8 @@ const STEP_HANDLERS = [
     LeadAgentStageService,
     LeadAgentLlmService,
     LeadAgentPromptBuilder,
+    LeadCaptureSyncService,
+    LeadAgentGuidedPathService,
     LeadAgentEngineService,
     LeadAgentSimulatorService,
     LeadFlowResolverService,

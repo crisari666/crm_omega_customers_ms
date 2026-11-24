@@ -16,6 +16,7 @@ import type { LeadCallSlot } from './types/lead-call-slot.type';
 import type { LeadPaymentMethod } from './types/lead-conversation-answers.type';
 import type { LeadProject, LeadProjectLotOption } from './types/lead-project.type';
 import type { OutboundMessagePlan, OutboundOption } from './types/outbound-message-plan.type';
+import type { ProjectKnowledge } from './v2/types/project-knowledge.type';
 import { buildCallSlotOption } from './utils/build-call-slot-option.util';
 import {
   buildLeadVentorContact,
@@ -67,6 +68,155 @@ export class LeadMessageComposerService {
       { id: REPLY_ID.motivationExploring, title: LEAD_TEMPLATES.motivationExploringOption },
     ];
     return [this.buildChoiceMessage(body, options)];
+  }
+
+  /** Short attractive project teaser from omega_rag `shortDescription` (V2, after project pick). */
+  composeProjectTeaser(project: Pick<ProjectKnowledge, 'title' | 'shortDescription'>): OutboundMessagePlan[] {
+    const shortDescription = project.shortDescription.trim();
+    const body =
+      shortDescription.length > 0
+        ? interpolateTemplate(LEAD_TEMPLATES.projectTeaserV2, {
+            project_name: project.title,
+            project_short_description: shortDescription,
+          })
+        : interpolateTemplate(LEAD_TEMPLATES.projectTeaserV2NameOnly, {
+            project_name: project.title,
+          });
+    return [{ kind: 'text', body }];
+  }
+
+  /** V2 time-to-buy list (5 rows). */
+  composeAskTimeToBuy(body: string = LEAD_TEMPLATES.askTimeToBuyPicker): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.timeImmediate, title: LEAD_TEMPLATES.timeImmediateOption },
+      { id: REPLY_ID.timeWithin30Days, title: LEAD_TEMPLATES.timeWithin30DaysOption },
+      { id: REPLY_ID.timeWithin3Months, title: LEAD_TEMPLATES.timeWithin3MonthsOption },
+      { id: REPLY_ID.timeFuture, title: LEAD_TEMPLATES.timeFutureOption },
+      { id: REPLY_ID.timeNotNow, title: LEAD_TEMPLATES.timeNotNowOption },
+    ];
+    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.askTimeToBuyListButton)];
+  }
+
+  /** V2 payment capture buttons: Financiado / De contado. */
+  composeAskPaymentCapture(body: string = LEAD_TEMPLATES.askPaymentCapturePicker): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.paymentFinanced, title: LEAD_TEMPLATES.paymentFinancedOption },
+      { id: REPLY_ID.paymentCash, title: LEAD_TEMPLATES.paymentCashOption },
+    ];
+    return [this.buildChoiceMessage(body, options)];
+  }
+
+  /**
+   * Attractive monthly-installment offer for a project (text-only; used when totals are needed).
+   * When `showTotals` is true (pricePolicy full_price), each line includes the lot total.
+   */
+  composeFinancingOffer(project: ProjectKnowledge, showTotals = false): OutboundMessagePlan[] {
+    const financing = project.financing;
+    if (financing === undefined) return [];
+    const lineTemplate = showTotals
+      ? LEAD_TEMPLATES.financingLotLineWithPrice
+      : LEAD_TEMPLATES.financingLotLine;
+    const lotLines = financing.plans
+      .map((plan) =>
+        interpolateTemplate(lineTemplate, {
+          area: formatArea(plan.area),
+          monthly: formatCop(plan.monthlyPayment),
+          ...(showTotals ? { price: formatCop(plan.price) } : {}),
+        }),
+      )
+      .join('\n');
+    const terms = this.buildFinancingTerms(financing);
+    const intro = interpolateTemplate(LEAD_TEMPLATES.financingIntro, {
+      project_name: project.title,
+      monthly: formatCop(financing.minMonthlyPayment),
+    });
+    return [{ kind: 'text', body: `${intro}\n\n${lotLines}\n\n${terms}` }];
+  }
+
+  /**
+   * V2 financed path: body lists area + monthly cuota; buttons/list titles are size only.
+   * Buttons when ≤3 plans; WhatsApp list otherwise. No separation/terms paragraph.
+   */
+  composeFinancingLotPicker(project: ProjectKnowledge): OutboundMessagePlan[] {
+    const financing = project.financing;
+    if (financing === undefined || financing.plans.length === 0) return [];
+    const lotLines = financing.plans
+      .map((plan) =>
+        interpolateTemplate(LEAD_TEMPLATES.financingLotPickerLine, {
+          area: formatArea(plan.area),
+          monthly: formatCop(plan.monthlyPayment),
+        }),
+      )
+      .join('\n\n');
+    const body = interpolateTemplate(LEAD_TEMPLATES.financingLotPickerBody, {
+      project_name: project.title,
+      lot_lines: lotLines,
+    });
+    const options: OutboundOption[] = financing.plans.map((plan) => {
+      const monthly = formatCop(plan.monthlyPayment);
+      return {
+        id: `${REPLY_ID.lotPrefix}${plan.area}`,
+        title: interpolateTemplate(LEAD_TEMPLATES.financingLotOptionTitle, {
+          area: formatArea(plan.area),
+        }).slice(0, 20),
+        description: interpolateTemplate(LEAD_TEMPLATES.financingLotOptionDescription, {
+          monthly,
+        }),
+      };
+    });
+    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.financingLotPickerListButton)];
+  }
+
+  /** Short ack after the customer picks a financed lot size. */
+  composeLotChoiceAck(area: number): OutboundMessagePlan[] {
+    return [
+      {
+        kind: 'text',
+        body: interpolateTemplate(LEAD_TEMPLATES.lotChoiceAck, { area: formatArea(area) }),
+      },
+    ];
+  }
+
+  private buildFinancingTerms(financing: NonNullable<ProjectKnowledge['financing']>): string {
+    if (financing.separation > 0) {
+      return interpolateTemplate(LEAD_TEMPLATES.financingTerms, {
+        separation: formatCop(financing.separation),
+        installments: String(financing.installments),
+      });
+    }
+    return interpolateTemplate(LEAD_TEMPLATES.financingTermsNoSeparation, {
+      installments: String(financing.installments),
+    });
+  }
+
+  /** V2 next-step buttons: another question or talk to an advisor. */
+  composeAskNextStep(body: string = LEAD_TEMPLATES.askNextStep): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.nextQuestion, title: LEAD_TEMPLATES.nextStepQuestionOption },
+      { id: REPLY_ID.nextCall, title: LEAD_TEMPLATES.nextStepCallOption },
+    ];
+    return [this.buildChoiceMessage(body, options)];
+  }
+
+  /** V2 urgency reply buttons. */
+  composeAskUrgency(body: string = LEAD_TEMPLATES.askUrgencyPicker): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.urgencyLow, title: LEAD_TEMPLATES.urgencyLowOption },
+      { id: REPLY_ID.urgencyMedium, title: LEAD_TEMPLATES.urgencyMediumOption },
+      { id: REPLY_ID.urgencyHigh, title: LEAD_TEMPLATES.urgencyHighOption },
+    ];
+    return [this.buildChoiceMessage(body, options)];
+  }
+
+  /** V2 decision-maker list. */
+  composeAskDecisionMaker(body: string = LEAD_TEMPLATES.askDecisionMakerPicker): OutboundMessagePlan[] {
+    const options: OutboundOption[] = [
+      { id: REPLY_ID.decisionSelf, title: LEAD_TEMPLATES.decisionSelfOption },
+      { id: REPLY_ID.decisionSpouse, title: LEAD_TEMPLATES.decisionSpouseOption },
+      { id: REPLY_ID.decisionFamily, title: LEAD_TEMPLATES.decisionFamilyOption },
+      { id: REPLY_ID.decisionOther, title: LEAD_TEMPLATES.decisionOtherOption },
+    ];
+    return [this.buildChoiceMessage(body, options, LEAD_TEMPLATES.askDecisionMakerListButton)];
   }
 
   private async buildProjectPickerOptions(): Promise<OutboundOption[]> {

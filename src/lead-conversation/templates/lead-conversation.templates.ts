@@ -8,18 +8,81 @@ export const LEAD_TEMPLATES = {
     '¡Hola{{name_suffix}}! 👋 Bienvenido a {{brand}}.\n\n' +
     'Soy el asistente del equipo comercial. Te ayudo a\n' +
     'encontrar el lote ideal para ti en {{location}}.\n\n' +
-    '¿Cuál proyecto te interesa?',
+    '¿Cuál te gustaría conocer?',
   askProjectListButton: 'Ver proyectos',
-  /** Short body for V2 mid-chat project picker (no full welcome). */
-  askProjectPicker: '¿Cuál proyecto te interesa?',
+  /** Body for V2 mid-chat project picker (no full welcome). */
+  askProjectPicker:
+    'Para brindarte la mejor información posible, Tenemos diferentes proyectos y quisiera orientarte sobre el que más te interese. ¿Cuál te gustaría conocer?',
   allProjectsOption: '✨ Me interesan todos',
+  /** Attractive V2 project teaser after the customer picks a project (`shortDescription` from omega_rag). */
+  projectTeaserV2: 'Perfecto. 🌿 {{project_name}}\n\n{{project_short_description}}',
+  /** Fallback when the project has no shortDescription. */
+  projectTeaserV2NameOnly: 'Perfecto. 🌿 {{project_name}}',
+  /**
+   * Appended to the configured greeting on the first inbound when a project is already related
+   * (campaign soft-suggest or confirmed session project).
+   */
+  greetingProjectConfirm: 'Veo que te interesó {{project_name}}, ¿es así?',
   /** Full ask when motivation buttons are the sole outbound. */
   askMotivationPicker: '¿Lo estás mirando para construir, como inversión, o solo explorando?',
   /** Short body when a text reply already asked / acknowledged before the buttons. */
-  askMotivationChoice: 'Elige una opción',
+  askMotivationChoice: 'Para orientarte mejor, indícame el motivo de compra:',
   motivationBuildOption: '🏗️ Construir',
   motivationInvestOption: '📈 Inversión',
   motivationExploringOption: '👀 Solo explorando',
+  askTimeToBuyPicker:
+    'Para acompañarte en el proceso de compra, ¿cuál es tu plazo para adquirir el lote?',
+  askTimeToBuyChoice: 'Para orientarte mejor, indícame tu plazo de compra:',
+  timeImmediateOption: 'Compra inmediata',
+  timeWithin30DaysOption: 'Compra en 30 días',
+  timeWithin3MonthsOption: 'Compra en 3 meses',
+  timeFutureOption: 'Compra futura',
+  timeNotNowOption: 'No comprar ahora',
+  askTimeToBuyListButton: 'Ver plazos',
+  askPaymentCapturePicker: 'Para prepararte una propuesta clara, ¿cómo te gustaría pagar?',
+  askPaymentCaptureChoice: 'Para orientarte mejor, indícame la forma de pago:',
+  paymentCashAndFinancingOption: 'Contado y financiación',
+  paymentSubsidyOption: 'Subsidio',
+  askUrgencyPicker: '¿Qué tan urgente es para ti avanzar con esta compra?',
+  askUrgencyChoice: 'Para priorizar tu acompañamiento, indícame el nivel de urgencia:',
+  urgencyLowOption: 'Baja',
+  urgencyMediumOption: 'Media',
+  urgencyHighOption: 'Alta',
+  askDecisionMakerPicker: '¿Quién toma la decisión final de compra?',
+  askDecisionMakerChoice: 'Para coordinar bien la asesoría, indícame quién decide:',
+  decisionSelfOption: 'Yo',
+  decisionSpouseOption: 'Cónyuge',
+  decisionFamilyOption: 'Familia',
+  decisionOtherOption: 'Otro',
+  askDecisionMakerListButton: 'Ver opciones',
+  financingIntro:
+    'Los lotes en {{project_name}} pueden financiarse con cuotas mensuales desde {{monthly}}.',
+  financingLotPickerBody:
+    'Perfecto, en {{project_name}} contamos con planes financiados para nuestros lotes con planes desde:\n{{lot_lines}}\n\n¿Cuál te interesa?',
+  financingLotPickerLine: '- {{area}} m²: *{{monthly}}* pesos mensuales',
+  financingLotLine: '{{area}} m² · cuotas desde {{monthly}} al mes',
+  financingLotLineWithPrice: '{{area}} m² · {{price}} · cuotas desde {{monthly}} al mes',
+  financingLotOptionTitle: '{{area}} m²',
+  financingLotOptionDescription: '{{monthly}}/mes',
+  financingLotPickerListButton: 'Ver lotes',
+  financingTerms:
+    'Separas tu lote con {{separation}} y el saldo lo pagas hasta en {{installments}} cuotas mensuales, con financiación directa, sin intereses y sin pasar por el banco.',
+  financingTermsNoSeparation:
+    'Puedes pagar el saldo hasta en {{installments}} cuotas mensuales, con financiación directa, sin intereses y sin pasar por el banco.',
+  /** Body when financing data is missing; schedule follows. */
+  financingMissingFallback:
+    'Un asesor te detalla las cuotas mensuales según el lote. Te agendo la llamada.',
+  /** After the customer picks a financed lot size. */
+  lotChoiceAck:
+    'Excelente elección el de {{area}} m². Esa cuota mensual te da un camino claro para avanzar.',
+  askNextStep:
+    '¿Tienes alguna otra duda, o prefieres que un asesor comercial te acompañe para avanzar con tu lote?',
+  askNextStepShort: '¿Te ayudo con algo más o te agendo la llamada con el asesor?',
+  offerCallNoAnswer:
+    'Ese detalle te lo explica mejor un asesor comercial en una llamada corta. ¿Te la agendo?',
+  nextStepQuestionOption: 'Tengo otra duda',
+  nextStepCallOption: 'Hablar con asesor',
+  askYourQuestion: 'Claro, cuéntame tu duda y te ayudo.',
   projectIntro: '¡Hola{{name_suffix}}! 👋 Bienvenido a {{brand}}.\n\n🌿 {{project_name}}\n\n{{project_short_description}}',
   planCaption: 'Aquí tienes el plano del condominio 👇\nAsí puedes ver cómo está distribuido.',
   lotRanges:

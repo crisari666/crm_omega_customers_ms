@@ -9,6 +9,7 @@ import type { LeadPaymentMethod } from './types/lead-conversation-answers.type';
 import { LeadConversationStep } from './types/lead-conversation-step.enum';
 import type { LeadProject } from './types/lead-project.type';
 import type { StepTransition } from './types/step-transition.type';
+import type { ProjectKnowledge } from './v2/types/project-knowledge.type';
 
 /** Reusable transitions shared by several step handlers. */
 @Injectable()
@@ -40,6 +41,81 @@ export class LeadFlowTransitionsService {
     return {
       nextStep: LeadConversationStep.V2Conversation,
       outbound: this.composer.composeAskMotivation(body),
+      expectsReply: true,
+    };
+  }
+
+  /** V2 project teaser from omega_rag shortDescription after project pick. */
+  buildProjectTeaser(project: Pick<ProjectKnowledge, 'title' | 'shortDescription'>): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeProjectTeaser(project),
+      expectsReply: false,
+    };
+  }
+
+  buildAskTimeToBuy(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskTimeToBuy(body),
+      expectsReply: true,
+    };
+  }
+
+  buildAskPaymentCapture(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskPaymentCapture(body),
+      expectsReply: true,
+    };
+  }
+
+  buildFinancingOffer(project: ProjectKnowledge, showTotals = false): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeFinancingOffer(project, showTotals),
+      expectsReply: false,
+    };
+  }
+
+  /** V2 financed path: lot picker with monthly cuotas (interactive). */
+  buildFinancingLotPicker(project: ProjectKnowledge): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeFinancingLotPicker(project),
+      expectsReply: true,
+    };
+  }
+
+  /** Ack after a financed lot size tap. */
+  buildLotChoiceAck(area: number): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeLotChoiceAck(area),
+      expectsReply: false,
+    };
+  }
+
+  buildAskNextStep(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskNextStep(body),
+      expectsReply: true,
+    };
+  }
+
+  buildAskUrgency(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskUrgency(body),
+      expectsReply: true,
+    };
+  }
+
+  buildAskDecisionMaker(body?: string): StepTransition {
+    return {
+      nextStep: LeadConversationStep.V2Conversation,
+      outbound: this.composer.composeAskDecisionMaker(body),
       expectsReply: true,
     };
   }
