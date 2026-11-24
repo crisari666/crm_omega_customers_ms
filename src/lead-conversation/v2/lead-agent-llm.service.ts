@@ -44,23 +44,39 @@ export class LeadAgentLlmService {
     messages: readonly LeadAgentChatMessage[],
     validation: LeadAgentTurnValidation,
   ): Promise<LeadAgentLlmTurn | null> {
+    const model = this.resolveModel();
+    this.logger.log(
+      `Agent LLM turn start model=${model} messages=${messages.length} lastUser=${this.describeLastUser(messages)}`,
+    );
     const params: LeadAgentCompletionParams = {
       temperature: LEAD_AGENT_LLM_TEMPERATURE,
       maxTokens: LEAD_AGENT_LLM_MAX_TOKENS,
       isJson: true,
     };
     for (let attempt = 1; attempt <= LEAD_AGENT_LLM_ATTEMPTS; attempt += 1) {
-      const content = await this.requestCompletion(messages, params);
+      this.logger.log(
+        `Agent LLM request attempt=${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} model=${model} messages=${messages.length}`,
+      );
+      const content = await this.requestCompletion(messages, params, model);
       if (content === null) {
         this.logger.warn(`Agent turn attempt ${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} produced no valid answer`);
         continue;
       }
+      this.logger.log(
+        `Agent LLM response attempt=${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} chars=${content.length}`,
+      );
       const turn = parseLeadAgentLlmTurn(content, validation);
-      if (turn !== null) return turn;
+      if (turn !== null) {
+        this.logger.log(
+          `Agent LLM turn ok attempt=${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} replies=${turn.replies.length} action=${turn.action}`,
+        );
+        return turn;
+      }
       this.logger.warn(
         `Agent turn attempt ${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} produced no valid answer content=${this.truncateContent(content)}`,
       );
     }
+    this.logger.warn(`Agent LLM turn null after ${LEAD_AGENT_LLM_ATTEMPTS} attempts`);
     return null;
   }
 
@@ -75,16 +91,23 @@ export class LeadAgentLlmService {
       maxTokens: LEAD_AGENT_BRIEF_MAX_TOKENS,
       isJson: false,
     };
+    const model = this.resolveModel();
     for (let attempt = 1; attempt <= LEAD_AGENT_LLM_ATTEMPTS; attempt += 1) {
-      const content = (await this.requestCompletion(messages, params))?.trim() ?? '';
-      if (content.length > 0) return content;
+      this.logger.log(`Agent LLM brief attempt=${attempt}/${LEAD_AGENT_LLM_ATTEMPTS} model=${model}`);
+      const content = (await this.requestCompletion(messages, params, model))?.trim() ?? '';
+      if (content.length > 0) {
+        this.logger.log(`Agent LLM brief ok chars=${content.length}`);
+        return content;
+      }
     }
+    this.logger.warn(`Agent LLM brief null after ${LEAD_AGENT_LLM_ATTEMPTS} attempts`);
     return null;
   }
 
   private async requestCompletion(
     messages: readonly LeadAgentChatMessage[],
     params: LeadAgentCompletionParams,
+    model: string,
   ): Promise<string | null> {
     const client = this.getClient();
     if (client === null) return null;
@@ -92,7 +115,7 @@ export class LeadAgentLlmService {
     try {
       const completion = await client.chat.completions.create(
         {
-          model: this.configService.get<string>('leadAgent.llmModel', 'deepseek-chat'),
+          model,
           temperature: params.temperature,
           max_tokens: params.maxTokens,
           ...(params.isJson ? { response_format: { type: 'json_object' as const } } : {}),
@@ -120,6 +143,19 @@ export class LeadAgentLlmService {
     const baseURL = this.configService.get<string>('deepseek.baseUrl', 'https://api.deepseek.com').trim();
     this.client = new OpenAI({ apiKey, baseURL });
     return this.client;
+  }
+
+  private resolveModel(): string {
+    return this.configService.get<string>('leadAgent.llmModel', 'deepseek-chat');
+  }
+
+  private describeLastUser(messages: readonly LeadAgentChatMessage[]): string {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'user') {
+        return this.truncateContent(messages[index].content);
+      }
+    }
+    return '""';
   }
 
   private truncateContent(content: string): string {
