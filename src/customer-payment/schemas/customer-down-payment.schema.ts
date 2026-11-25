@@ -57,6 +57,9 @@ export const CustomerDownPaymentSchema = SchemaFactory.createForClass(
   CustomerDownPayment,
 );
 
-CustomerDownPaymentSchema.index({ customerId: 1, projectId: 1 }, { unique: true });
+CustomerDownPaymentSchema.index(
+  { customerId: 1, projectId: 1, lotNumber: 1 },
+  { unique: true },
+);
 CustomerDownPaymentSchema.index({ createdAt: -1 });
 CustomerDownPaymentSchema.index({ recordedBy: 1, createdAt: -1 });

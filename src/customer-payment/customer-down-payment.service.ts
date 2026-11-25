@@ -93,14 +93,19 @@ export class CustomerDownPaymentService {
         'First payment cannot exceed expected down payment value',
       );
     }
+    const lotNumber = dto.lotNumber.trim();
     const existing = await this.downPaymentModel
-      .findOne({ customerId: dto.customerId, projectId: dto.projectId })
+      .findOne({
+        customerId: dto.customerId,
+        projectId: dto.projectId,
+        lotNumber,
+      })
       .select({ _id: 1 })
       .lean()
       .exec();
     if (existing != null) {
       throw new ConflictException(
-        'A down payment already exists for this customer and project. Only fee payments can be added until the expected value is reached.',
+        'A down payment already exists for this customer, project, and lot. Only fee payments can be added until the expected value is reached.',
       );
     }
     const customerName =
@@ -111,20 +116,26 @@ export class CustomerDownPaymentService {
       dto.firstPaymentValue >= dto.expectedValue
         ? CustomerDownPaymentStatus.Completed
         : CustomerDownPaymentStatus.Pending;
-    const downPayment = await this.downPaymentModel.create({
-      customerId: dto.customerId,
-      projectId: dto.projectId,
-      lotNumber: dto.lotNumber.trim(),
-      expectedValue: dto.expectedValue,
-      status,
-      totalPaid: 0,
-      feeCount: 0,
-      customerName: customerName || undefined,
-      projectName: projectName || undefined,
-      contractMimeType: 'pending',
-      contractStoredFileName: 'pending',
-      recordedBy,
-    });
+    let downPayment: CustomerDownPaymentDocument;
+    try {
+      downPayment = await this.downPaymentModel.create({
+        customerId: dto.customerId,
+        projectId: dto.projectId,
+        lotNumber,
+        expectedValue: dto.expectedValue,
+        status,
+        totalPaid: 0,
+        feeCount: 0,
+        customerName: customerName || undefined,
+        projectName: projectName || undefined,
+        contractMimeType: 'pending',
+        contractStoredFileName: 'pending',
+        recordedBy,
+      });
+    } catch (err: unknown) {
+      this.throwIfDuplicateDownPaymentKey(err);
+      throw err;
+    }
     const downPaymentId = String(downPayment._id);
     try {
       const contractMeta = await this.persistFile({
@@ -171,6 +182,7 @@ export class CustomerDownPaymentService {
     } catch (err: unknown) {
       await this.feeModel.deleteMany({ downPaymentId }).exec();
       await this.downPaymentModel.deleteOne({ _id: downPayment._id }).exec();
+      this.throwIfDuplicateDownPaymentKey(err);
       throw err;
     }
   }
@@ -642,6 +654,18 @@ export class CustomerDownPaymentService {
     }
     if (!CUSTOMER_DOWN_PAYMENT_ALLOWED_MIME.has(contract!.mimetype)) {
       throw new BadRequestException('Unsupported contract MIME type');
+    }
+  }
+
+  private throwIfDuplicateDownPaymentKey(err: unknown): void {
+    const code =
+      err != null && typeof err === 'object' && 'code' in err
+        ? (err as { code?: number | string }).code
+        : undefined;
+    if (code === 11000 || code === '11000') {
+      throw new ConflictException(
+        'A down payment already exists for this customer, project, and lot. Only fee payments can be added until the expected value is reached.',
+      );
     }
   }
 
