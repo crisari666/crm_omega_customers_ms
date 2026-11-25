@@ -20,6 +20,8 @@ export type CustomerAdminListItem = {
   enabled: boolean;
   isReferral: boolean;
   createdAt: string;
+  /** Project ids of interest (titles resolved by admin UI from RAG catalog). */
+  interestedProjects?: { projectId: string }[];
 };
 
 export type CustomerStepDistributionItem = {

@@ -82,6 +82,7 @@ type AdminListAggRow = {
   enabled?: boolean;
   isReferral?: boolean;
   createdAt?: Date;
+  interestedProjects?: { projectId?: string }[];
   __stepName?: string;
   __stepColor?: string;
 };
@@ -451,6 +452,7 @@ export class CustomerService {
                 enabled: 1,
                 isReferral: 1,
                 createdAt: 1,
+                interestedProjects: 1,
                 __stepName: 1,
                 __stepColor: 1,
               },
@@ -523,6 +525,9 @@ export class CustomerService {
         ? createdRaw.toISOString()
         : new Date(createdRaw as string).toISOString();
 
+    const interestedProjects = (doc.interestedProjects ?? [])
+      .map((entry) => ({ projectId: (entry.projectId ?? '').trim() }))
+      .filter((entry) => entry.projectId.length > 0);
     const item: CustomerAdminListItem = {
       id: String(doc._id),
       name: doc.name,
@@ -534,6 +539,7 @@ export class CustomerService {
       enabled: doc.enabled !== false,
       isReferral: doc.isReferral === true,
       createdAt,
+      ...(interestedProjects.length > 0 ? { interestedProjects } : {}),
     };
     if (sid !== undefined) {
       item.customerStepId = sid;
