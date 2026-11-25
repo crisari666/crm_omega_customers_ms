@@ -62,4 +62,9 @@ export class MarketingAudienceFilterDto {
   @IsArray()
   @IsMongoId({ each: true })
   customerStepIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  projectId?: string;
 }

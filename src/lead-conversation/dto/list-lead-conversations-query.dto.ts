@@ -30,6 +30,13 @@ export class ListLeadConversationsQueryDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   search?: string;
 
+  /** When set, only sessions whose confirmed `projectId` matches. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  projectId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

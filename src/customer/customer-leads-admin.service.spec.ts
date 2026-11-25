@@ -118,6 +118,17 @@ describe('CustomerLeadsAdminService', () => {
     );
   });
 
+  it('filters leads by interestedProjects.projectId', async () => {
+    mockCustomerModel.find.mockReturnValue(buildChain([]));
+    mockCustomerModel.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(0) });
+    await service.listLeads({ page: 0, limit: 50, projectId: 'proj-abc' });
+    expect(mockCustomerModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'interestedProjects.projectId': 'proj-abc',
+      }),
+    );
+  });
+
   it('includes next pending scheduledCall on list items', async () => {
     const eventId = new Types.ObjectId();
     const scheduledAt = new Date('2030-01-15T15:00:00.000Z');

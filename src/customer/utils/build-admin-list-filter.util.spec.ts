@@ -37,4 +37,18 @@ describe('buildAdminListFilter', () => {
       { assignedTo: '' },
     ]);
   });
+
+  it('filters by interestedProjects.projectId when projectId is set', () => {
+    const filter = buildAdminListFilter({
+      projectId: ' proj-abc ',
+    });
+    expect(filter['interestedProjects.projectId']).toBe('proj-abc');
+  });
+
+  it('ignores blank projectId', () => {
+    const filter = buildAdminListFilter({
+      projectId: '   ',
+    });
+    expect(filter['interestedProjects.projectId']).toBeUndefined();
+  });
 });

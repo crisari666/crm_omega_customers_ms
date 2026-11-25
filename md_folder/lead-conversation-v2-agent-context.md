@@ -40,10 +40,11 @@ Code owns stage moves (`LeadAgentStageService`). LLM writes replies + extracts `
 ### 1. Project always defined (confirmed vs suggested)
 
 - Ad registry (`meta_lead_ad_campaigns`) maps Meta `campaignId` → RAG `projectId`.
-- That mapping is a **soft suggestion** (`suggestedProject` in the prompt) until Instant Form adopt or customer confirm.
+- **Meta V2 delayed welcome** (`executeStartAgentSession`): when the ad registry returns a `projectId`, the session is stamped with `projectId` / `projectTitle` at start (confirmed) so admin Lead Conversations can filter by project immediately.
+- That mapping is otherwise a **soft suggestion** (`suggestedProject` in the prompt) until Instant Form adopt or customer confirm (inbound paths without welcome stamp).
 - **Instant Form dump** with suggested project and **without** location rejection (“otra ciudad”) → engine **adopts** `session.projectId` immediately (no picker).
 - Location rejection → leave unconfirmed; still **do not** auto-append the project picker (LLM explores; picker only via `offer_projects`).
-- Confirmed project = `session.projectId` after adopt / interactive tap / LLM catalog `projectId`, **or** `session.isAllProjects` after `project:all`.
+- Confirmed project = `session.projectId` after welcome stamp / adopt / interactive tap / LLM catalog `projectId`, **or** `session.isAllProjects` after `project:all`.
 - Interactive picker: same V1 option ids (`project:<id>`, `project:all`). Engine appends it only when there is **no** confirmed project **and no** `suggestedProject`, or when action is `offer_projects`.
 - Admin V2 restart / V1→V2 adoption (`buildLeadAgentSessionReset`) **`$unset`s** `projectId` + `projectTitle` so the next “Hola” asks again (selector appended when no suggestion).
 - Stage stays in `opening` while `hasProject` is false (`projectId` unset and not `isAllProjects`).

@@ -100,9 +100,9 @@ describe('MetaLeadFormQualificationService V2 welcome', () => {
       step: 'v2_conversation',
       leadProfile: { stage: 'opening', stageTurns: 0 },
       recovery: { sentStepIds: [] },
+      projectId: 'p1',
+      projectTitle: 'Valle del Sol',
     });
-    expect(update.$set).not.toHaveProperty('projectId');
-    expect(update.$set).not.toHaveProperty('projectTitle');
     expect(mockMessageModel.create).toHaveBeenCalledWith(
       expect.objectContaining({ direction: 'outbound', kind: 'template', body: 'Hola Camila', templateName: 'bienvenida_v2', wamid: 'wamid.out' }),
     );

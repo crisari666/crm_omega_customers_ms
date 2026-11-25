@@ -86,6 +86,10 @@ export function buildMarketingAudienceFilter(
   } else if (stepIds.length > 1) {
     filter.customerStepId = { $in: stepIds.map((id) => new Types.ObjectId(id)) };
   }
+  const projectId = query.projectId?.trim();
+  if (projectId !== undefined && projectId !== '') {
+    filter['interestedProjects.projectId'] = projectId;
+  }
   const enabledClause =
     query.enabled === true
       ? { $or: [{ enabled: true }, { enabled: { $exists: false } }] }

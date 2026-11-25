@@ -98,6 +98,14 @@ export class ListCustomersAdminQueryDto {
   @IsMongoId()
   customerStepId?: string;
 
+  /**
+   * When set, only customers with this id in `interestedProjects.projectId`.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  projectId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

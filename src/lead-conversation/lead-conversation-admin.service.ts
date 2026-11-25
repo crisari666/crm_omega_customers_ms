@@ -159,6 +159,9 @@ function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<Lead
     const pattern = new RegExp(escapeRegex(query.search), 'i');
     filter.$or = [{ waId: pattern }, { profileName: pattern }, { projectTitle: pattern }];
   }
+  if (query.projectId) {
+    filter.projectId = query.projectId;
+  }
   return filter;
 }
 

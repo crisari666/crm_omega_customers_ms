@@ -75,6 +75,7 @@ type CustomerLeadLean = {
   readonly metaLeadgenId?: string;
   readonly createdAt?: Date;
   readonly isProspect?: boolean;
+  readonly interestedProjects?: readonly { readonly projectId?: string }[];
 };
 
 type CampaignFormLean = {
@@ -250,6 +251,10 @@ export class CustomerLeadsAdminService {
         },
       ];
     }
+    const projectId = query.projectId?.trim() ?? '';
+    if (projectId.length > 0) {
+      filter['interestedProjects.projectId'] = projectId;
+    }
     return filter;
   }
 
@@ -406,6 +411,9 @@ export class CustomerLeadsAdminService {
   ): AdminLeadListItem {
     const lifecycle = resolveLifecycle(row);
     const sources = row.leadSources ?? [];
+    const interestedProjects = (row.interestedProjects ?? [])
+      .map((entry) => ({ projectId: (entry.projectId ?? '').trim() }))
+      .filter((entry) => entry.projectId.length > 0);
     return {
       id: String(row._id),
       name: row.name ?? '',
@@ -419,6 +427,7 @@ export class CustomerLeadsAdminService {
       ...(formMeta?.metaFormId ? { metaFormId: formMeta.metaFormId } : {}),
       ...(formMeta?.metaFormName ? { metaFormName: formMeta.metaFormName } : {}),
       createdAt: toIso(row.createdAt),
+      ...(interestedProjects.length > 0 ? { interestedProjects } : {}),
       ...(session
         ? {
             leadSession: {

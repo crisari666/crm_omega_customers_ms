@@ -8,4 +8,5 @@ export type MarketingAudienceFilter = {
   readonly isReferral?: boolean;
   readonly search?: string;
   readonly customerStepIds?: string[];
+  readonly projectId?: string;
 };

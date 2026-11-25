@@ -40,6 +40,8 @@ export type AdminLeadListItem = {
   readonly createdAt: string;
   readonly leadSession?: AdminLeadSessionSummary;
   readonly scheduledCall?: AdminLeadScheduledCall;
+  /** Project ids of interest (titles resolved by admin UI from RAG catalog). */
+  readonly interestedProjects?: readonly { readonly projectId: string }[];
 };
 
 export type AdminLeadListPage = {

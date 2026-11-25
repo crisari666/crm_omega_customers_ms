@@ -255,6 +255,14 @@ export class MetaLeadFormQualificationService {
               step: LeadConversationStep.V2Conversation,
               leadProfile: { stage: 'opening', stageTurns: 0 },
               recovery: { anchorAt: now, sentStepIds: [] },
+              ...(welcome.projectId !== undefined
+                ? {
+                    projectId: welcome.projectId,
+                    ...(welcome.projectTitle !== undefined
+                      ? { projectTitle: welcome.projectTitle }
+                      : {}),
+                  }
+                : {}),
             },
             $setOnInsert: {
               customerId,

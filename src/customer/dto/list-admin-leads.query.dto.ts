@@ -41,6 +41,12 @@ export class ListAdminLeadsQueryDto {
   @MaxLength(64)
   formId?: string;
 
+  /** When set, only leads with this id in `interestedProjects.projectId`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  projectId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

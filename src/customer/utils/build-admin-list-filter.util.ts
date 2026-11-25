@@ -87,6 +87,10 @@ export function buildAdminListFilter(
   if (stepId !== undefined && stepId !== '') {
     filter.customerStepId = new Types.ObjectId(stepId);
   }
+  const projectId = query.projectId?.trim();
+  if (projectId !== undefined && projectId !== '') {
+    filter['interestedProjects.projectId'] = projectId;
+  }
   const createdBy = query.createdBy?.trim();
   if (createdBy !== undefined && createdBy !== '') {
     filter.createdBy = createdBy;
