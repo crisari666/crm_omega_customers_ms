@@ -76,6 +76,14 @@ export class LeadConversationInboundService {
       this.logger.debug(`Duplicate lead message ${message.wamid} ignored`);
       return;
     }
+    if (!message.hasSendablePhone) {
+      this.logger.warn(
+        `Lead session ${String(session._id)} username-only inbound ${message.wamid} ` +
+          `waId=${message.waId} username=${message.whatsappUsername ?? 'n/a'} — ` +
+          `saved transcript; skipping bot outbound until a sendable phone is known`,
+      );
+      return;
+    }
     await this.reminderScheduler.executeCancel(String(session._id));
     await this.metaLeadFormQualificationScheduler.executeCancelByWaId(message.waId);
     const resolved = await this.flowResolver.executeResolve(session);
