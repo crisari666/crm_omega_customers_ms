@@ -202,6 +202,91 @@ describe('LeadCustomerService', () => {
     );
   });
 
+  it('creates a username-only customer with synthetic phone and skips phone candidates', async () => {
+    const created = { _id: new Types.ObjectId() };
+    mockCustomerService.createCustomer.mockResolvedValue(created);
+    const actual = await service.findOrCreateByWaId({
+      waId: 'meta:CO.4513634245617612',
+      profileName: 'Carmen Dozar',
+      actorUserId: 'bot',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+    });
+    expect(actual).toBe(created);
+    expect(mockCustomerModel.find).not.toHaveBeenCalled();
+    expect(mockCustomerService.createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: 'meta:CO.4513634245617612',
+        whatsappUsername: 'carmendozar',
+        metaWhatsappUserId: 'CO.4513634245617612',
+        leadSources: ['whatsapp_lead_conversation'],
+      }),
+      'bot',
+    );
+    expect(mockCustomerService.createCustomer.mock.calls[0][0].whatsapp).toBeUndefined();
+  });
+
+  it('finds an existing customer by metaWhatsappUserId for synthetic waId', async () => {
+    const customerId = new Types.ObjectId();
+    const customer = {
+      _id: customerId,
+      name: 'Carmen',
+      lastName: '',
+      phone: 'meta:CO.4513634245617612',
+      email: '',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+      metaCtwaClid: '',
+      whatsapp: '',
+      assignedTo: '',
+      save: jest.fn().mockResolvedValue(undefined),
+      $locals: {} as Record<string, unknown>,
+    };
+    mockCustomerModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
+    const actual = await service.findOrCreateByWaId({
+      waId: 'meta:CO.4513634245617612',
+      profileName: 'Carmen Dozar',
+      actorUserId: 'bot',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+    });
+    expect(actual).toBe(customer);
+    expect(mockCustomerService.createCustomer).not.toHaveBeenCalled();
+    expect(mockCustomerService.tagLeadIngress).toHaveBeenCalledWith(customerId, 'whatsapp_lead_conversation');
+  });
+
+  it('upgrades synthetic phone when a sendable waId arrives for the same Meta user', async () => {
+    const customerId = new Types.ObjectId();
+    const customer = {
+      _id: customerId,
+      name: 'Carmen',
+      lastName: '',
+      phone: 'meta:CO.4513634245617612',
+      email: '',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+      metaCtwaClid: '',
+      whatsapp: '',
+      assignedTo: '',
+      save: jest.fn().mockResolvedValue(undefined),
+      $locals: {} as Record<string, unknown>,
+    };
+    mockCustomerModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+    });
+    mockCustomerModel.findOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(customer) });
+    await service.findOrCreateByWaId({
+      waId: '573001112233',
+      profileName: 'Carmen Dozar',
+      actorUserId: 'bot',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+    });
+    expect(customer.phone).toBe('573001112233');
+    expect(customer.whatsapp).toBe('573001112233');
+    expect(customer.save).toHaveBeenCalled();
+  });
+
   it('retries phone lookup after create conflict', async () => {
     const customerId = new Types.ObjectId();
     const customer = {

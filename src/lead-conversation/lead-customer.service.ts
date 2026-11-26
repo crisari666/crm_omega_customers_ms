@@ -9,6 +9,11 @@ import {
 } from '../customer/schemas/meta-lead-campaign.schema';
 import { findCustomersByPhoneCandidates } from '../customer/utils/find-customer-by-phone-candidates.util';
 import { normalizeCustomerPhone } from '../customer/utils/normalize-customer-phone.util';
+import {
+  isSendableLeadPhone,
+  isSyntheticLeadWaId,
+  normalizeWhatsappUsername,
+} from './utils/lead-identity-key.util';
 
 const FALLBACK_CUSTOMER_NAME = 'Contacto';
 const LEAD_BOT_ACTOR_ID = 'lead-conversation-bot';
@@ -42,18 +47,25 @@ export class LeadCustomerService {
   ) {}
 
   /**
-   * Resolves the Ceiba/leadgen Customer (phone → email → metaWhatsappUserId) or creates a lead.
-   * Enrichment never clears `assignedTo`.
+   * Resolves the Ceiba/leadgen Customer (phone → email → metaWhatsappUserId → username) or creates a lead.
+   * Enrichment never clears `assignedTo`. Synthetic `meta:`/`username:` keys skip phone-candidate matching.
    */
   async findOrCreateByWaId(input: LeadCustomerIdentityInput): Promise<CustomerDocument> {
     const phone = normalizeCustomerPhone(input.waId);
-    const byPhone = await findCustomersByPhoneCandidates(this.customerModel, phone);
-    let preferred = await this.pickPreferredCustomer(byPhone);
-    if (!preferred && input.email) {
-      preferred = await this.findByEmail(input.email);
+    const isSynthetic = isSyntheticLeadWaId(phone) || !isSendableLeadPhone(phone);
+    let preferred: CustomerDocument | null = null;
+    if (!isSynthetic) {
+      const byPhone = await findCustomersByPhoneCandidates(this.customerModel, phone);
+      preferred = await this.pickPreferredCustomer(byPhone);
     }
     if (!preferred && input.metaWhatsappUserId) {
       preferred = await this.findByMetaWhatsappUserId(input.metaWhatsappUserId);
+    }
+    if (!preferred && input.whatsappUsername) {
+      preferred = await this.findByWhatsappUsername(input.whatsappUsername);
+    }
+    if (!preferred && input.email) {
+      preferred = await this.findByEmail(input.email);
     }
     if (preferred) {
       await this.enrichCustomerIdentity(preferred, { ...input, waId: phone });
@@ -68,7 +80,7 @@ export class LeadCustomerService {
           name,
           lastName,
           phone,
-          whatsapp: phone,
+          ...(isSynthetic ? {} : { whatsapp: phone }),
           lifecycleStatus: 'lead',
           leadSources: ['whatsapp_lead_conversation'],
           ...(input.email ? { email: input.email } : {}),
@@ -80,8 +92,13 @@ export class LeadCustomerService {
       );
     } catch (err) {
       if (!(err instanceof ConflictException)) throw err;
-      const raced = await findCustomersByPhoneCandidates(this.customerModel, phone);
-      const racedPreferred = await this.pickPreferredCustomer(raced);
+      const racedPreferred = isSynthetic
+        ? (await this.findByMetaWhatsappUserId(input.metaWhatsappUserId ?? '')) ??
+          (await this.findByWhatsappUsername(input.whatsappUsername ?? '')) ??
+          (await this.findBySyntheticPhone(phone))
+        : await this.pickPreferredCustomer(
+            await findCustomersByPhoneCandidates(this.customerModel, phone),
+          );
       if (!racedPreferred) throw err;
       await this.enrichCustomerIdentity(racedPreferred, { ...input, waId: phone });
       await this.stampMetaLeadCampaignWhatsappIdentity(racedPreferred._id as Types.ObjectId, input);
@@ -245,19 +262,46 @@ export class LeadCustomerService {
     return this.customerModel.findOne({ metaWhatsappUserId: trimmed }).exec();
   }
 
+  private async findByWhatsappUsername(whatsappUsername: string): Promise<CustomerDocument | null> {
+    const normalized = normalizeWhatsappUsername(whatsappUsername);
+    if (!normalized) return null;
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.customerModel
+      .findOne({ whatsappUsername: { $regex: new RegExp(`^@?${escaped}$`, 'i') } })
+      .exec();
+  }
+
+  private async findBySyntheticPhone(phone: string): Promise<CustomerDocument | null> {
+    const trimmed = phone.trim();
+    if (!trimmed || !isSyntheticLeadWaId(trimmed)) return null;
+    return this.customerModel.findOne({ phone: trimmed }).exec();
+  }
+
   private async enrichCustomerIdentity(
     customer: CustomerDocument,
     input: LeadCustomerIdentityInput,
   ): Promise<void> {
     const phone = normalizeCustomerPhone(input.waId);
     const existingPhone = normalizeCustomerPhone(customer.phone ?? '');
-    if (phone && existingPhone && phone !== existingPhone) {
-      this.logger.warn(
-        `Identity enrich phone mismatch customer=${String(customer._id)} ` +
-          `keptPhone=${existingPhone} formWaId=${phone} (phone not overwritten)`,
-      );
-    }
+    const incomingSendable = isSendableLeadPhone(phone);
+    const existingSynthetic = isSyntheticLeadWaId(existingPhone) || !isSendableLeadPhone(existingPhone);
     let dirty = false;
+    if (phone && existingPhone && phone !== existingPhone) {
+      if (incomingSendable && existingSynthetic) {
+        customer.phone = phone;
+        customer.whatsapp = phone;
+        dirty = true;
+        this.logger.warn(
+          `Identity enrich upgraded synthetic phone customer=${String(customer._id)} ` +
+            `from=${existingPhone} to=${phone}`,
+        );
+      } else {
+        this.logger.warn(
+          `Identity enrich phone mismatch customer=${String(customer._id)} ` +
+            `keptPhone=${existingPhone} formWaId=${phone} (phone not overwritten)`,
+        );
+      }
+    }
     if (input.profileName) {
       const filled = this.applyNameIfEmpty(customer, input.profileName);
       dirty = dirty || filled;
@@ -278,7 +322,7 @@ export class LeadCustomerService {
       customer.metaCtwaClid = input.ctwaClid.trim();
       dirty = true;
     }
-    if (phone && !(customer.whatsapp ?? '').trim()) {
+    if (incomingSendable && !(customer.whatsapp ?? '').trim()) {
       customer.whatsapp = phone;
       dirty = true;
     }

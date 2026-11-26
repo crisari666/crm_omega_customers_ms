@@ -10,6 +10,7 @@ import { LeadConversationStep } from './types/lead-conversation-step.enum';
 import type { OutboundMessagePlan } from './types/outbound-message-plan.type';
 import type { StepTransition } from './types/step-transition.type';
 import { extractFirstName } from './utils/extract-first-name.util';
+import { isSendableLeadPhone } from './utils/lead-identity-key.util';
 
 export type LeadSessionSnapshot = LeadConversationSession & { readonly _id: Types.ObjectId };
 
@@ -38,14 +39,44 @@ export class LeadConversationSessionService {
     readonly whatsappUsername?: string;
     readonly metaWhatsappUserId?: string;
   }): Promise<LeadSessionSnapshot> {
-    const $set: Record<string, unknown> = {};
-    if (input.whatsappUsername) $set.whatsappUsername = input.whatsappUsername;
-    if (input.metaWhatsappUserId) $set.metaWhatsappUserId = input.metaWhatsappUserId;
+    const identitySet: Record<string, unknown> = {};
+    if (input.whatsappUsername) identitySet.whatsappUsername = input.whatsappUsername;
+    if (input.metaWhatsappUserId) identitySet.metaWhatsappUserId = input.metaWhatsappUserId;
+    if (isSendableLeadPhone(input.waId) && input.metaWhatsappUserId?.trim()) {
+      const upgraded = await this.upgradeUsernameSession(input, identitySet);
+      if (upgraded) return upgraded;
+    }
+    if (!isSendableLeadPhone(input.waId) && input.metaWhatsappUserId?.trim()) {
+      const byMeta = await this.sessionModel
+        .findOneAndUpdate(
+          {
+            phoneNumberId: input.phoneNumberId,
+            metaWhatsappUserId: input.metaWhatsappUserId.trim(),
+          },
+          {
+            $set: {
+              ...identitySet,
+              customerId: input.customerId,
+              waId: input.waId,
+            },
+            $setOnInsert: {
+              phoneNumberId: input.phoneNumberId,
+              profileName: input.profileName,
+              firstName: extractFirstName(input.profileName),
+              step: LeadConversationStep.Initial,
+              status: 'active',
+            },
+          },
+          { upsert: true, new: true, lean: true },
+        )
+        .exec();
+      if (byMeta) return byMeta as LeadSessionSnapshot;
+    }
     return this.sessionModel
       .findOneAndUpdate(
         { waId: input.waId, phoneNumberId: input.phoneNumberId },
         {
-          ...(Object.keys($set).length > 0 ? { $set } : {}),
+          ...(Object.keys(identitySet).length > 0 ? { $set: identitySet } : {}),
           $setOnInsert: {
             customerId: input.customerId,
             waId: input.waId,
@@ -59,6 +90,40 @@ export class LeadConversationSessionService {
         { upsert: true, new: true, lean: true },
       )
       .exec() as Promise<LeadSessionSnapshot>;
+  }
+
+  /**
+   * When Meta later sends a digit `from`, reuse the username-only session keyed by `metaWhatsappUserId`
+   * and upgrade `waId` so outbound can use the sendable phone.
+   */
+  private async upgradeUsernameSession(
+    input: {
+      readonly customerId: Types.ObjectId;
+      readonly waId: string;
+      readonly phoneNumberId: string;
+      readonly metaWhatsappUserId?: string;
+    },
+    identitySet: Record<string, unknown>,
+  ): Promise<LeadSessionSnapshot | null> {
+    const metaId = input.metaWhatsappUserId?.trim();
+    if (!metaId) return null;
+    return this.sessionModel
+      .findOneAndUpdate(
+        {
+          phoneNumberId: input.phoneNumberId,
+          metaWhatsappUserId: metaId,
+          $or: [{ waId: { $regex: /^(meta:|username:)/u } }, { waId: input.waId }],
+        },
+        {
+          $set: {
+            ...identitySet,
+            waId: input.waId,
+            customerId: input.customerId,
+          },
+        },
+        { new: true, lean: true },
+      )
+      .exec() as Promise<LeadSessionSnapshot | null>;
   }
 
   async findById(sessionId: string): Promise<LeadSessionSnapshot | null> {
