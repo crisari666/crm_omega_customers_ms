@@ -28,6 +28,7 @@ export type AdminLeadListItem = {
   readonly name: string;
   readonly lastName: string;
   readonly phone: string;
+  readonly whatsappUsername?: string;
   readonly lifecycleStatus: CustomerLifecycleStatus;
   readonly leadSources: readonly CustomerLeadSource[];
   readonly isPromoted: boolean;

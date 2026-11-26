@@ -10,6 +10,7 @@ export type LeadConversationAdminListItem = {
   readonly customerId: string;
   readonly customerName: string;
   readonly phone: string;
+  readonly whatsappUsername?: string;
   readonly projectTitle?: string;
   readonly isAllProjects: boolean;
   readonly step: LeadConversationStep;

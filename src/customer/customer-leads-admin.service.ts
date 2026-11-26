@@ -22,6 +22,7 @@ import {
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import type { CustomerLeadSource } from './types/customer-lead-source.type';
 import type { CustomerLifecycleStatus } from './types/customer-lifecycle-status.type';
+import { formatLeadContactDisplay } from '../lead-conversation/utils/format-lead-contact-display.util';
 import type {
   AdminLeadListItem,
   AdminLeadListPage,
@@ -69,6 +70,8 @@ type CustomerLeadLean = {
   readonly name?: string;
   readonly lastName?: string;
   readonly phone: string;
+  readonly whatsappUsername?: string;
+  readonly metaWhatsappUserId?: string;
   readonly lifecycleStatus?: CustomerLifecycleStatus;
   readonly leadSources?: CustomerLeadSource[];
   readonly assignedTo?: string;
@@ -213,10 +216,13 @@ export class CustomerLeadsAdminService {
     }
     if (query.search?.trim()) {
       const q = query.search.trim();
+      const withoutAt = q.replace(/^@+/u, '');
       const searchOr = [
         { phone: { $regex: escapeRegex(q), $options: 'i' } },
         { name: { $regex: escapeRegex(q), $options: 'i' } },
         { lastName: { $regex: escapeRegex(q), $options: 'i' } },
+        { whatsappUsername: { $regex: escapeRegex(withoutAt), $options: 'i' } },
+        { metaWhatsappUserId: { $regex: escapeRegex(q), $options: 'i' } },
       ];
       filter.$and = [...(filter.$and ?? []), { $or: searchOr }];
     }
@@ -414,11 +420,16 @@ export class CustomerLeadsAdminService {
     const interestedProjects = (row.interestedProjects ?? [])
       .map((entry) => ({ projectId: (entry.projectId ?? '').trim() }))
       .filter((entry) => entry.projectId.length > 0);
+    const whatsappUsername = (row.whatsappUsername ?? '').trim() || undefined;
     return {
       id: String(row._id),
       name: row.name ?? '',
       lastName: row.lastName ?? '',
-      phone: row.phone,
+      phone: formatLeadContactDisplay({
+        phone: row.phone,
+        ...(whatsappUsername ? { whatsappUsername } : {}),
+      }),
+      ...(whatsappUsername ? { whatsappUsername } : {}),
       lifecycleStatus: lifecycle,
       leadSources: sources,
       isPromoted: lifecycle === 'customer',

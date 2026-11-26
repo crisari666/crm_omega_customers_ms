@@ -25,11 +25,15 @@ import type { LeadTemperature } from './types/lead-temperature.type';
 import { buildLeadAgentSessionReset } from './utils/build-lead-agent-session-reset.util';
 import { buildLeadSessionReset } from './utils/build-lead-session-reset.util';
 import { escapeRegex } from './utils/escape-regex.util';
+import { formatLeadContactDisplay } from './utils/format-lead-contact-display.util';
+import { isSendableLeadPhone } from './utils/lead-identity-key.util';
 
 const DEFAULT_PAGE_SIZE = 20;
 
 type SessionWithTimestamps = LeadSessionSnapshot & { readonly createdAt?: Date };
-type CustomerContact = Pick<Customer, 'name' | 'lastName' | 'phone'> & { readonly _id: Types.ObjectId };
+type CustomerContact = Pick<Customer, 'name' | 'lastName' | 'phone' | 'whatsappUsername'> & {
+  readonly _id: Types.ObjectId;
+};
 
 const toIso = (value?: Date): string | undefined => (value ? new Date(value).toISOString() : undefined);
 
@@ -89,7 +93,8 @@ export class LeadConversationAdminService {
     const settings = await this.settingsService.executeGetOrCreate();
     if (settings.enabled) return this.restartAgentSession(session);
     await this.reminderScheduler.executeCancel(sessionId);
-    const canSend = isInsideCustomerServiceWindow(session.lastInboundAt);
+    const canSend =
+      isSendableLeadPhone(session.waId) && isInsideCustomerServiceWindow(session.lastInboundAt);
     const transition = canSend ? await this.transitions.buildAskProject(session) : undefined;
     const question = transition?.outbound[transition.outbound.length - 1];
     const now = new Date();
@@ -138,7 +143,7 @@ export class LeadConversationAdminService {
     const ids = [...new Set(sessions.map((session) => String(session.customerId)))].map((id) => new Types.ObjectId(id));
     if (ids.length === 0) return new Map();
     const customers = (await this.customerModel
-      .find({ _id: { $in: ids } }, { name: 1, lastName: 1, phone: 1 })
+      .find({ _id: { $in: ids } }, { name: 1, lastName: 1, phone: 1, whatsappUsername: 1 })
       .lean()
       .exec()) as unknown as CustomerContact[];
     return new Map(customers.map((customer) => [String(customer._id), customer]));
@@ -156,8 +161,17 @@ function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<Lead
   if (query.flow === 'v2') filter.flowVersion = 'v2';
   if (query.flow === 'v1') filter.flowVersion = { $ne: 'v2' };
   if (query.search) {
-    const pattern = new RegExp(escapeRegex(query.search), 'i');
-    filter.$or = [{ waId: pattern }, { profileName: pattern }, { projectTitle: pattern }];
+    const raw = query.search.trim();
+    const withoutAt = raw.replace(/^@+/u, '');
+    const pattern = new RegExp(escapeRegex(raw), 'i');
+    const usernamePattern = new RegExp(escapeRegex(withoutAt), 'i');
+    filter.$or = [
+      { waId: pattern },
+      { profileName: pattern },
+      { projectTitle: pattern },
+      { whatsappUsername: usernamePattern },
+      { metaWhatsappUserId: pattern },
+    ];
   }
   if (query.projectId) {
     filter.projectId = query.projectId;
@@ -168,11 +182,18 @@ function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<Lead
 function toListItem(session: SessionWithTimestamps, contact?: CustomerContact): LeadConversationAdminListItem {
   const fullName = [contact?.name, contact?.lastName].filter(Boolean).join(' ').trim();
   const isAgentFlow = session.flowVersion === 'v2';
+  const whatsappUsername =
+    (session.whatsappUsername ?? '').trim() || (contact?.whatsappUsername ?? '').trim() || undefined;
   return {
     sessionId: String(session._id),
     customerId: String(session.customerId),
     customerName: fullName || session.profileName || '',
-    phone: contact?.phone || session.waId,
+    phone: formatLeadContactDisplay({
+      phone: contact?.phone,
+      waId: session.waId,
+      ...(whatsappUsername ? { whatsappUsername } : {}),
+    }),
+    ...(whatsappUsername ? { whatsappUsername } : {}),
     projectTitle: session.projectTitle,
     isAllProjects: session.isAllProjects,
     step: session.step,

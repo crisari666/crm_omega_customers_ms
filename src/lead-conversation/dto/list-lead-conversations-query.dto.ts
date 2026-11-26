@@ -23,7 +23,7 @@ export class ListLeadConversationsQueryDto {
   @IsIn(LEAD_FLOW_FILTERS)
   flow?: LeadFlowVersion;
 
-  /** Matches phone (waId), WhatsApp profile name or project title. */
+  /** Matches phone (waId), WhatsApp username, profile name or project title. */
   @IsOptional()
   @IsString()
   @MaxLength(MAX_SEARCH_LENGTH)
