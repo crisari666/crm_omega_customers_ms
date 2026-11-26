@@ -51,6 +51,7 @@ describe('parseMetaLeadMessages', () => {
     expect(actual[0]).toMatchObject({
       wamid: 'wamid.ctwa-test',
       waId: '573182620113',
+      hasSendablePhone: true,
       phoneNumberId: '1031088740092803',
       profileName: 'Andres Palomino',
       email: 'andresfelipe.lugo@outlook.com',
@@ -136,7 +137,83 @@ Inbox URL:`;
     expect(actual[0].profileName).toBe('Ana');
   });
 
-  it('returns empty when there is no from and no recoverable phone', () => {
+  it('ingests username-only messages with synthetic waId and hasSendablePhone false', () => {
+    const actual = parseMetaLeadMessages({
+      entry: [
+        {
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                metadata: { phone_number_id: '1031088740092803' },
+                contacts: [
+                  {
+                    profile: { name: 'Carmen', username: 'carmendozar' },
+                    user_id: 'CO.4513634245617612',
+                  },
+                ],
+                messages: [
+                  {
+                    id: 'wamid.username-only',
+                    from_user_id: 'CO.4513634245617612',
+                    timestamp: '1700000000',
+                    type: 'text',
+                    text: { body: 'Hola sin teléfono' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(actual).toHaveLength(1);
+    expect(actual[0]).toMatchObject({
+      wamid: 'wamid.username-only',
+      waId: 'meta:CO.4513634245617612',
+      hasSendablePhone: false,
+      phoneNumberId: '1031088740092803',
+      profileName: 'Carmen',
+      whatsappUsername: 'carmendozar',
+      metaWhatsappUserId: 'CO.4513634245617612',
+    });
+  });
+
+  it('uses contacts.wa_id when message.from and body phone are missing', () => {
+    const actual = parseMetaLeadMessages({
+      entry: [
+        {
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                metadata: { phone_number_id: '1' },
+                contacts: [{ wa_id: '573001112233', profile: { name: 'Ana', username: 'ana_wa' } }],
+                messages: [
+                  {
+                    id: 'wamid.contact-wa',
+                    from_user_id: 'CO.ana',
+                    timestamp: '1700000000',
+                    type: 'text',
+                    text: { body: 'Hola' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(actual).toHaveLength(1);
+    expect(actual[0]).toMatchObject({
+      waId: '573001112233',
+      hasSendablePhone: true,
+      whatsappUsername: 'ana_wa',
+      metaWhatsappUserId: 'CO.ana',
+    });
+  });
+
+  it('returns empty when there is no from, phone, Meta user id, or username', () => {
     const actual = parseMetaLeadMessages({
       entry: [
         {
@@ -146,11 +223,10 @@ Inbox URL:`;
               value: {
                 messages: [
                   {
-                    id: 'wamid.no-phone',
-                    from_user_id: 'CO.only',
+                    id: 'wamid.no-identity',
                     timestamp: '1700000000',
                     type: 'text',
-                    text: { body: 'Hola sin teléfono' },
+                    text: { body: 'Hola sin identidad' },
                   },
                 ],
               },

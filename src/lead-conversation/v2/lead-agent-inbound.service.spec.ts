@@ -9,6 +9,7 @@ const mockStoredId = new Types.ObjectId();
 const mockMessage: InboundLeadMessage = {
   wamid: 'wamid.7',
   waId: '573001112233',
+  hasSendablePhone: true,
   phoneNumberId: '111',
   profileName: 'Camila',
   type: 'text',

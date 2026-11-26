@@ -1,8 +1,13 @@
 /** Normalized inbound WhatsApp message from the lead qualification line. */
 export type InboundLeadMessage = {
   readonly wamid: string;
-  /** Sendable WhatsApp phone digits (never Meta `CO.…` user ids). */
+  /**
+   * Sendable WhatsApp phone digits when known; otherwise a synthetic key
+   * (`meta:CO.…` / `username:handle`) for username-only Meta contacts.
+   */
   readonly waId: string;
+  /** False when Cloud API cannot send to `waId` (username-only / opaque Meta id). */
+  readonly hasSendablePhone: boolean;
   readonly phoneNumberId: string;
   readonly profileName: string;
   readonly type: string;

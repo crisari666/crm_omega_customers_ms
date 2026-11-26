@@ -13,6 +13,7 @@ import {
   isInstantFormDump,
 } from './extract-form-fields-from-lead-text.util';
 import { extractPhoneFromLeadText } from './extract-phone-from-lead-text.util';
+import { buildSyntheticLeadWaId, isSendableLeadPhone } from './lead-identity-key.util';
 
 const MILLISECONDS_PER_SECOND = 1000;
 const logger = new Logger('ParseMetaLeadMessages');
@@ -33,14 +34,46 @@ function resolveContact(value: MetaLeadWebhookValue, waId: string): MetaLeadWebh
   return byWaId ?? contacts[0];
 }
 
-function resolveWaId(message: MetaLeadWebhookMessage, text: string): { waId: string; fromBody: boolean } | undefined {
+function resolveContactWaId(value: MetaLeadWebhookValue): string | undefined {
+  for (const contact of value.contacts ?? []) {
+    const raw = contact.wa_id?.trim() ?? '';
+    if (!raw) continue;
+    const waId = normalizeCustomerPhone(raw);
+    if (isSendableLeadPhone(waId)) return waId;
+  }
+  return undefined;
+}
+
+type ResolvedWaId = {
+  readonly waId: string;
+  readonly fromBody: boolean;
+  readonly hasSendablePhone: boolean;
+};
+
+function resolveWaId(
+  message: MetaLeadWebhookMessage,
+  text: string,
+  value: MetaLeadWebhookValue,
+  contactPreview: MetaLeadWebhookContact | undefined,
+): ResolvedWaId | undefined {
   const from = message.from?.trim();
   if (from) {
     const waId = normalizeCustomerPhone(from);
-    if (waId.length > 0) return { waId, fromBody: false };
+    if (isSendableLeadPhone(waId)) return { waId, fromBody: false, hasSendablePhone: true };
   }
   const fromBody = extractPhoneFromLeadText(text);
-  if (fromBody) return { waId: fromBody, fromBody: true };
+  if (fromBody) return { waId: fromBody, fromBody: true, hasSendablePhone: true };
+  const fromContact = resolveContactWaId(value);
+  if (fromContact) return { waId: fromContact, fromBody: false, hasSendablePhone: true };
+  const metaWhatsappUserId = message.from_user_id?.trim() || contactPreview?.user_id?.trim();
+  const whatsappUsername = contactPreview?.profile?.username?.trim();
+  const synthetic = buildSyntheticLeadWaId({
+    ...(metaWhatsappUserId ? { metaWhatsappUserId } : {}),
+    ...(whatsappUsername ? { whatsappUsername } : {}),
+  });
+  if (synthetic) {
+    return { waId: synthetic, fromBody: false, hasSendablePhone: false };
+  }
   return undefined;
 }
 
@@ -57,10 +90,10 @@ function resolveMetaWhatsappUserId(
 function mapMessage(value: MetaLeadWebhookValue, message: MetaLeadWebhookMessage): InboundLeadMessage | null {
   const { text, replyId } = extractTextAndReply(message);
   const contactPreview = (value.contacts ?? [])[0];
-  const resolved = resolveWaId(message, text);
+  const resolved = resolveWaId(message, text, value, contactPreview);
   if (!resolved) {
     logger.warn(
-      `Skipping lead message ${message.id}: no sendable phone ` +
+      `Skipping lead message ${message.id}: no phone, Meta user id, or username ` +
         `(from_user_id=${message.from_user_id ?? contactPreview?.user_id ?? 'n/a'} ` +
         `username=${contactPreview?.profile?.username ?? 'n/a'})`,
     );
@@ -68,6 +101,12 @@ function mapMessage(value: MetaLeadWebhookValue, message: MetaLeadWebhookMessage
   }
   if (resolved.fromBody) {
     logger.warn(`Lead message ${message.id}: resolved waId=${resolved.waId} from text body (missing message.from)`);
+  }
+  if (!resolved.hasSendablePhone) {
+    logger.warn(
+      `Lead message ${message.id}: username-only identity waId=${resolved.waId} ` +
+        `(outbound suppressed until a sendable phone is known)`,
+    );
   }
   const contact = resolveContact(value, resolved.waId);
   const formFields = extractFormFieldsFromLeadText(text);
@@ -83,6 +122,7 @@ function mapMessage(value: MetaLeadWebhookValue, message: MetaLeadWebhookMessage
   return {
     wamid: message.id,
     waId: resolved.waId,
+    hasSendablePhone: resolved.hasSendablePhone,
     phoneNumberId: value.metadata?.phone_number_id?.trim() ?? '',
     profileName,
     type: message.type,

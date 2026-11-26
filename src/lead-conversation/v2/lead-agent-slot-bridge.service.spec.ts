@@ -9,6 +9,7 @@ import { LeadAgentSlotBridgeService } from './lead-agent-slot-bridge.service';
 const mockMessage: InboundLeadMessage = {
   wamid: 'wamid.1',
   waId: '573001112233',
+  hasSendablePhone: true,
   phoneNumberId: '111',
   profileName: 'Camila',
   type: 'interactive',

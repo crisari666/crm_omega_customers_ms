@@ -55,6 +55,7 @@ const SLOT_START = new Date('2026-10-16T00:00:00.000Z');
 const buildMessage = (text: string, replyId?: string): InboundLeadMessage => ({
   wamid: `wamid.${Math.random()}`,
   waId: '573001112233',
+  hasSendablePhone: true,
   phoneNumberId: '111',
   profileName: 'Ana María',
   type: replyId ? 'interactive' : 'text',
