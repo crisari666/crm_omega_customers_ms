@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
@@ -15,6 +15,7 @@ import { LeadConversationStep } from './types/lead-conversation-step.enum';
 import type { StepTransition } from './types/step-transition.type';
 
 const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const execResult = <T>(value: T): { exec: jest.Mock } => ({ exec: jest.fn().mockResolvedValue(value) });
 const leanResult = <T>(value: T): { lean: () => { exec: jest.Mock } } => ({ lean: () => execResult(value) });
@@ -32,7 +33,12 @@ describe('LeadConversationAdminService', () => {
     score: 1,
     lastInboundAt: new Date(),
   };
-  const mockSessionModel = { findById: jest.fn(), updateOne: jest.fn(), deleteOne: jest.fn() };
+  const mockSessionModel = {
+    findById: jest.fn(),
+    updateOne: jest.fn(),
+    deleteOne: jest.fn(),
+    aggregate: jest.fn(),
+  };
   const mockMessageModel = { deleteMany: jest.fn(), findOne: jest.fn() };
   const mockReminder = { executeCancel: jest.fn() };
   const mockRecovery = { executeCancel: jest.fn() };
@@ -154,5 +160,46 @@ describe('LeadConversationAdminService', () => {
     expect(mockDispatcher.executeDispatch).not.toHaveBeenCalled();
     expect(mockTransitions.buildAskProject).not.toHaveBeenCalled();
     expect(mockSettings.executeGetOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('Given sessions in range, When getSessionStats, Then returns step and temperature buckets', async () => {
+    mockSessionModel.aggregate.mockReturnValue(
+      execResult([
+        {
+          byStep: [
+            { _id: LeadConversationStep.AskPayment, count: 2 },
+            { _id: LeadConversationStep.V2Conversation, count: 1 },
+          ],
+          byTemperature: [
+            { _id: 'hot', count: 1 },
+            { _id: 'unset', count: 2 },
+          ],
+          total: [{ count: 3 }],
+        },
+      ]),
+    );
+    const actual = await service.getSessionStats({ from: '2026-11-01', to: '2026-11-27' });
+    expect(actual).toEqual({
+      total: 3,
+      byStep: [
+        { key: LeadConversationStep.AskPayment, count: 2 },
+        { key: LeadConversationStep.V2Conversation, count: 1 },
+      ],
+      byTemperature: [
+        { key: 'hot', count: 1 },
+        { key: 'unset', count: 2 },
+      ],
+    });
+    const pipeline = mockSessionModel.aggregate.mock.calls[0][0];
+    const match = pipeline[0].$match.createdAt;
+    expect(match.$gte).toEqual(new Date('2026-11-01T00:00:00.000Z'));
+    expect(match.$lt).toEqual(new Date(new Date('2026-11-27T00:00:00.000Z').getTime() + DAY_MS));
+  });
+
+  it('Given from after to, When getSessionStats, Then BadRequestException is thrown', async () => {
+    await expect(service.getSessionStats({ from: '2026-11-27', to: '2026-11-01' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockSessionModel.aggregate).not.toHaveBeenCalled();
   });
 });

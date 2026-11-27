@@ -1,10 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customer/schemas/customer.schema';
 import { LeadAssistantSettingsService } from '../lead-assistant/lead-assistant-settings.service';
 import { LeadRecoveryScheduler } from '../lead-assistant/lead-recovery.scheduler';
 import { CUSTOMER_SERVICE_WINDOW_MS, MAX_SCORE, MAX_SCORE_V2 } from './constants/lead-conversation.constants';
+import type { LeadConversationStatsQueryDto } from './dto/lead-conversation-stats-query.dto';
 import type { ListLeadConversationsQueryDto } from './dto/list-lead-conversations-query.dto';
 import type { LeadSessionSnapshot } from './lead-conversation-session.service';
 import { LeadFlowTransitionsService } from './lead-flow-transitions.service';
@@ -21,6 +22,8 @@ import {
 import type { LeadConversationAdminListItem } from './types/lead-conversation-admin-list-item.type';
 import type { LeadConversationAdminListPage } from './types/lead-conversation-admin-list-page.type';
 import type { LeadConversationRestartResult } from './types/lead-conversation-restart-result.type';
+import type { LeadConversationStatsBucket } from './types/lead-conversation-stats-bucket.type';
+import type { LeadConversationStats } from './types/lead-conversation-stats.type';
 import type { LeadTemperature } from './types/lead-temperature.type';
 import { buildLeadAgentSessionReset } from './utils/build-lead-agent-session-reset.util';
 import { buildLeadSessionReset } from './utils/build-lead-session-reset.util';
@@ -29,6 +32,15 @@ import { formatLeadContactDisplay } from './utils/format-lead-contact-display.ut
 import { isSendableLeadPhone } from './utils/lead-identity-key.util';
 
 const DEFAULT_PAGE_SIZE = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const UNSET_TEMPERATURE_KEY = 'unset';
+
+type AggregateBucketRow = { readonly _id: string | null; readonly count: number };
+type StatsFacetResult = {
+  readonly byStep: AggregateBucketRow[];
+  readonly byTemperature: AggregateBucketRow[];
+  readonly total: Array<{ readonly count: number }>;
+};
 
 type SessionWithTimestamps = LeadSessionSnapshot & { readonly createdAt?: Date };
 type CustomerContact = Pick<Customer, 'name' | 'lastName' | 'phone' | 'whatsappUsername'> & {
@@ -69,6 +81,39 @@ export class LeadConversationAdminService {
       toListItem(session, contacts.get(String(session.customerId))),
     );
     return { items, total, page, limit };
+  }
+
+  /**
+   * Aggregates sessions by step and temperature for admin charts.
+   * Range is inclusive on UTC calendar days of `from` / `to` (`createdAt`).
+   */
+  async getSessionStats(query: LeadConversationStatsQueryDto): Promise<LeadConversationStats> {
+    const { start, endExclusive } = resolveUtcDayRange(query.from, query.to);
+    const [facet] = await this.sessionModel
+      .aggregate<StatsFacetResult>([
+        { $match: { createdAt: { $gte: start, $lt: endExclusive } } },
+        {
+          $facet: {
+            byStep: [{ $group: { _id: '$step', count: { $sum: 1 } } }, { $sort: { count: -1 } }],
+            byTemperature: [
+              {
+                $group: {
+                  _id: { $ifNull: ['$temperature', UNSET_TEMPERATURE_KEY] },
+                  count: { $sum: 1 },
+                },
+              },
+              { $sort: { count: -1 } },
+            ],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ])
+      .exec();
+    return {
+      total: facet?.total[0]?.count ?? 0,
+      byStep: mapAggregateBuckets(facet?.byStep ?? []),
+      byTemperature: mapAggregateBuckets(facet?.byTemperature ?? []),
+    };
   }
 
   /** Deletes the session and its transcript; the next inbound message starts a fresh flow. */
@@ -152,6 +197,28 @@ export class LeadConversationAdminService {
 
 function isInsideCustomerServiceWindow(lastInboundAt?: Date): boolean {
   return Boolean(lastInboundAt) && Date.now() - new Date(lastInboundAt as Date).getTime() < CUSTOMER_SERVICE_WINDOW_MS;
+}
+
+/** Inclusive UTC calendar-day range from ISO or `YYYY-MM-DD` strings. */
+function resolveUtcDayRange(from: string, to: string): { start: Date; endExclusive: Date } {
+  const start = toUtcDayStart(from);
+  const endDay = toUtcDayStart(to);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(endDay.getTime()) || start.getTime() > endDay.getTime()) {
+    throw new BadRequestException('Invalid date range: from must be on or before to');
+  }
+  return { start, endExclusive: new Date(endDay.getTime() + DAY_MS) };
+}
+
+function toUtcDayStart(isoOrDate: string): Date {
+  const day = isoOrDate.slice(0, 10);
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+function mapAggregateBuckets(rows: readonly AggregateBucketRow[]): LeadConversationStatsBucket[] {
+  return rows.map((row) => ({
+    key: row._id == null || row._id === '' ? UNSET_TEMPERATURE_KEY : String(row._id),
+    count: row.count,
+  }));
 }
 
 function buildListFilter(query: ListLeadConversationsQueryDto): QueryFilter<LeadConversationSessionDocument> {

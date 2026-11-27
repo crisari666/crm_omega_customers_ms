@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ParseHexObjectIdPipe } from '../core/pipes/parse-hex-object-id.pipe';
+import { LeadConversationStatsQueryDto } from './dto/lead-conversation-stats-query.dto';
 import { ListLeadConversationMessagesQueryDto } from './dto/list-lead-conversation-messages-query.dto';
 import { ListLeadConversationsQueryDto } from './dto/list-lead-conversations-query.dto';
 import { LeadConversationAdminService } from './lead-conversation-admin.service';
@@ -7,6 +8,7 @@ import { LeadConversationQueryService } from './lead-conversation-query.service'
 import type { LeadConversationAdminListPage } from './types/lead-conversation-admin-list-page.type';
 import type { LeadConversationMessagesPage } from './types/lead-conversation-messages-page.type';
 import type { LeadConversationRestartResult } from './types/lead-conversation-restart-result.type';
+import type { LeadConversationStats } from './types/lead-conversation-stats.type';
 
 /**
  * CRM admin view of AI lead conversations (JWT via TokenJwtMiddleware on `/admin/customer`).
@@ -22,6 +24,12 @@ export class LeadConversationAdminController {
   @Get()
   listSessions(@Query() query: ListLeadConversationsQueryDto): Promise<LeadConversationAdminListPage> {
     return this.adminService.listSessions(query);
+  }
+
+  /** Aggregates by step and temperature for charts; must stay before `:sessionId` routes. */
+  @Get('stats')
+  getStats(@Query() query: LeadConversationStatsQueryDto): Promise<LeadConversationStats> {
+    return this.adminService.getSessionStats(query);
   }
 
   @Get(':sessionId/messages')
