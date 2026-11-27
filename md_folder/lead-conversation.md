@@ -55,11 +55,12 @@ Priority: score ≥5 → 3, ≥2 → 2, else 1. `MAX_SCORE=6`.
 ## Admin REST (`token` JWT, `/admin/customer` prefix)
 `/sessions` segment avoids clash with `GET admin/customer/:customerId`.
 - `GET /admin/customer/lead-conversations/sessions?status&step&search&page(0-based)&limit` → `{items[{sessionId, customerId, customerName, phone, projectTitle, isAllProjects, step, status, score, maxScore, priority, lastInboundAt, startedAt}], total, page, limit}`. `search` = waId / profileName / projectTitle.
+- `GET .../sessions/stats?from&to` (ISO / `YYYY-MM-DD`, inclusive UTC days on `createdAt`) → `{total, byStep[{key,count}], byTemperature[{key,count}]}`. Missing temperature → key `unset`.
 - `GET .../sessions/:sessionId/messages?limit&before` → transcript page.
 - `DELETE .../sessions/:sessionId` → cancel reminder, delete session + messages. Next inbound starts fresh. Queued outbound jobs of a deleted session are dropped by the processor.
 - `POST .../sessions/:sessionId/restart` → cancel reminder, reset answers/score/project. If lead assistant **enabled** (or session already V2): convert/reset to clean V2, send nothing → `{restarted, sent:false, reason:'v2_waits_for_customer'}`. If assistant **disabled**: V1 path — if `lastInboundAt` < 24h: step `ask_project` + welcome list → `{sent:true}`; else step `initial` → `{sent:false, reason:'outside_customer_service_window'}`.
 
-UI: crm_lots_agents `/dashboard/lead-conversations` (`src/features/lead-conversations/`, menu "Conversaciones IA leads", crmAdminOnly).
+UI: crm_lots_agents `/dashboard/lead-conversations` (`src/features/lead-conversations/`, menu "Conversaciones IA leads", crmAdminOnly): list + date-range charts (bar by step, pie by temperature).
 
 ### Lead calls agenda (`lead-call-schedule-admin.controller.ts`)
 Prefix `/admin/customer/lead-calls/agenda` (`/agenda` avoids the `:customerId` clash).
